@@ -1,0 +1,496 @@
+const SEASON_LIST = '/api/season/'
+
+/** @returns {string} */
+function getCookie(name) {
+  const row = document.cookie.split('; ').find((r) => r.startsWith(`${name}=`))
+  if (!row) return ''
+  return decodeURIComponent(row.slice(name.length + 1))
+}
+
+function csrfHeaders() {
+  const token = getCookie('csrftoken')
+  return token ? { 'X-CSRFToken': token } : {}
+}
+
+async function parseError(res) {
+  let msg = `${res.status} ${res.statusText}`
+  try {
+    const body = await res.json()
+    if (body && typeof body === 'object') {
+      if (typeof body.detail === 'string') msg = body.detail
+      else if (body.non_field_errors?.[0]) msg = String(body.non_field_errors[0])
+      else {
+        const first = Object.entries(body).find(
+          ([k, v]) => k !== 'detail' && Array.isArray(v) && v.length
+        )
+        if (first) msg = `${first[0]}: ${first[1][0]}`
+        else if (typeof body.year === 'string') msg = body.year
+      }
+    }
+  } catch {
+    // ignore non-JSON bodies
+  }
+  return msg
+}
+
+/** @param {unknown} data */
+export function normalizeSeasonList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchSeasons() {
+  const res = await fetch(SEASON_LIST, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeSeasonList(data)
+}
+
+/** @param {number} year */
+export async function createSeason(year) {
+  const res = await fetch(SEASON_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ year }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {number} year */
+export async function patchSeason(id, year) {
+  const res = await fetch(`${SEASON_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ year }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteSeason(id) {
+  const res = await fetch(`${SEASON_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+const PRACTICE_LIST = '/api/practice/'
+
+/** @param {unknown} data */
+export function normalizePracticeList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchPractices() {
+  const res = await fetch(PRACTICE_LIST, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizePracticeList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createPractice(body) {
+  const res = await fetch(PRACTICE_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchPractice(id, body) {
+  const res = await fetch(`${PRACTICE_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deletePractice(id) {
+  const res = await fetch(`${PRACTICE_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+const COACH_LIST = '/api/coach/'
+const MENTOR_LIST = '/api/mentor/'
+const COACH_PRACTICE_ASSIGNMENT_LIST = '/api/coach-practice-assignment/'
+const MENTOR_PRACTICE_ASSIGNMENT_LIST = '/api/mentor-practice-assignment/'
+
+/** @param {unknown} data */
+export function normalizeCoachList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+/** List coaches from Django: `GET /api/coach/`. */
+export async function fetchCoaches() {
+  const res = await fetch(COACH_LIST, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeCoachList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createCoach(body) {
+  const res = await fetch(COACH_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchCoach(id, body) {
+  const res = await fetch(`${COACH_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteCoach(id) {
+  const res = await fetch(`${COACH_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+/** @param {File} file */
+export async function importCoachesCsv(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${COACH_LIST}import-csv/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+    body: formData,
+  })
+  if (!res.ok && res.status !== 207) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {unknown} data */
+export function normalizeMentorList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchMentors() {
+  const res = await fetch(MENTOR_LIST, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeMentorList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createMentor(body) {
+  const res = await fetch(MENTOR_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchMentor(id, body) {
+  const res = await fetch(`${MENTOR_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteMentor(id) {
+  const res = await fetch(`${MENTOR_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+/** @param {File} file */
+export async function importMentorsCsv(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${MENTOR_LIST}import-csv/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+    body: formData,
+  })
+  if (!res.ok && res.status !== 207) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function fetchPractice(id) {
+  const res = await fetch(`${PRACTICE_LIST}${id}/`, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {unknown} data */
+export function normalizeCoachPracticeAssignmentList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchCoachPracticeAssignments() {
+  const res = await fetch(COACH_PRACTICE_ASSIGNMENT_LIST, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeCoachPracticeAssignmentList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createCoachPracticeAssignment(body) {
+  const res = await fetch(COACH_PRACTICE_ASSIGNMENT_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteCoachPracticeAssignment(id) {
+  const res = await fetch(`${COACH_PRACTICE_ASSIGNMENT_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+/** @param {unknown} data */
+export function normalizeMentorPracticeAssignmentList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchMentorPracticeAssignments() {
+  const res = await fetch(MENTOR_PRACTICE_ASSIGNMENT_LIST, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeMentorPracticeAssignmentList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createMentorPracticeAssignment(body) {
+  const res = await fetch(MENTOR_PRACTICE_ASSIGNMENT_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteMentorPracticeAssignment(id) {
+  const res = await fetch(`${MENTOR_PRACTICE_ASSIGNMENT_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+const SCHEDULED_EMAIL_LIST = '/api/scheduled-email/'
+
+/** @param {unknown} data */
+export function normalizeScheduledEmailList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export async function fetchScheduledEmails() {
+  const res = await fetch(SCHEDULED_EMAIL_LIST, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeScheduledEmailList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createScheduledEmail(body) {
+  const res = await fetch(SCHEDULED_EMAIL_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchScheduledEmail(id, body) {
+  const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteScheduledEmail(id) {
+  const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+const MENTOR_EMAIL_REPLY = '/api/mentor-email-reply'
+
+/** @param {string} token raw UUID from URL */
+export async function fetchMentorEmailReply(token) {
+  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/**
+ * @param {string} token
+ * @param {{ practice: number, attendance: string }[]} replies
+ */
+export async function putMentorEmailReply(token, replies) {
+  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
+  const res = await fetch(url, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ replies }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
