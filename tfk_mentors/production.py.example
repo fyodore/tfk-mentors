@@ -24,6 +24,12 @@ os.environ["EMAIL_USE_TLS"] = "1"
 os.environ["EMAIL_HOST_USER"] = "your-email@gmail.com"
 os.environ["EMAIL_HOST_PASSWORD"] = "app-specific-password"
 
+# Site / deployment
+os.environ["FRONTEND_PUBLIC_URL"] = "https://your-domain.com"
+os.environ["ALLOWED_HOSTS"] = "your-domain.com,www.your-domain.com"
+os.environ["CSRF_TRUSTED_ORIGINS"] = "https://your-domain.com,https://www.your-domain.com"
+os.environ["TIME_ZONE"] = "America/Chicago"
+
 from tfk_mentors.settings import *  # noqa: E402, F403
 
 DEBUG = False

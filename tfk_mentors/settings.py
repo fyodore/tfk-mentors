@@ -15,10 +15,13 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Used in scheduled email templates for {{ link }} (mentor-specific reply URL).
-FRONTEND_PUBLIC_URL = os.environ.get(
-    "FRONTEND_PUBLIC_URL", "http://localhost:5173"
-).rstrip("/")
+
+def _env_list(name, default):
+    return [
+        item.strip()
+        for item in os.environ.get(name, default).split(",")
+        if item.strip()
+    ]
 
 
 # Quick-start development settings - unsuitable for production
@@ -30,12 +33,19 @@ SECRET_KEY = 'django-insecure-z=-52jc5t9j1xw0b#31t9y=o9!)f76iwkh37*3-(8oe*a!*gww
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0', 'web']
+# Site / deployment — production values are set in tfk_mentors/production.py (gitignored).
+# Used in scheduled email templates for {{ link }} (mentor-specific reply URL).
+FRONTEND_PUBLIC_URL = os.environ.get(
+    "FRONTEND_PUBLIC_URL", "http://localhost:5173"
+).rstrip("/")
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-]
+ALLOWED_HOSTS = _env_list(
+    "ALLOWED_HOSTS", "127.0.0.1,localhost,0.0.0.0,web"
+)
+
+CSRF_TRUSTED_ORIGINS = _env_list(
+    "CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+)
 
 
 # Application definition
@@ -90,7 +100,7 @@ WSGI_APPLICATION = 'tfk_mentors.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-# Values are set in tfk_mentors/production.py on the server (gitignored).
+# Production values are set in tfk_mentors/production.py (gitignored).
 
 DATABASES = {
     "default": {
@@ -103,10 +113,10 @@ DATABASES = {
     }
 }
 
-# Redis
+# Redis — production value set in tfk_mentors/production.py (gitignored).
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 
-# Email
+# Email — production values set in tfk_mentors/production.py (gitignored).
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") in ("1", "true", "True")
@@ -139,7 +149,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'America/Chicago'
+# Production value set in tfk_mentors/production.py (gitignored).
+TIME_ZONE = os.environ.get("TIME_ZONE", "America/Chicago")
 
 USE_I18N = True
 
