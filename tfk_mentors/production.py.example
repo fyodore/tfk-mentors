@@ -25,9 +25,10 @@ os.environ["EMAIL_HOST_USER"] = "your-email@gmail.com"
 os.environ["EMAIL_HOST_PASSWORD"] = "app-specific-password"
 
 # Site / deployment
-os.environ["FRONTEND_PUBLIC_URL"] = "https://your-domain.com"
-os.environ["ALLOWED_HOSTS"] = "your-domain.com,www.your-domain.com"
-os.environ["CSRF_TRUSTED_ORIGINS"] = "https://your-domain.com,https://www.your-domain.com"
+os.environ["FRONTEND_PUBLIC_URL"] = "https://mentors.runsforkids.com"
+os.environ["ALLOWED_HOSTS"] = "api.runsforkids.com"
+os.environ["CSRF_TRUSTED_ORIGINS"] = "https://mentors.runsforkids.com"
+os.environ["CORS_ALLOWED_ORIGINS"] = "https://mentors.runsforkids.com"
 os.environ["TIME_ZONE"] = "America/Chicago"
 
 from tfk_mentors.settings import *  # noqa: E402, F403

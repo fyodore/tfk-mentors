@@ -47,6 +47,14 @@ CSRF_TRUSTED_ORIGINS = _env_list(
     "CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
 )
 
+# CORS — production origins set in tfk_mentors/production.py (gitignored).
+# Defaults include FRONTEND_PUBLIC_URL so the SPA can call the API cross-origin.
+CORS_ALLOWED_ORIGINS = _env_list(
+    "CORS_ALLOWED_ORIGINS",
+    f"{os.environ.get('FRONTEND_PUBLIC_URL', 'http://localhost:5173')},http://localhost:5173,http://127.0.0.1:5173",
+)
+CORS_ALLOW_CREDENTIALS = True
+
 
 # Application definition
 
@@ -66,10 +74,12 @@ INSTALLED_APPS = [
 
     # third-party apps
     "rest_framework",
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
