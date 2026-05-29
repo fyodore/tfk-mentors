@@ -218,3 +218,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+/tfk_mentors/.env.dev
+tfk_mentors/production.py

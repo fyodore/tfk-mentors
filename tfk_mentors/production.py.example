@@ -1,0 +1,29 @@
+"""
+Production settings template. Copy to production.py and customize on the server:
+
+    cp tfk_mentors/production.py.example tfk_mentors/production.py
+
+Set DJANGO_SETTINGS_MODULE=tfk_mentors.production on the server.
+"""
+import os
+
+# Database
+os.environ["DB_NAME"] = "myapp_prod"
+os.environ["DB_USER"] = "myapp_user"
+os.environ["DB_PASSWORD"] = "secure_password"
+os.environ["DB_HOST"] = "db"
+os.environ["DB_PORT"] = "5432"
+
+# Redis
+os.environ["REDIS_URL"] = "redis://redis:6379/0"
+
+# Email
+os.environ["EMAIL_HOST"] = "smtp.gmail.com"
+os.environ["EMAIL_PORT"] = "587"
+os.environ["EMAIL_USE_TLS"] = "1"
+os.environ["EMAIL_HOST_USER"] = "your-email@gmail.com"
+os.environ["EMAIL_HOST_PASSWORD"] = "app-specific-password"
+
+from tfk_mentors.settings import *  # noqa: E402, F403
+
+DEBUG = False
