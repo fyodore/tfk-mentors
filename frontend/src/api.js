@@ -1,4 +1,6 @@
-const SEASON_LIST = '/api/season/'
+import { apiPath } from './config.js'
+
+const SEASON_LIST = apiPath('/api/season/')
 
 /** @returns {string} */
 function getCookie(name) {
@@ -91,7 +93,7 @@ export async function deleteSeason(id) {
     throw new Error(await parseError(res))
 }
 
-const PRACTICE_LIST = '/api/practice/'
+const PRACTICE_LIST = apiPath('/api/practice/')
 
 /** @param {unknown} data */
 export function normalizePracticeList(data) {
@@ -151,10 +153,10 @@ export async function deletePractice(id) {
     throw new Error(await parseError(res))
 }
 
-const COACH_LIST = '/api/coach/'
-const MENTOR_LIST = '/api/mentor/'
-const COACH_PRACTICE_ASSIGNMENT_LIST = '/api/coach-practice-assignment/'
-const MENTOR_PRACTICE_ASSIGNMENT_LIST = '/api/mentor-practice-assignment/'
+const COACH_LIST = apiPath('/api/coach/')
+const MENTOR_LIST = apiPath('/api/mentor/')
+const COACH_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/coach-practice-assignment/')
+const MENTOR_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/mentor-practice-assignment/')
 
 /** @param {unknown} data */
 export function normalizeCoachList(data) {
@@ -406,7 +408,7 @@ export async function deleteMentorPracticeAssignment(id) {
     throw new Error(await parseError(res))
 }
 
-const SCHEDULED_EMAIL_LIST = '/api/scheduled-email/'
+const SCHEDULED_EMAIL_LIST = apiPath('/api/scheduled-email/')
 
 /** @param {unknown} data */
 export function normalizeScheduledEmailList(data) {
@@ -466,7 +468,7 @@ export async function deleteScheduledEmail(id) {
     throw new Error(await parseError(res))
 }
 
-const MENTOR_EMAIL_REPLY = '/api/mentor-email-reply'
+const MENTOR_EMAIL_REPLY = apiPath('/api/mentor-email-reply')
 
 /** @param {string} token raw UUID from URL */
 export async function fetchMentorEmailReply(token) {
