@@ -24,7 +24,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1.25rem 1.5rem;
-  background: color-mix(in srgb, var(--bg) 92%, var(--border));
+  background: #fff;
   box-shadow: var(--shadow);
 }
 
@@ -80,11 +80,12 @@
 }
 
 .nav-back {
-  color: var(--accent);
+  color: var(--text);
   text-decoration: none;
 }
 
 .nav-back:hover {
+  color: var(--text);
   text-decoration: underline;
 }
 
@@ -223,23 +224,23 @@
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--primary);
   color: #fff;
-  border-color: color-mix(in srgb, var(--accent) 70%, #000);
+  border-color: color-mix(in srgb, var(--primary) 75%, #000);
 }
 
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.05);
+  background: color-mix(in srgb, var(--primary) 88%, var(--secondary));
 }
 
 .btn-secondary {
-  background: color-mix(in srgb, var(--bg) 88%, var(--border));
-  color: var(--text-h);
-  border-color: var(--border);
+  background: var(--accent-bg);
+  color: var(--text);
+  border-color: var(--accent-border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg) 75%, var(--border));
+  background: color-mix(in srgb, var(--secondary) 28%, var(--bg));
 }
 
 .btn-danger {
@@ -252,24 +253,17 @@
   filter: brightness(1.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  .btn-danger {
-    background: #991b1b;
-    border-color: #450a0a;
-  }
-}
-
 .btn-text {
   background: transparent;
   border: none;
-  color: var(--accent);
+  color: var(--text);
   padding: 0.35rem 0.5rem;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .btn-text:hover:not(:disabled) {
-  color: var(--text-h);
+  color: var(--text);
 }
 
 .btn-text-danger {
@@ -580,4 +574,35 @@
 
 .mentor-reply-actions {
   margin-top: 1.25rem;
+}
+
+.mentor-reply-greeting {
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+
+.mentor-reply-thanks {
+  margin: 0 0 1rem;
+}
+
+.mentor-reply-email-confirm {
+  display: block;
+  margin: 1rem 0;
+}
+
+.mentor-reply-hint {
+  margin: 0.5rem 0 0;
+}
+
+.mentor-reply-pace-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  max-width: 12rem;
+}
+
+.mentor-reply-pace-select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
 }

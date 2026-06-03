@@ -172,9 +172,11 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+SITE_PASSWORD = os.environ.get("SITE_PASSWORD", "tedrules83")
+
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
+        "tfk_mentors.permissions.IsSiteAuthenticated",
     ],
     # SPA uses cookie CSRF headers; omit session auth so DRF doesn't double-enforce CSRF.
     "DEFAULT_AUTHENTICATION_CLASSES": [],

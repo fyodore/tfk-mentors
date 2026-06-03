@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 import { fetchMentorEmailReply, putMentorEmailReply } from '../api'
 
 const AT_PRACTICE = 'At Practice'
+const REMOTE = 'Remote'
+const ATTENDING = new Set(['attending', 'first_half', 'second_half'])
 
-/** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null }} PracticeReplyRow */
+/** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null, pace?: string }} PracticeReplyRow */
 
 function formatPracticeWhen(iso, nyrrRace) {
   const d = new Date(iso)
@@ -18,6 +20,10 @@ function formatPracticeWhen(iso, nyrrRace) {
   return race ? `${when} · NYRR: ${race}` : when
 }
 
+function isAttending(attendance) {
+  return ATTENDING.has(attendance ?? '')
+}
+
 /** @param {PracticeReplyRow[]} practices */
 function initialAttendanceMap(practices) {
   /** @type {Record<number, string>} */
@@ -28,27 +34,49 @@ function initialAttendanceMap(practices) {
   return m
 }
 
+/** @param {PracticeReplyRow[]} practices */
+function initialPaceMap(practices, defaultPace) {
+  /** @type {Record<number, string>} */
+  const m = {}
+  for (const p of practices) {
+    m[p.id] = p.pace?.trim() || defaultPace || ''
+  }
+  return m
+}
+
+function resolveToken(pathToken, searchParams) {
+  const fromPath = typeof pathToken === 'string' ? pathToken.trim() : ''
+  if (fromPath) return fromPath
+  return (searchParams.get('token') ?? '').trim()
+}
+
 export default function MentorReplyPage() {
-  const { token } = useParams()
+  const { token: pathToken } = useParams()
+  const [searchParams] = useSearchParams()
+  const rawToken = resolveToken(pathToken, searchParams)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [mentor, setMentor] = useState(null)
-  const [scheduledSendAt, setScheduledSendAt] = useState('')
+  const [seasonYear, setSeasonYear] = useState(null)
   /** @type {PracticeReplyRow[]} */
   const [practices, setPractices] = useState([])
-  const [canSubmit, setCanSubmit] = useState(false)
+  /** @type {string[]} */
+  const [paceChoices, setPaceChoices] = useState([])
+  const [minAtPractice, setMinAtPractice] = useState(3)
+  const [emailReceivedConfirmed, setEmailReceivedConfirmed] = useState(false)
   /** @type {Record<number, string>} */
   const [attendanceByPractice, setAttendanceByPractice] = useState({})
+  /** @type {Record<number, string>} */
+  const [paceByPractice, setPaceByPractice] = useState({})
   const [busy, setBusy] = useState(false)
   const [saveOk, setSaveOk] = useState(null)
-
-  const rawToken = typeof token === 'string' ? token : ''
 
   useEffect(() => {
     let cancelled = false
 
     Promise.resolve().then(async () => {
-      if (!rawToken.trim()) {
+      if (!rawToken) {
         if (!cancelled) {
           setLoading(false)
           setError('Missing link token.')
@@ -61,12 +89,19 @@ export default function MentorReplyPage() {
       try {
         const data = await fetchMentorEmailReply(rawToken)
         if (cancelled) return
-        setMentor(data.mentor)
-        setScheduledSendAt(data.scheduled_send_at ?? '')
+        const m = data.mentor ?? null
+        setMentor(m)
+        setSeasonYear(data.season_year ?? null)
         const plist = Array.isArray(data.practices) ? data.practices : []
         setPractices(plist)
-        setCanSubmit(Boolean(data.can_submit))
+        setPaceChoices(
+          Array.isArray(data.pace_choices) ? data.pace_choices : []
+        )
+        setMinAtPractice(data.min_at_practice_attendance ?? 3)
+        setEmailReceivedConfirmed(Boolean(data.email_received_confirmed))
+        const defaultPace = m?.pace ?? ''
         setAttendanceByPractice(initialAttendanceMap(plist))
+        setPaceByPractice(initialPaceMap(plist, defaultPace))
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
@@ -83,28 +118,87 @@ export default function MentorReplyPage() {
     }
   }, [rawToken])
 
-  const mentorLabel = useMemo(() => {
+  const isAtPractice = mentor?.type === AT_PRACTICE
+  const isRemote = mentor?.type === REMOTE
+
+  const attendingCount = useMemo(() => {
+    return practices.filter((p) =>
+      isAttending(attendanceByPractice[p.id])
+    ).length
+  }, [practices, attendanceByPractice])
+
+  const introMessage = useMemo(() => {
     if (!mentor) return ''
-    return `${mentor.first_name} ${mentor.last_name}`.trim()
-  }, [mentor])
+    if (isAtPractice) {
+      return 'Please select the practices you can attend.'
+    }
+    if (isRemote) {
+      return (
+        'As a non practice mentor please confirm that you received the email. ' +
+        'If you would like to attend a practice please select which practice and pace below.'
+      )
+    }
+    return ''
+  }, [mentor, isAtPractice, isRemote])
 
   function setAttendance(practiceId, attendance) {
     setAttendanceByPractice((prev) => ({ ...prev, [practiceId]: attendance }))
+    if (!isAttending(attendance)) {
+      setPaceByPractice((prev) => ({ ...prev, [practiceId]: '' }))
+    } else if (isRemote && !paceByPractice[practiceId]) {
+      setPaceByPractice((prev) => ({
+        ...prev,
+        [practiceId]: mentor?.pace ?? paceChoices[0] ?? '',
+      }))
+    }
+  }
+
+  function setPace(practiceId, pace) {
+    setPaceByPractice((prev) => ({ ...prev, [practiceId]: pace }))
+  }
+
+  function validateBeforeSubmit() {
+    if (isAtPractice && attendingCount < minAtPractice) {
+      return `Select at least ${minAtPractice} practices you can attend.`
+    }
+    if (isRemote && !emailReceivedConfirmed) {
+      return 'Please confirm that you received the email.'
+    }
+    if (isRemote) {
+      for (const p of practices) {
+        if (
+          isAttending(attendanceByPractice[p.id]) &&
+          !(paceByPractice[p.id] ?? '').trim()
+        ) {
+          return 'Select a pace for each practice you plan to attend.'
+        }
+      }
+    }
+    return null
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!canSubmit || !rawToken.trim()) return
+    if (!rawToken) return
+    const validationError = validateBeforeSubmit()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     setBusy(true)
     setError(null)
     setSaveOk(null)
     try {
-      const replies = practices.map((p) => ({
-        practice: p.id,
-        attendance: attendanceByPractice[p.id] ?? 'not_attending',
-      }))
-      await putMentorEmailReply(rawToken, replies)
-      setSaveOk('Your availability was saved.')
+      const replies = practices.map((p) => {
+        const attendance = attendanceByPractice[p.id] ?? 'not_attending'
+        const pace = isAttending(attendance) ? paceByPractice[p.id] ?? '' : ''
+        return { practice: p.id, attendance, pace }
+      })
+      await putMentorEmailReply(rawToken, {
+        replies,
+        ...(isRemote ? { email_received_confirmed: true } : {}),
+      })
+      setSaveOk('Thank you — your response was saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -112,19 +206,31 @@ export default function MentorReplyPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <main className="panel mentor-reply-panel">
+        <p className="muted">Loading…</p>
+      </main>
+    )
+  }
+
+  if (!mentor) {
+    return (
+      <main className="panel mentor-reply-panel">
+        <p className="error" role="alert">
+          {error || 'This link is invalid or has expired.'}
+        </p>
+      </main>
+    )
+  }
+
   return (
     <>
       <header className="app-header">
-        <h1>Practice availability</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Site home
-          </Link>
-        </p>
+        <h1>Mentor confirmation</h1>
       </header>
 
       <main className="panel mentor-reply-panel">
-        {loading && <p className="muted">Loading…</p>}
         {error && (
           <p className="error" role="alert">
             {error}
@@ -136,126 +242,160 @@ export default function MentorReplyPage() {
           </p>
         )}
 
-        {!loading && mentor && (
-          <>
-            <p>
-              <strong>{mentorLabel}</strong>
-              {mentor.type !== AT_PRACTICE ? (
-                <span className="muted"> · {mentor.type}</span>
-              ) : null}
+            <p className="mentor-reply-greeting">
+              Hello <strong>{mentor.first_name}</strong>
             </p>
-            {scheduledSendAt ? (
-              <p className="muted">
-                Related message scheduled{' '}
-                {new Date(scheduledSendAt).toLocaleString(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })}
+            {seasonYear != null ? (
+              <p className="mentor-reply-thanks">
+                Thank you for mentoring for the{' '}
+                <strong>{seasonYear}</strong> season.
               </p>
             ) : null}
 
-            {!canSubmit ? (
-              <p className="muted">
-                This scheduling form is only for mentors marked{' '}
-                <strong>At Practice</strong>. If you believe this is a mistake,
-                contact your coordinator.
-              </p>
-            ) : practices.length === 0 ? (
+            {practices.length === 0 ? (
               <p className="muted">
                 No practices were attached to this message.
               </p>
             ) : (
               <form className="mentor-reply-form" onSubmit={handleSubmit}>
-                <p className="muted mentor-reply-intro">
-                  For each practice below, indicate whether you can attend. Split
-                  practices may ask which half you can cover when your mentor profile
-                  uses split practice.
-                </p>
+                {introMessage ? (
+                  <p className="mentor-reply-intro">{introMessage}</p>
+                ) : null}
+
+                {isRemote ? (
+                  <label className="checkbox-label mentor-reply-email-confirm">
+                    <input
+                      type="checkbox"
+                      checked={emailReceivedConfirmed}
+                      disabled={busy}
+                      onChange={(ev) =>
+                        setEmailReceivedConfirmed(ev.target.checked)
+                      }
+                    />
+                    I received the mentoring email
+                  </label>
+                ) : null}
+
+                {isAtPractice ? (
+                  <p className="muted mentor-reply-hint">
+                    Select at least {minAtPractice} practices (
+                    {attendingCount} selected).
+                  </p>
+                ) : null}
+
                 <ul className="practice-list mentor-reply-list">
-                  {practices.map((p) => (
-                    <li key={p.id} className="practice-row mentor-reply-row">
-                      <div className="practice-row-main">
-                        <span className="practice-date">
-                          {formatPracticeWhen(p.date, p.nyrr_race)}
-                        </span>
-                        {!p.full_practice ? (
-                          <span className="muted">Split practice session</span>
-                        ) : (
-                          <span className="muted">Full practice</span>
-                        )}
-                        {p.full_practice || !mentor.split_practice ? (
-                          <label className="checkbox-label mentor-reply-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={
-                                (attendanceByPractice[p.id] ?? 'not_attending') ===
-                                'attending'
-                              }
-                              disabled={busy}
-                              onChange={(ev) =>
-                                setAttendance(
-                                  p.id,
-                                  ev.target.checked ? 'attending' : 'not_attending'
+                  {practices.map((p) => {
+                    const attendance =
+                      attendanceByPractice[p.id] ?? 'not_attending'
+                    const attending = isAttending(attendance)
+                    const showSplit =
+                      isAtPractice &&
+                      !p.full_practice &&
+                      mentor.split_practice
+
+                    return (
+                      <li key={p.id} className="practice-row mentor-reply-row">
+                        <div className="practice-row-main">
+                          <span className="practice-date">
+                            {formatPracticeWhen(p.date, p.nyrr_race)}
+                          </span>
+                          {!p.full_practice && isAtPractice ? (
+                            <span className="muted">Split practice session</span>
+                          ) : null}
+
+                          {showSplit ? (
+                            <fieldset className="mentor-reply-split-fieldset">
+                              <legend className="muted">
+                                Which half can you cover?
+                              </legend>
+                              <label className="radio-row">
+                                <input
+                                  type="radio"
+                                  name={`half-${p.id}`}
+                                  value="first_half"
+                                  checked={attendance === 'first_half'}
+                                  disabled={busy}
+                                  onChange={() =>
+                                    setAttendance(p.id, 'first_half')
+                                  }
+                                />
+                                First half
+                              </label>
+                              <label className="radio-row">
+                                <input
+                                  type="radio"
+                                  name={`half-${p.id}`}
+                                  value="second_half"
+                                  checked={attendance === 'second_half'}
+                                  disabled={busy}
+                                  onChange={() =>
+                                    setAttendance(p.id, 'second_half')
+                                  }
+                                />
+                                Second half
+                              </label>
+                              <label className="radio-row">
+                                <input
+                                  type="radio"
+                                  name={`half-${p.id}`}
+                                  value="not_attending"
+                                  checked={attendance === 'not_attending'}
+                                  disabled={busy}
+                                  onChange={() =>
+                                    setAttendance(p.id, 'not_attending')
+                                  }
+                                />
+                                Not attending
+                              </label>
+                            </fieldset>
+                          ) : (
+                            <label className="checkbox-label mentor-reply-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={attending}
+                                disabled={busy}
+                                onChange={(ev) =>
+                                  setAttendance(
+                                    p.id,
+                                    ev.target.checked
+                                      ? 'attending'
+                                      : 'not_attending'
+                                  )
+                                }
+                              />
+                              I can attend this practice
+                            </label>
+                          )}
+
+                          {isRemote && attending ? (
+                            <label className="mentor-reply-pace-label">
+                              <span className="muted">Pace</span>
+                              <select
+                                className="mentor-reply-pace-select"
+                                value={paceByPractice[p.id] ?? ''}
+                                disabled={busy}
+                                onChange={(ev) =>
+                                  setPace(p.id, ev.target.value)
+                                }
+                              >
+                                <option value="">Select pace…</option>
+                                {(paceChoices.length
+                                  ? paceChoices
+                                  : [mentor.pace]
                                 )
-                              }
-                            />
-                            I can attend this practice
-                          </label>
-                        ) : (
-                          <fieldset className="mentor-reply-split-fieldset">
-                            <legend className="muted">
-                              Which half can you cover?
-                            </legend>
-                            <label className="radio-row">
-                              <input
-                                type="radio"
-                                name={`half-${p.id}`}
-                                value="first_half"
-                                checked={
-                                  attendanceByPractice[p.id] === 'first_half'
-                                }
-                                disabled={busy}
-                                onChange={() =>
-                                  setAttendance(p.id, 'first_half')
-                                }
-                              />
-                              First half
+                                  .filter(Boolean)
+                                  .map((pace) => (
+                                    <option key={pace} value={pace}>
+                                      {pace}
+                                    </option>
+                                  ))}
+                              </select>
                             </label>
-                            <label className="radio-row">
-                              <input
-                                type="radio"
-                                name={`half-${p.id}`}
-                                value="second_half"
-                                checked={
-                                  attendanceByPractice[p.id] === 'second_half'
-                                }
-                                disabled={busy}
-                                onChange={() =>
-                                  setAttendance(p.id, 'second_half')
-                                }
-                              />
-                              Second half
-                            </label>
-                            <label className="radio-row">
-                              <input
-                                type="radio"
-                                name={`half-${p.id}`}
-                                value="not_attending"
-                                checked={
-                                  attendanceByPractice[p.id] === 'not_attending'
-                                }
-                                disabled={busy}
-                                onChange={() =>
-                                  setAttendance(p.id, 'not_attending')
-                                }
-                              />
-                              Not attending
-                            </label>
-                          </fieldset>
-                        )}
-                      </div>
-                    </li>
-                  ))}
+                          ) : null}
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
                 <div className="mentor-reply-actions">
                   <button
@@ -263,13 +403,11 @@ export default function MentorReplyPage() {
                     className="btn btn-primary"
                     disabled={busy || practices.length === 0}
                   >
-                    {busy ? 'Saving…' : 'Save availability'}
+                    {busy ? 'Submitting…' : 'Submit'}
                   </button>
                 </div>
               </form>
             )}
-          </>
-        )}
       </main>
     </>
   )

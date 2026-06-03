@@ -468,11 +468,37 @@ export async function deleteScheduledEmail(id) {
     throw new Error(await parseError(res))
 }
 
+const AUTH_SESSION = apiPath('/api/auth/session/')
+
+/** Bootstrap CSRF cookie and report whether the admin session is active. */
+export async function checkAuthSession() {
+  const res = await fetch(AUTH_SESSION, { credentials: 'include' })
+  if (!res.ok) return false
+  const data = await res.json()
+  return data.authenticated === true
+}
+
+/** @param {string} password */
+export async function loginSitePassword(password) {
+  const res = await fetch(AUTH_SESSION, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ password }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 const MENTOR_EMAIL_REPLY = apiPath('/api/mentor-email-reply')
 
-/** @param {string} token raw UUID from URL */
+/** @param {string} token raw UUID from URL (?token= or path) */
 export async function fetchMentorEmailReply(token) {
-  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
+  const q = new URLSearchParams({ token })
+  const url = `${MENTOR_EMAIL_REPLY}/?${q}`
   const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
@@ -480,10 +506,14 @@ export async function fetchMentorEmailReply(token) {
 
 /**
  * @param {string} token
- * @param {{ practice: number, attendance: string }[]} replies
+ * @param {{
+ *   replies: { practice: number, attendance: string, pace?: string }[],
+ *   email_received_confirmed?: boolean
+ * }} payload
  */
-export async function putMentorEmailReply(token, replies) {
-  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
+export async function putMentorEmailReply(token, payload) {
+  const q = new URLSearchParams({ token })
+  const url = `${MENTOR_EMAIL_REPLY}/?${q}`
   const res = await fetch(url, {
     method: 'PUT',
     credentials: 'include',
@@ -491,7 +521,7 @@ export async function putMentorEmailReply(token, replies) {
       'Content-Type': 'application/json',
       ...csrfHeaders(),
     },
-    body: JSON.stringify({ replies }),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

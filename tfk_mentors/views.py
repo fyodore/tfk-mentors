@@ -1,6 +1,8 @@
 import csv
 import io
+import uuid
 
+from django.conf import settings
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -16,6 +18,7 @@ from .models import (
     Mentor,
     MentorPracticeAssignment,
     MentorTypes,
+    PaceTypes,
     Practice,
     PracticeAttendanceReply,
     Requests,
@@ -24,6 +27,16 @@ from .models import (
     ScheduledEmailMentorToken,
     Season,
 )
+
+MIN_AT_PRACTICE_ATTENDANCE = 3
+ATTENDING_REPLY_VALUES = frozenset(
+    {
+        PracticeAttendanceReply.ATTENDING,
+        PracticeAttendanceReply.FIRST_HALF,
+        PracticeAttendanceReply.SECOND_HALF,
+    }
+)
+PACE_VALUES = frozenset(c.value for c in PaceTypes)
 from .serializers import (
     CoachSerializer,
     CoachPracticeAssignmentSerializer,
@@ -305,13 +318,47 @@ class RequestsViewSet(viewsets.ModelViewSet):
     serializer_class = RequestsSerializer
 
 
+def mentor_reply_payload(mentor):
+    """Full mentor record for the public reply page."""
+    return {
+        "id": mentor.id,
+        "first_name": mentor.first_name,
+        "last_name": mentor.last_name,
+        "email": mentor.email,
+        "cell_phone": mentor.cell_phone,
+        "type": mentor.type,
+        "pace": mentor.pace,
+        "split_practice": mentor.split_practice,
+        "season_years": list(
+            mentor.seasons.order_by("-year").values_list("year", flat=True)
+        ),
+    }
+
+
+def season_year_for_scheduled_email(scheduled):
+    return scheduled.resolve_season_year()
+
+
+def count_attending_replies(replies_by_practice_id):
+    return sum(
+        1
+        for att in replies_by_practice_id.values()
+        if att in ATTENDING_REPLY_VALUES
+    )
+
+
 def validate_practice_attendance(practice, mentor, attendance):
     """Raise ValueError if attendance is not allowed for this mentor/practice."""
-    if mentor.type != MentorTypes.PRACTICE:
-        raise ValueError("Only At Practice mentors may submit availability.")
     valid_vals = {c.value for c in PracticeAttendanceReply}
     if attendance not in valid_vals:
         raise ValueError("Invalid attendance choice.")
+    if mentor.type == MentorTypes.REMOTE:
+        if attendance not in (
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.NOT_ATTENDING,
+        ):
+            raise ValueError("Remote mentors may only mark attending or not attending.")
+        return
     if practice.full_practice:
         if attendance not in (
             PracticeAttendanceReply.ATTENDING,
@@ -335,29 +382,99 @@ def validate_practice_attendance(practice, mentor, attendance):
         raise ValueError("Choose attending or not attending.")
 
 
+def validate_reply_pace(mentor, attendance, pace):
+    """Raise ValueError if pace is missing or invalid for this reply."""
+    if attendance not in ATTENDING_REPLY_VALUES:
+        if pace:
+            raise ValueError("Pace should only be set when attending a practice.")
+        return
+    if mentor.type == MentorTypes.REMOTE:
+        if not pace:
+            raise ValueError("Select a pace for each practice you plan to attend.")
+        if pace not in PACE_VALUES:
+            raise ValueError("Invalid pace choice.")
+        return
+    if pace and pace not in PACE_VALUES:
+        raise ValueError("Invalid pace choice.")
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
-class MentorScheduledEmailReplyView(APIView):
-    """Public mentor reply page backed by opaque UUID token."""
+class SiteAuthView(APIView):
+    """Site password login for admin SPA (session cookie)."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
 
-    def get(self, request, token):
+    def get(self, request):
+        return Response(
+            {"authenticated": request.session.get("site_authenticated") is True}
+        )
+
+    def post(self, request):
+        password = request.data.get("password", "")
+        if password != settings.SITE_PASSWORD:
+            return Response(
+                {"detail": "Invalid password."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        request.session["site_authenticated"] = True
+        request.session.set_expiry(60 * 60 * 24 * 14)  # 14 days
+        return Response({"detail": "Authenticated."})
+
+    def delete(self, request):
+        request.session.flush()
+        return Response({"detail": "Logged out."})
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class MentorScheduledEmailReplyView(APIView):
+    """Public mentor reply page backed by opaque UUID token (?token= or path)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _resolve_token(self, request, token=None):
+        if token is not None:
+            return token
+        raw = request.GET.get("token")
+        if not raw:
+            return None
+        try:
+            return uuid.UUID(str(raw).strip())
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+    def _get_token_row(self, request, token=None):
+        resolved = self._resolve_token(request, token)
+        if resolved is None:
+            return None, Response(
+                {"detail": "Missing or invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             mt = ScheduledEmailMentorToken.objects.select_related(
-                "scheduled_email", "mentor"
-            ).get(token=token)
+                "scheduled_email__recipient_season", "mentor"
+            ).prefetch_related("mentor__seasons").get(token=resolved)
         except ScheduledEmailMentorToken.DoesNotExist:
-            return Response(
+            return None, Response(
                 {"detail": "Invalid link."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        return mt, None
+
+    def get(self, request, token=None):
+        mt, err = self._get_token_row(request, token)
+        if err is not None:
+            return err
         mentor = mt.mentor
         scheduled = mt.scheduled_email
         practices = scheduled.practices.select_related("season").order_by("date")
-        reply_map = {r.practice_id: r.attendance for r in mt.practice_replies.all()}
+        reply_map = {
+            r.practice_id: r for r in mt.practice_replies.all()
+        }
         practice_payload = []
         for p in practices:
+            saved = reply_map.get(p.id)
             practice_payload.append(
                 {
                     "id": p.id,
@@ -365,52 +482,51 @@ class MentorScheduledEmailReplyView(APIView):
                     "nyrr_race": p.nyrr_race or "",
                     "full_practice": p.full_practice,
                     "season_id": p.season_id,
-                    "attendance": reply_map.get(p.id),
+                    "attendance": saved.attendance if saved else None,
+                    "pace": (saved.pace or "") if saved else "",
                 }
             )
+        season_year = season_year_for_scheduled_email(scheduled)
         return Response(
             {
-                "mentor": {
-                    "first_name": mentor.first_name,
-                    "last_name": mentor.last_name,
-                    "split_practice": mentor.split_practice,
-                    "type": mentor.type,
-                },
+                "mentor": mentor_reply_payload(mentor),
+                "season_year": season_year,
                 "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
                 "practices": practice_payload,
-                "can_submit": mentor.type == MentorTypes.PRACTICE,
+                "pace_choices": [c.value for c in PaceTypes],
+                "email_received_confirmed": mt.email_received_confirmed,
+                "min_at_practice_attendance": MIN_AT_PRACTICE_ATTENDANCE,
             }
         )
 
-    def put(self, request, token):
-        try:
-            mt = ScheduledEmailMentorToken.objects.select_related(
-                "scheduled_email", "mentor"
-            ).get(token=token)
-        except ScheduledEmailMentorToken.DoesNotExist:
-            return Response(
-                {"detail": "Invalid link."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+    def put(self, request, token=None):
+        mt, err = self._get_token_row(request, token)
+        if err is not None:
+            return err
         mentor = mt.mentor
-        if mentor.type != MentorTypes.PRACTICE:
-            return Response(
-                {"detail": "Only At Practice mentors may submit availability."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         replies_in = request.data.get("replies")
         if not isinstance(replies_in, list):
             return Response(
                 {"detail": "Expected 'replies' list."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        email_confirmed = request.data.get("email_received_confirmed")
+        if mentor.type == MentorTypes.REMOTE:
+            if email_confirmed is not True:
+                return Response(
+                    {
+                        "detail": "Please confirm that you received the email.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         practice_ids = set(
             mt.scheduled_email.practices.values_list("pk", flat=True)
         )
         practices_by_id = {
             p.id: p for p in mt.scheduled_email.practices.all()
         }
-        incoming = {}
+        incoming_attendance = {}
+        incoming_pace = {}
         for item in replies_in:
             if not isinstance(item, dict):
                 return Response(
@@ -419,6 +535,7 @@ class MentorScheduledEmailReplyView(APIView):
                 )
             pid = item.get("practice")
             att = item.get("attendance")
+            pace = item.get("pace") or ""
             try:
                 pid = int(pid)
             except (TypeError, ValueError):
@@ -426,7 +543,7 @@ class MentorScheduledEmailReplyView(APIView):
                     {"detail": f"Invalid practice id: {pid!r}."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if pid in incoming:
+            if pid in incoming_attendance:
                 return Response(
                     {"detail": f"Duplicate practice {pid}."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -436,21 +553,36 @@ class MentorScheduledEmailReplyView(APIView):
                     {"detail": f"Practice {pid} is not part of this email."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            incoming[pid] = att
-        if set(incoming.keys()) != practice_ids:
+            incoming_attendance[pid] = att
+            incoming_pace[pid] = pace
+        if set(incoming_attendance.keys()) != practice_ids:
             return Response(
                 {
                     "detail": "Submit exactly one reply per practice in this email.",
-                    "missing": list(practice_ids - set(incoming.keys())),
-                    "extra": list(set(incoming.keys()) - practice_ids),
+                    "missing": list(practice_ids - set(incoming_attendance.keys())),
+                    "extra": list(set(incoming_attendance.keys()) - practice_ids),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if mentor.type == MentorTypes.PRACTICE:
+            attending_count = count_attending_replies(incoming_attendance)
+            if attending_count < MIN_AT_PRACTICE_ATTENDANCE:
+                return Response(
+                    {
+                        "detail": (
+                            f"Select at least {MIN_AT_PRACTICE_ATTENDANCE} practices "
+                            "you can attend."
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         rows = []
-        for pid, att in incoming.items():
+        for pid, att in incoming_attendance.items():
             practice = practices_by_id[pid]
+            pace = incoming_pace.get(pid) or ""
             try:
                 validate_practice_attendance(practice, mentor, att)
+                validate_reply_pace(mentor, att, pace)
             except ValueError as e:
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             rows.append(
@@ -458,9 +590,16 @@ class MentorScheduledEmailReplyView(APIView):
                     mentor_token=mt,
                     practice_id=pid,
                     attendance=att,
+                    pace=pace if att in ATTENDING_REPLY_VALUES else "",
                 )
             )
         with transaction.atomic():
+            mt.email_received_confirmed = (
+                email_confirmed is True
+                if mentor.type == MentorTypes.REMOTE
+                else mt.email_received_confirmed
+            )
+            mt.save(update_fields=["email_received_confirmed", "updated_at"])
             mt.practice_replies.all().delete()
             ScheduledEmailMentorPracticeReply.objects.bulk_create(rows)
         return Response({"detail": "Saved.", "saved": len(rows)})

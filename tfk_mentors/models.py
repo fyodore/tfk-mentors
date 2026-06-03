@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 EMAIL_TEMPLATE_PLACEHOLDER_RE = re.compile(
-    r"\{\{\s*(first_name|last_name|pace|link)\s*\}\}",
+    r"\{\{\s*(first_name|last_name|pace|link|year)\s*\}\}",
     re.IGNORECASE,
 )
 
@@ -433,8 +433,8 @@ class ScheduledEmail(TimeStampedModel):
     )
     body_text = models.TextField(
         help_text=(
-            "Message template. Use {{ first_name }}, {{ last_name }}, {{ pace }}, and {{ link }} "
-            "(personal reply URL); replaced per mentor when the email is sent."
+            "Message template. Use {{ first_name }}, {{ last_name }}, {{ year }}, {{ pace }}, "
+            "and {{ link }} (personal reply URL); replaced per mentor when the email is sent."
         ),
     )
     practices = models.ManyToManyField(
@@ -567,7 +567,16 @@ class ScheduledEmail(TimeStampedModel):
         base = getattr(settings, "FRONTEND_PUBLIC_URL", "http://localhost:5173").rstrip(
             "/"
         )
-        return f"{base}/mentor-reply/{mt.token}"
+        return f"{base}/mentor-reply?token={mt.token}"
+
+    def resolve_season_year(self):
+        """Season year for {{ year }} from recipient_season or linked practices."""
+        if self.recipient_season_id:
+            return self.recipient_season.year
+        practice = self.practices.select_related("season").order_by("date").first()
+        if practice:
+            return practice.season.year
+        return None
 
     def resolve_pace_for_mentor(self, mentor):
         """Pace from MentorPracticeAssignment on linked practices, else mentor default."""
@@ -590,6 +599,7 @@ class ScheduledEmail(TimeStampedModel):
         """Replace template placeholders with this mentor's values (plain text)."""
         pace = self.resolve_pace_for_mentor(mentor)
         link = self.reply_absolute_url_for_mentor(mentor)
+        year = self.resolve_season_year()
 
         def repl(match):
             key = match.group(1).lower()
@@ -597,6 +607,8 @@ class ScheduledEmail(TimeStampedModel):
                 return mentor.first_name or ""
             if key == "last_name":
                 return mentor.last_name or ""
+            if key == "year":
+                return str(year) if year is not None else ""
             if key == "pace":
                 return str(pace or "")
             if key == "link":
@@ -620,6 +632,7 @@ class ScheduledEmailMentorToken(TimeStampedModel):
         related_name="scheduled_email_tokens",
     )
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    email_received_confirmed = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -643,6 +656,12 @@ class ScheduledEmailMentorPracticeReply(TimeStampedModel):
     )
     practice = models.ForeignKey(Practice, on_delete=models.CASCADE)
     attendance = models.CharField(max_length=20, choices=PracticeAttendanceReply.choices)
+    pace = models.CharField(
+        max_length=11,
+        choices=PaceTypes.choices,
+        blank=True,
+        default="",
+    )
 
     class Meta:
         constraints = [

@@ -14,13 +14,15 @@ import { Modal } from '../components/Modal.jsx'
 
 const DEFAULT_BODY = `Hi {{ first_name }} {{ last_name }},
 
+Thank you for being a mentor for the {{ year }} NYC Marathon season.
+
 Please confirm which practices you can attend using this personal link:
 {{ link }}
 
 Your pace group for these sessions is {{ pace }}.
 
 Thanks,
-TFK`
+Your friendly Mentor Coordinator Ted`
 
 const pad2 = (n) => String(n).padStart(2, '0')
 
@@ -568,6 +570,7 @@ export default function EmailsPage() {
         Per-mentor placeholders:{' '}
         <code>{'{{ first_name }}'}</code>,{' '}
         <code>{'{{ last_name }}'}</code>,{' '}
+        <code>{'{{ year }}'}</code> (scheduled season),{' '}
         <code>{'{{ pace }}'}</code>,{' '}
         <code>{'{{ link }}'}</code> (unique reply URL).
       </p>

@@ -11,7 +11,7 @@
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(8, 6, 13, 0.45);
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {

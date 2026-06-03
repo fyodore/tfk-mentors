@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 
+import { PasswordGate } from './components/PasswordGate.jsx'
 import CoachesPage from './pages/CoachesPage.jsx'
 import EmailsPage from './pages/EmailsPage.jsx'
 import HomePage from './pages/HomePage.jsx'
@@ -11,18 +12,72 @@ import SeasonsPage from './pages/SeasonsPage.jsx'
 
 import './App.css'
 
+function Protected({ children }) {
+  return <PasswordGate>{children}</PasswordGate>
+}
+
 export default function App() {
   return (
     <div className="app">
       <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/seasons" element={<SeasonsPage />} />
-        <Route path="/practices" element={<PracticesPage />} />
-        <Route path="/practices/:id" element={<PracticeDetailPage />} />
-        <Route path="/coaches" element={<CoachesPage />} />
-        <Route path="/mentors" element={<MentorsPage />} />
-        <Route path="/emails" element={<EmailsPage />} />
+        <Route path="/mentor-reply" element={<MentorReplyPage />} />
         <Route path="/mentor-reply/:token" element={<MentorReplyPage />} />
+        <Route
+          path="/"
+          element={
+            <Protected>
+              <HomePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/seasons"
+          element={
+            <Protected>
+              <SeasonsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/practices"
+          element={
+            <Protected>
+              <PracticesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/practices/:id"
+          element={
+            <Protected>
+              <PracticeDetailPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/coaches"
+          element={
+            <Protected>
+              <CoachesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/mentors"
+          element={
+            <Protected>
+              <MentorsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/emails"
+          element={
+            <Protected>
+              <EmailsPage />
+            </Protected>
+          }
+        />
       </Routes>
     </div>
   )
