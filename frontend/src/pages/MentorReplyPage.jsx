@@ -17,7 +17,14 @@ function formatPracticeWhen(iso, nyrrRace) {
     timeStyle: 'short',
   })
   const race = nyrrRace?.trim()
-  return race ? `${when} · NYRR: ${race}` : when
+  return race ? `${when} · NYRR Race: ${race}` : when
+}
+
+function formatPaceLabel(pace) {
+  const trimmed = pace?.trim()
+  if (!trimmed) return ''
+  if (/min\/mile/i.test(trimmed)) return trimmed
+  return `${trimmed} min/mile`
 }
 
 function isAttending(attendance) {
@@ -256,7 +263,7 @@ export default function MentorReplyPage() {
             {(assignedPace || mentor.pace) ? (
               <p className="mentor-reply-pace-assigned">
                 Your assigned pace group is{' '}
-                <strong>{assignedPace || mentor.pace}</strong>.
+                <strong>{formatPaceLabel(assignedPace || mentor.pace)}</strong>.
               </p>
             ) : null}
 
@@ -394,7 +401,7 @@ export default function MentorReplyPage() {
                                   .filter(Boolean)
                                   .map((pace) => (
                                     <option key={pace} value={pace}>
-                                      {pace}
+                                      {formatPaceLabel(pace)}
                                     </option>
                                   ))}
                               </select>
