@@ -43,10 +43,12 @@ from .serializers import (
     CoachPracticeAssignmentSerializer,
     MentorSerializer,
     MentorPracticeAssignmentSerializer,
+    PracticeDetailSerializer,
     PracticeSerializer,
     RequestsSerializer,
     ScheduledEmailSerializer,
     SeasonSerializer,
+    practice_mentor_reply_payload,
 )
 
 
@@ -306,6 +308,11 @@ class PracticeViewSet(viewsets.ModelViewSet):
     )
     serializer_class = PracticeSerializer
 
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return PracticeDetailSerializer
+        return PracticeSerializer
+
     @action(detail=True, methods=["get", "post", "delete"], url_path="mentor-replies")
     def mentor_replies(self, request, pk=None):
         """Mentors assigned to this practice via ScheduledEmailMentorPracticeReply."""
@@ -418,24 +425,6 @@ def mentor_reply_payload(mentor):
         "season_years": list(
             mentor.seasons.order_by("-year").values_list("year", flat=True)
         ),
-    }
-
-
-def practice_mentor_reply_payload(reply):
-    """Serialized mentor attendance reply for admin practice view."""
-    mentor = reply.mentor
-    scheduled = reply.mentor_token.scheduled_email
-    return {
-        "id": reply.id,
-        "mentor_id": mentor.id,
-        "first_name": mentor.first_name,
-        "last_name": mentor.last_name,
-        "mentor_type": mentor.type,
-        "attendance": reply.attendance,
-        "pace": reply.pace or mentor.pace or "",
-        "responded_at": reply.updated_at.isoformat(),
-        "scheduled_email_id": scheduled.id,
-        "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
     }
 
 

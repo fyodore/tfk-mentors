@@ -64,6 +64,24 @@ class MentorSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+def practice_mentor_reply_payload(reply):
+    """Serialized mentor attendance reply for admin practice view."""
+    mentor = reply.mentor
+    scheduled = reply.mentor_token.scheduled_email
+    return {
+        "id": reply.id,
+        "mentor_id": mentor.id,
+        "first_name": mentor.first_name,
+        "last_name": mentor.last_name,
+        "mentor_type": mentor.type,
+        "attendance": reply.attendance,
+        "pace": reply.pace or mentor.pace or "",
+        "responded_at": reply.updated_at.isoformat(),
+        "scheduled_email_id": scheduled.id,
+        "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
+    }
+
+
 class PracticeSerializer(serializers.ModelSerializer):
     nyrr_race = serializers.CharField(
         max_length=150, allow_blank=True, required=False
@@ -85,6 +103,20 @@ class PracticeSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class PracticeDetailSerializer(PracticeSerializer):
+    mentor_replies = serializers.SerializerMethodField()
+
+    class Meta(PracticeSerializer.Meta):
+        fields = PracticeSerializer.Meta.fields + ["mentor_replies"]
+
+    def get_mentor_replies(self, obj):
+        obj.sync_mentor_assignments_from_replies()
+        return [
+            practice_mentor_reply_payload(r)
+            for r in obj.latest_attending_mentor_replies()
+        ]
 
 
 class RequestsSerializer(serializers.ModelSerializer):

@@ -10,7 +10,6 @@ import {
   fetchCoaches,
   fetchMentors,
   fetchPractice,
-  fetchPracticeMentorReplies,
   fetchSeasons,
 } from '../api'
 
@@ -66,20 +65,21 @@ export default function PracticeDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [p, sList, cList, mList, caList, replyList] = await Promise.all([
+      const [p, sList, cList, mList, caList] = await Promise.all([
         fetchPractice(practiceId),
         fetchSeasons(),
         fetchCoaches(),
         fetchMentors(),
         fetchCoachPracticeAssignments(),
-        fetchPracticeMentorReplies(practiceId),
       ])
       setPractice(p)
       setSeasons(sList)
       setCoaches([...cList].sort(byName))
       setMentors([...mList].sort(byName))
       setCoachAssignments(caList.filter((a) => a.practice === practiceId))
-      setMentorReplies(Array.isArray(replyList) ? replyList : [])
+      setMentorReplies(
+        Array.isArray(p.mentor_replies) ? p.mentor_replies : []
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -101,13 +101,12 @@ export default function PracticeDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const [p, sList, cList, mList, caList, replyList] = await Promise.all([
+        const [p, sList, cList, mList, caList] = await Promise.all([
           fetchPractice(practiceId),
           fetchSeasons(),
           fetchCoaches(),
           fetchMentors(),
           fetchCoachPracticeAssignments(),
-          fetchPracticeMentorReplies(practiceId),
         ])
         if (!cancelled) {
           setPractice(p)
@@ -115,7 +114,9 @@ export default function PracticeDetailPage() {
           setCoaches([...cList].sort(byName))
           setMentors([...mList].sort(byName))
           setCoachAssignments(caList.filter((a) => a.practice === practiceId))
-          setMentorReplies(Array.isArray(replyList) ? replyList : [])
+          setMentorReplies(
+            Array.isArray(p.mentor_replies) ? p.mentor_replies : []
+          )
         }
       } catch (e) {
         if (!cancelled) {

@@ -48,5 +48,16 @@ urlpatterns = [
         MentorScheduledEmailReplyView.as_view(),
         name="mentor-email-reply",
     ),
+    path(
+        "practice/<int:pk>/mentor-replies/",
+        PracticeViewSet.as_view(
+            {
+                "get": "mentor_replies",
+                "post": "mentor_replies",
+                "delete": "mentor_replies",
+            }
+        ),
+        name="practice-mentor-replies",
+    ),
     path("", include(router.urls)),
 ]
