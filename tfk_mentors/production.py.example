@@ -3,9 +3,7 @@ Production settings template. Copy to production.py on the server (gitignored):
 
     cp tfk_mentors/production.py.example tfk_mentors/production.py
 
-Apache/mod_wsgi must set (on WSGIDaemonProcess, not only SetEnv):
-
-    environment=DJANGO_SETTINGS_MODULE=tfk_mentors.production
+Apache/mod_wsgi loads production.py automatically when that file exists (see wsgi.py).
 """
 import os
 
@@ -19,12 +17,20 @@ os.environ["DB_PORT"] = "5432"
 # Redis
 os.environ["REDIS_URL"] = "redis://redis:6379/0"
 
-# Email
+# Gmail SMTP — use OAuth refresh token (recommended) OR an app password.
 os.environ["EMAIL_HOST"] = "smtp.gmail.com"
-os.environ["EMAIL_PORT"] = "587"
-os.environ["EMAIL_USE_TLS"] = "1"
+os.environ["EMAIL_PORT"] = "465"
+os.environ["EMAIL_USE_TLS"] = "0"
+os.environ["EMAIL_USE_SSL"] = "1"
 os.environ["EMAIL_HOST_USER"] = "your-email@gmail.com"
-os.environ["EMAIL_HOST_PASSWORD"] = "app-specific-password"
+
+# Option A: OAuth (generate once locally with scripts/get_gmail_refresh_token.py)
+os.environ["GMAIL_CLIENT_ID"] = "....apps.googleusercontent.com"
+os.environ["GMAIL_CLIENT_SECRET"] = "...."
+os.environ["GMAIL_REFRESH_TOKEN"] = "1//...."
+
+# Option B: app password (leave GMAIL_* empty and set this instead)
+# os.environ["EMAIL_HOST_PASSWORD"] = "your-gmail-app-password"
 
 # Site / deployment — also set explicitly after import below
 os.environ["FRONTEND_PUBLIC_URL"] = "https://mentors.runsforkids.com"

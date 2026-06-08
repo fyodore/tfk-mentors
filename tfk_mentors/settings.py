@@ -129,10 +129,26 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 # Email — production values set in tfk_mentors/production.py (gitignored).
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") in ("1", "true", "True")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "0") in ("1", "true", "True")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") in (
+    "1",
+    "true",
+    "True",
+) and not EMAIL_USE_SSL
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "30"))
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "noreply@localhost"
+
+# Gmail OAuth2 (optional — preferred on servers that block SMTP passwords)
+GMAIL_CLIENT_ID = os.environ.get("GMAIL_CLIENT_ID", "")
+GMAIL_CLIENT_SECRET = os.environ.get("GMAIL_CLIENT_SECRET", "")
+GMAIL_REFRESH_TOKEN = os.environ.get("GMAIL_REFRESH_TOKEN", "")
+
+if GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN:
+    EMAIL_BACKEND = "tfk_mentors.email_backends.GmailOAuth2EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 
 # Password validation
