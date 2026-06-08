@@ -23,6 +23,25 @@ class PaceTypes(models.TextChoices):
     THIRTEEN = "13+"
 
 
+PACE_DASH_CHARS_RE = re.compile(r"[\u2010-\u2015\u2212-]+")
+
+
+def normalize_pace(raw):
+    """Normalize imported pace labels (e.g. 8--9) to a PaceTypes value."""
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", "", text)
+    text = PACE_DASH_CHARS_RE.sub("-", text)
+    text = re.sub(r"-+", "-", text)
+    text = re.sub(r"\++", "+", text)
+    if text.startswith("13"):
+        return PaceTypes.THIRTEEN.value
+    return text
+
+
 class ScheduledEmailRecipientMode(models.TextChoices):
     ALL_IN_SEASON = "all_in_season", "All mentors in season"
     SPECIFIC_MENTORS = "specific_mentors", "Specific mentors"

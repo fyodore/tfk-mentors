@@ -34,7 +34,6 @@ export default function HomePage() {
     <>
       <header className="app-header">
         <h1>TFK Mentors</h1>
-        <p className="tagline">React UI · API proxied to Django</p>
       </header>
 
       <main className="panel home-panel">

@@ -5,11 +5,13 @@ from .models import (
     CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
+    PaceTypes,
     Practice,
     Requests,
     ScheduledEmail,
     ScheduledEmailRecipientMode,
     Season,
+    normalize_pace,
 )
 
 
@@ -62,6 +64,13 @@ class MentorSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_pace(self, value):
+        normalized = normalize_pace(value)
+        valid = {choice.value for choice in PaceTypes}
+        if normalized not in valid:
+            raise serializers.ValidationError(f'"{value}" is not a valid choice.')
+        return normalized
 
 
 def practice_mentor_reply_payload(reply):

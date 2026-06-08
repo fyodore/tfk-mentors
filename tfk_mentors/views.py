@@ -29,6 +29,7 @@ from .models import (
     ScheduledEmailMentorPracticeReply,
     ScheduledEmailMentorToken,
     Season,
+    normalize_pace,
 )
 
 ATTENDING_REPLY_VALUES = frozenset(
@@ -246,12 +247,21 @@ class MentorViewSet(viewsets.ModelViewSet):
                 errors.append(f"row {row_num}: season {season_year} does not exist")
                 continue
 
+            raw_pace = (row.get("pace") or "").strip()
+            pace = normalize_pace(raw_pace) if raw_pace else ""
+            if raw_pace and pace not in PACE_VALUES:
+                errors.append(
+                    f"row {row_num}: invalid pace '{raw_pace}'"
+                    + (f" (normalized to '{pace}')" if pace != raw_pace else "")
+                )
+                continue
+
             defaults = {
                 "first_name": (row.get("first_name") or "").strip(),
                 "last_name": (row.get("last_name") or "").strip(),
                 "cell_phone": (row.get("cell_phone") or row.get("cell") or "").strip(),
                 "type": (row.get("type") or "").strip(),
-                "pace": (row.get("pace") or "").strip(),
+                "pace": pace,
                 "split_practice": parse_bool(row.get("split_practice") or ""),
             }
 
