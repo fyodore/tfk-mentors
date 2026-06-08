@@ -1,5 +1,54 @@
 import { displayTimeZoneOptions, getDisplayTimeZone } from './timezone.js'
 
+const pad2 = (n) => String(n).padStart(2, '0')
+
+/** @param {number} utcMs @param {string} [timeZone] */
+function zonedPartsFromMs(utcMs, timeZone = getDisplayTimeZone()) {
+  const d = new Date(utcMs)
+  if (Number.isNaN(d.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hourCycle: 'h23',
+    hour12: false,
+  }).formatToParts(d)
+  const pick = (type) => parts.find((p) => p.type === type)?.value
+  return {
+    year: Number(pick('year')),
+    month: Number(pick('month')),
+    day: Number(pick('day')),
+    hour: Number(pick('hour')),
+    minute: Number(pick('minute')),
+  }
+}
+
+/** Wall clock in the server timezone → UTC epoch ms. */
+function zonedWallClockToUtcMs(year, month, day, hour, minute) {
+  const timeZone = getDisplayTimeZone()
+  const start = Date.UTC(year, month - 1, day, 0) - 16 * 3_600_000
+  const end = Date.UTC(year, month - 1, day, 23, 59) + 16 * 3_600_000
+
+  for (let ms = start; ms <= end; ms += 60_000) {
+    const parts = zonedPartsFromMs(ms, timeZone)
+    if (!parts) continue
+    if (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === hour &&
+      parts.minute === minute
+    ) {
+      return ms
+    }
+  }
+
+  return null
+}
+
 /** @param {string|number|Date} iso */
 export function formatDateTime(iso) {
   if (!iso) return '—'
@@ -27,42 +76,30 @@ export function formatPracticeWhen(iso, nyrrRace) {
 
 /** @param {number} h @param {number} m */
 export function formatWallClockTime(h, m) {
-  const d = new Date(2000, 0, 1, h, m, 0, 0)
-  return d.toLocaleTimeString(undefined, {
+  const iso = dateAndQuarterTimeToIso('2000-01-01', `${pad2(h)}:${pad2(m)}`)
+  if (!iso) return `${h}:${pad2(m)}`
+  return new Date(iso).toLocaleTimeString(undefined, {
     ...displayTimeZoneOptions(),
     hour: 'numeric',
     minute: '2-digit',
   })
 }
 
-/** @param {string|number|Date} iso */
-function zonedParts(iso) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: getDisplayTimeZone(),
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  }).formatToParts(d)
-  const pick = (type) => parts.find((p) => p.type === type)?.value
-  return {
-    year: Number(pick('year')),
-    month: Number(pick('month')),
-    day: Number(pick('day')),
-    hour: Number(pick('hour')),
-    minute: Number(pick('minute')),
+/** Quarter-hour slots for practice/email time pickers (server timezone labels). */
+export function buildQuarterTimeOptions() {
+  const out = []
+  for (let q = 0; q < 96; q += 1) {
+    const h = Math.floor(q / 4)
+    const m = (q % 4) * 15
+    const value = `${pad2(h)}:${pad2(m)}`
+    out.push({ value, label: formatWallClockTime(h, m) })
   }
+  return out
 }
-
-const pad2 = (n) => String(n).padStart(2, '0')
 
 /** API datetime → date + quarter-hour in the server timezone. */
 export function isoToDateAndQuarterTime(iso) {
-  const parts = zonedParts(iso)
+  const parts = zonedPartsFromMs(new Date(iso).getTime())
   if (!parts) return { date: '', time: '09:00' }
   const totalMin = parts.hour * 60 + parts.minute
   const snapped = Math.min(23 * 60 + 45, Math.round(totalMin / 15) * 15)
@@ -85,22 +122,9 @@ export function dateAndQuarterTimeToIso(dateStr, timeStr) {
   return new Date(utcMs).toISOString()
 }
 
-function zonedWallClockToUtcMs(year, month, day, hour, minute) {
-  let ms = Date.UTC(year, month - 1, day, hour, minute)
-  for (let i = 0; i < 8; i += 1) {
-    const p = zonedParts(new Date(ms).toISOString())
-    if (!p) return null
-    if (
-      p.year === year &&
-      p.month === month &&
-      p.day === day &&
-      p.hour === hour &&
-      p.minute === minute
-    ) {
-      return ms
-    }
-    ms += ((hour - p.hour) * 60 + (minute - p.minute)) * 60_000
-    ms += (day - p.day) * 86_400_000
-  }
-  return ms
+/** Round-trip check for forms: saved ISO should map back to the same wall clock. */
+export function wallClockMatchesIso(dateStr, timeStr, iso) {
+  if (!iso) return false
+  const { date, time } = isoToDateAndQuarterTime(iso)
+  return date === dateStr && time === timeStr
 }

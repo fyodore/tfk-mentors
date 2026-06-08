@@ -12,9 +12,9 @@ import {
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
 import {
+  buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,
   formatDateTime,
-  formatWallClockTime,
   isoToDateAndQuarterTime,
 } from '../datetime.js'
 
@@ -29,19 +29,6 @@ Your fastest pace group for these sessions is {{ pace }} min/mile.
 
 Thanks,
 Your friendly Mentor Coordinator Ted`
-
-const pad2 = (n) => String(n).padStart(2, '0')
-
-const QUARTER_TIME_OPTIONS = (() => {
-  const out = []
-  for (let q = 0; q < 96; q += 1) {
-    const h = Math.floor(q / 4)
-    const m = (q % 4) * 15
-    const value = `${pad2(h)}:${pad2(m)}`
-    out.push({ value, label: formatWallClockTime(h, m) })
-  }
-  return out
-})()
 
 function isoToSendDateAndTime(iso) {
   const { date, time } = isoToDateAndQuarterTime(iso)
@@ -89,6 +76,8 @@ export default function EmailsPage() {
       ),
     [seasons]
   )
+
+  const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
 
   const mentorsSorted = useMemo(() => {
     return [...mentors].sort((a, b) => {
@@ -404,7 +393,7 @@ export default function EmailsPage() {
             }
             required
           >
-            {QUARTER_TIME_OPTIONS.map((opt) => (
+            {quarterTimeOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>

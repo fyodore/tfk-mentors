@@ -10,9 +10,9 @@ import {
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
 import {
+  buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,
   formatDateTime,
-  formatWallClockTime,
   isoToDateAndQuarterTime,
 } from '../datetime.js'
 
@@ -31,17 +31,6 @@ function sortPracticesByDateDesc(list) {
 }
 
 const pad2 = (n) => String(n).padStart(2, '0')
-
-const QUARTER_TIME_OPTIONS = (() => {
-  const out = []
-  for (let q = 0; q < 96; q += 1) {
-    const h = Math.floor(q / 4)
-    const m = (q % 4) * 15
-    const value = `${pad2(h)}:${pad2(m)}`
-    out.push({ value, label: formatWallClockTime(h, m) })
-  }
-  return out
-})()
 
 function isoToPracticeDateAndTime(iso) {
   const { date, time } = isoToDateAndQuarterTime(iso)
@@ -78,6 +67,8 @@ export default function PracticesPage() {
   )
 
   const defaultSeasonId = sortedSeasons[0]?.id ?? ''
+
+  const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
 
   const seasonYearById = useMemo(() => {
     const m = new Map()
@@ -446,7 +437,7 @@ export default function PracticesPage() {
                 }
                 required
               >
-                {QUARTER_TIME_OPTIONS.map((opt) => (
+                {quarterTimeOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -567,7 +558,7 @@ export default function PracticesPage() {
                 }
                 required
               >
-                {QUARTER_TIME_OPTIONS.map((opt) => (
+                {quarterTimeOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
