@@ -252,6 +252,42 @@ class Practice(TimeStampedModel):
             key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
         )
 
+    def sync_mentor_assignments_from_replies(self):
+        """Align MentorPracticeAssignment + practice.mentors with reply attendance."""
+        attending_replies = self.latest_attending_mentor_replies()
+        attending_mentor_ids = [reply.mentor_id for reply in attending_replies]
+
+        MentorPracticeAssignment.objects.filter(practice=self).exclude(
+            mentor_id__in=attending_mentor_ids
+        ).delete()
+
+        for reply in attending_replies:
+            pace = reply.pace or reply.mentor.pace
+            MentorPracticeAssignment.objects.update_or_create(
+                mentor_id=reply.mentor_id,
+                practice=self,
+                defaults={"pace": pace},
+            )
+
+        self.mentors.set(attending_mentor_ids)
+
+    def get_or_create_mentor_reply_token(self, mentor):
+        """Token for storing admin or mentor replies tied to this practice."""
+        scheduled = (
+            ScheduledEmail.objects.filter(practices=self)
+            .order_by("-scheduled_send_at", "-id")
+            .first()
+        )
+        if scheduled is None:
+            raise ValidationError(
+                "Link a scheduled email to this practice before assigning mentors."
+            )
+        token, _ = ScheduledEmailMentorToken.objects.get_or_create(
+            scheduled_email=scheduled,
+            mentor=mentor,
+        )
+        return token
+
 
 class CoachPracticeAssignment(TimeStampedModel):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)

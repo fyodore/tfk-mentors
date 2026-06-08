@@ -327,6 +327,37 @@ export async function fetchPracticeMentorReplies(id) {
   return res.json()
 }
 
+/** @param {number|string} practiceId @param {{ mentor: number, pace: string }} body */
+export async function createPracticeMentorReply(practiceId, body) {
+  const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} practiceId @param {number|string} mentorId */
+export async function deletePracticeMentorReply(practiceId, mentorId) {
+  const q = new URLSearchParams({ mentor: String(mentorId) })
+  const res = await fetch(
+    `${PRACTICE_LIST}${practiceId}/mentor-replies/?${q}`,
+    {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        ...csrfHeaders(),
+      },
+    }
+  )
+  if (!res.ok && res.status !== 204) throw new Error(await parseError(res))
+}
+
 /** @param {unknown} data */
 export function normalizeCoachPracticeAssignmentList(data) {
   if (!data || typeof data !== 'object') return []

@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 
 from tfk_mentors.models import (
     Mentor,
+    MentorPracticeAssignment,
     MentorTypes,
     Practice,
     PracticeAttendanceReply,
@@ -89,6 +90,16 @@ class MentorEmailReplySubmitTests(TestCase):
             attendance=PracticeAttendanceReply.ATTENDING
         ).count()
         self.assertEqual(attending, 3)
+        self.practices[0].refresh_from_db()
+        assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practices[0],
+        )
+        self.assertEqual(assignment.pace, "11-12")
+        self.assertIn(
+            self.mentor.id,
+            list(self.practices[0].mentors.values_list("pk", flat=True)),
+        )
 
     def test_get_returns_saved_replies(self):
         ScheduledEmailMentorPracticeReply.objects.create(

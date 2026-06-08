@@ -3,6 +3,7 @@ import io
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
@@ -305,16 +306,90 @@ class PracticeViewSet(viewsets.ModelViewSet):
     )
     serializer_class = PracticeSerializer
 
-    @action(detail=True, methods=["get"], url_path="mentor-replies")
+    @action(detail=True, methods=["get", "post", "delete"], url_path="mentor-replies")
     def mentor_replies(self, request, pk=None):
-        """Mentors assigned to this practice from email confirmation replies."""
+        """Mentors assigned to this practice via ScheduledEmailMentorPracticeReply."""
         practice = self.get_object()
-        return Response(
-            [
-                practice_mentor_reply_payload(r)
-                for r in practice.latest_attending_mentor_replies()
-            ]
-        )
+
+        if request.method == "GET":
+            practice.sync_mentor_assignments_from_replies()
+            return Response(
+                [
+                    practice_mentor_reply_payload(r)
+                    for r in practice.latest_attending_mentor_replies()
+                ]
+            )
+
+        if request.method == "POST":
+            mentor_id = request.data.get("mentor")
+            pace = (request.data.get("pace") or "").strip()
+            try:
+                mentor_id = int(mentor_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid mentor id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                mentor = Mentor.objects.get(pk=mentor_id)
+            except Mentor.DoesNotExist:
+                return Response(
+                    {"detail": "Mentor not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if not mentor.seasons.filter(id=practice.season_id).exists():
+                return Response(
+                    {"detail": "Mentor must belong to the practice season."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not pace:
+                pace = mentor.pace
+            if pace not in PACE_VALUES:
+                return Response(
+                    {"detail": "Invalid pace choice."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                mentor_token = practice.get_or_create_mentor_reply_token(mentor)
+            except ValidationError as e:
+                return Response(
+                    {"detail": e.messages[0] if e.messages else str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            with transaction.atomic():
+                reply, _ = ScheduledEmailMentorPracticeReply.objects.update_or_create(
+                    mentor_token=mentor_token,
+                    practice=practice,
+                    defaults={
+                        "mentor": mentor,
+                        "attendance": PracticeAttendanceReply.ATTENDING,
+                        "pace": pace,
+                    },
+                )
+                practice.sync_mentor_assignments_from_replies()
+            return Response(
+                practice_mentor_reply_payload(reply),
+                status=status.HTTP_201_CREATED,
+            )
+
+        mentor_id = request.data.get("mentor") or request.query_params.get("mentor")
+        try:
+            mentor_id = int(mentor_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "Invalid mentor id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                practice=practice,
+                mentor_id=mentor_id,
+            ).update(
+                attendance=PracticeAttendanceReply.NOT_ATTENDING,
+                pace="",
+            )
+            practice.sync_mentor_assignments_from_replies()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class RequestsViewSet(viewsets.ModelViewSet):
@@ -634,6 +709,8 @@ class MentorScheduledEmailReplyView(APIView):
             mt.save(update_fields=["email_received_confirmed", "updated_at"])
             mt.practice_replies.all().delete()
             ScheduledEmailMentorPracticeReply.objects.bulk_create(rows)
+            for pid in practice_ids:
+                Practice.objects.get(pk=pid).sync_mentor_assignments_from_replies()
         saved_replies = (
             ScheduledEmailMentorPracticeReply.objects.filter(mentor_token=mt)
             .select_related("practice")

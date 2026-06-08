@@ -3,17 +3,15 @@ import { Link, useParams } from 'react-router-dom'
 
 import {
   createCoachPracticeAssignment,
-  createMentorPracticeAssignment,
+  createPracticeMentorReply,
   deleteCoachPracticeAssignment,
-  deleteMentorPracticeAssignment,
+  deletePracticeMentorReply,
   fetchCoachPracticeAssignments,
   fetchCoaches,
-  fetchMentorPracticeAssignments,
   fetchMentors,
   fetchPractice,
   fetchPracticeMentorReplies,
   fetchSeasons,
-  patchPractice,
 } from '../api'
 
 function byName(a, b) {
@@ -31,7 +29,6 @@ export default function PracticeDetailPage() {
   const [coaches, setCoaches] = useState([])
   const [mentors, setMentors] = useState([])
   const [coachAssignments, setCoachAssignments] = useState([])
-  const [mentorAssignments, setMentorAssignments] = useState([])
   const [mentorReplies, setMentorReplies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -60,21 +57,6 @@ export default function PracticeDetailPage() {
     return m
   }, [mentors])
 
-  const mentorAssignmentByMentorId = useMemo(() => {
-    const m = new Map()
-    for (const a of mentorAssignments) m.set(a.mentor, a)
-    return m
-  }, [mentorAssignments])
-
-  async function loadMentorReplies() {
-    try {
-      const replyList = await fetchPracticeMentorReplies(practiceId)
-      return Array.isArray(replyList) ? replyList : []
-    } catch {
-      return []
-    }
-  }
-
   async function loadAll() {
     if (Number.isNaN(practiceId)) {
       setError('Invalid practice id.')
@@ -84,21 +66,19 @@ export default function PracticeDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [p, sList, cList, mList, caList, maList, replyList] = await Promise.all([
+      const [p, sList, cList, mList, caList, replyList] = await Promise.all([
         fetchPractice(practiceId),
         fetchSeasons(),
         fetchCoaches(),
         fetchMentors(),
         fetchCoachPracticeAssignments(),
-        fetchMentorPracticeAssignments(),
-        loadMentorReplies(),
+        fetchPracticeMentorReplies(practiceId),
       ])
       setPractice(p)
       setSeasons(sList)
       setCoaches([...cList].sort(byName))
       setMentors([...mList].sort(byName))
       setCoachAssignments(caList.filter((a) => a.practice === practiceId))
-      setMentorAssignments(maList.filter((a) => a.practice === practiceId))
       setMentorReplies(Array.isArray(replyList) ? replyList : [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -121,14 +101,13 @@ export default function PracticeDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const [p, sList, cList, mList, caList, maList, replyList] = await Promise.all([
+        const [p, sList, cList, mList, caList, replyList] = await Promise.all([
           fetchPractice(practiceId),
           fetchSeasons(),
           fetchCoaches(),
           fetchMentors(),
           fetchCoachPracticeAssignments(),
-          fetchMentorPracticeAssignments(),
-          loadMentorReplies(),
+          fetchPracticeMentorReplies(practiceId),
         ])
         if (!cancelled) {
           setPractice(p)
@@ -136,7 +115,6 @@ export default function PracticeDetailPage() {
           setCoaches([...cList].sort(byName))
           setMentors([...mList].sort(byName))
           setCoachAssignments(caList.filter((a) => a.practice === practiceId))
-          setMentorAssignments(maList.filter((a) => a.practice === practiceId))
           setMentorReplies(Array.isArray(replyList) ? replyList : [])
         }
       } catch (e) {
@@ -159,8 +137,8 @@ export default function PracticeDetailPage() {
   )
 
   const assignedMentorIds = useMemo(
-    () => new Set(mentorAssignments.map((a) => a.mentor)),
-    [mentorAssignments]
+    () => new Set(mentorReplies.map((r) => r.mentor_id)),
+    [mentorReplies]
   )
 
   const practiceSeasonId = practice?.season
@@ -223,18 +201,14 @@ export default function PracticeDetailPage() {
   async function handleAddMentor(e) {
     e.preventDefault()
     const mentorId = Number.parseInt(mentorIdToAdd, 10)
-    if (Number.isNaN(mentorId) || !practice) return
+    if (Number.isNaN(mentorId)) return
     setSaving(true)
     setError(null)
     try {
-      await createMentorPracticeAssignment({
+      await createPracticeMentorReply(practiceId, {
         mentor: mentorId,
-        practice: practiceId,
         pace: mentorPaceToAdd,
       })
-      const mentorsNext = [...(practice.mentors || []), mentorId]
-      const updated = await patchPractice(practiceId, { mentors: mentorsNext })
-      setPractice(updated)
       setMentorIdToAdd('')
       setMentorPaceToAdd('8-9')
       await loadAll()
@@ -245,15 +219,11 @@ export default function PracticeDetailPage() {
     }
   }
 
-  async function handleRemoveMentor(assignmentId, mentorId) {
-    if (!practice) return
+  async function handleRemoveMentor(mentorId) {
     setSaving(true)
     setError(null)
     try {
-      await deleteMentorPracticeAssignment(assignmentId)
-      const mentorsNext = (practice.mentors || []).filter((m) => m !== mentorId)
-      const updated = await patchPractice(practiceId, { mentors: mentorsNext })
-      setPractice(updated)
+      await deletePracticeMentorReply(practiceId, mentorId)
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -364,7 +334,6 @@ export default function PracticeDetailPage() {
             <h2>Mentors + Pace Group</h2>
             <ul className="practice-list">
               {mentorReplies.map((r) => {
-                const assignment = mentorAssignmentByMentorId.get(r.mentor_id)
                 const m = mentorById.get(r.mentor_id)
                 return (
                   <li key={r.id} className="practice-row">
@@ -378,16 +347,14 @@ export default function PracticeDetailPage() {
                       </span>
                       <span className="muted">Pace group {r.pace}</span>
                     </div>
-                    {assignment ? (
-                      <button
-                        type="button"
-                        className="btn btn-text btn-text-danger"
-                        disabled={saving}
-                        onClick={() => handleRemoveMentor(assignment.id, assignment.mentor)}
-                      >
-                        Remove
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="btn btn-text btn-text-danger"
+                      disabled={saving}
+                      onClick={() => handleRemoveMentor(r.mentor_id)}
+                    >
+                      Remove
+                    </button>
                   </li>
                 )
               })}
