@@ -12,10 +12,10 @@ const ATTENDING = new Set(['attending', 'first_half', 'second_half'])
 function formatPracticeWhen(iso, nyrrRace) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return String(iso)
-  const when = d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+  const datePart = d.toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const weekday = d.toLocaleDateString(undefined, { weekday: 'long' })
+  const timePart = d.toLocaleTimeString(undefined, { timeStyle: 'short' })
+  const when = `${datePart}, ${weekday}, ${timePart}`
   const race = nyrrRace?.trim()
   return race ? `${when} · NYRR Race: ${race}` : when
 }
