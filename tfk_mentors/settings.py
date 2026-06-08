@@ -146,7 +146,12 @@ GMAIL_CLIENT_SECRET = os.environ.get("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.environ.get("GMAIL_REFRESH_TOKEN", "")
 
 if GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN:
-    EMAIL_BACKEND = "tfk_mentors.email_backends.GmailOAuth2EmailBackend"
+    # HTTPS Gmail API (works when SMTP ports 465/587 are blocked).
+    # Set GMAIL_USE_SMTP=1 to use OAuth-over-SMTP instead.
+    if os.environ.get("GMAIL_USE_SMTP", "0") in ("1", "true", "True"):
+        EMAIL_BACKEND = "tfk_mentors.email_backends.GmailOAuth2EmailBackend"
+    else:
+        EMAIL_BACKEND = "tfk_mentors.email_backends.GmailApiEmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 

@@ -1,11 +1,11 @@
 """Send due ScheduledEmail rows to mentors."""
 
 from django.conf import settings
-from django.core.mail import get_connection
-from django.core.mail import send_mail
+from django.core.mail import get_connection, send_mail
 from django.db import transaction
 from django.utils import timezone
 
+from .email_backends import gmail_oauth_configured, verify_gmail_api_access
 from .models import ScheduledEmail
 
 
@@ -45,15 +45,26 @@ def send_scheduled_email(scheduled_email, *, dry_run=False):
         return {"sent": 0, "recipients": len(mentors), "subject": subject}
 
     try:
-        connection = get_connection(fail_silently=False)
-        connection.open()
-        connection.close()
+        if gmail_oauth_configured() and settings.EMAIL_BACKEND.endswith(
+            "GmailApiEmailBackend"
+        ):
+            verify_gmail_api_access()
+        else:
+            connection = get_connection(fail_silently=False)
+            connection.open()
+            connection.close()
     except OSError as exc:
         raise ConnectionError(
             f"Cannot reach SMTP server {settings.EMAIL_HOST}:{settings.EMAIL_PORT} "
             f"(TLS={settings.EMAIL_USE_TLS}, SSL={settings.EMAIL_USE_SSL}). "
             f"The host may be blocked by your provider's firewall, or the port may "
-            f"be wrong. Try port 465 with EMAIL_USE_SSL=1, or use an email API relay. "
+            f"be wrong. Configure GMAIL_* OAuth vars to use Gmail API over HTTPS, "
+            f"or try port 465 with EMAIL_USE_SSL=1. "
+            f"Original error: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise ConnectionError(
+            f"Email delivery is not configured correctly ({settings.EMAIL_BACKEND}). "
             f"Original error: {exc}"
         ) from exc
 

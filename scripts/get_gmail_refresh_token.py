@@ -15,7 +15,7 @@ Then set on the server in production.py / environment:
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://mail.google.com/"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 
 def main():
