@@ -6,7 +6,14 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tfk_mentors.settings')
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tfk_mentors.settings")
+
+    # Cron/manage.py on production: use production.py when present (same as wsgi.py).
+    settings_path = os.path.join(
+        os.path.dirname(__file__), "tfk_mentors", "production.py"
+    )
+    if os.path.isfile(settings_path):
+        os.environ["DJANGO_SETTINGS_MODULE"] = "tfk_mentors.production"
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
