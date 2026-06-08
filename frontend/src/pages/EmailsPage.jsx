@@ -11,6 +11,12 @@ import {
   patchScheduledEmail,
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
+import {
+  dateAndQuarterTimeToIso,
+  formatDateTime,
+  formatWallClockTime,
+  isoToDateAndQuarterTime,
+} from '../datetime.js'
 
 const DEFAULT_BODY = `Hi {{ first_name }} {{ last_name }},
 
@@ -26,57 +32,20 @@ Your friendly Mentor Coordinator Ted`
 
 const pad2 = (n) => String(n).padStart(2, '0')
 
-/** Every 15 minutes from 00:00 through 23:45 (value `HH:mm` for forms). */
 const QUARTER_TIME_OPTIONS = (() => {
   const out = []
   for (let q = 0; q < 96; q += 1) {
     const h = Math.floor(q / 4)
     const m = (q % 4) * 15
-    const d = new Date(2000, 0, 1, h, m, 0, 0)
     const value = `${pad2(h)}:${pad2(m)}`
-    const label = d.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    out.push({ value, label })
+    out.push({ value, label: formatWallClockTime(h, m) })
   }
   return out
 })()
 
-/** Map an API datetime to calendar date + nearest quarter-hour slot. */
-function isoToDateAndQuarterTime(iso) {
-  if (!iso) return { sendDate: '', sendTime: '09:00' }
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return { sendDate: '', sendTime: '09:00' }
-  const totalMin = d.getHours() * 60 + d.getMinutes()
-  const snapped = Math.min(23 * 60 + 45, Math.round(totalMin / 15) * 15)
-  const hh = Math.floor(snapped / 60)
-  const mm = snapped % 60
-  return {
-    sendDate: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
-    sendTime: `${pad2(hh)}:${pad2(mm)}`,
-  }
-}
-
-/** Build ISO string in local time from `YYYY-MM-DD` + `HH:mm` (quarter-hour). */
-function dateAndQuarterTimeToIso(sendDate, sendTime) {
-  if (!sendDate?.trim() || !sendTime?.trim()) return ''
-  const [y, mo, da] = sendDate.split('-').map((x) => Number.parseInt(x, 10))
-  const [hh, mm] = sendTime.split(':').map((x) => Number.parseInt(x, 10))
-  if ([y, mo, da, hh, mm].some((n) => Number.isNaN(n))) return ''
-  const d = new Date(y, mo - 1, da, hh, mm, 0, 0)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toISOString()
-}
-
-function formatDt(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso)
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+function isoToSendDateAndTime(iso) {
+  const { date, time } = isoToDateAndQuarterTime(iso)
+  return { sendDate: date, sendTime: time }
 }
 
 function sortPracticesByDateAsc(list) {
@@ -141,7 +110,7 @@ export default function EmailsPage() {
   )
 
   const practiceLabel = (p) => {
-    const when = formatDt(p.date)
+    const when = formatDateTime(p.date)
     const year = seasonYearById.get(p.season) ?? p.season
     const race = p.nyrr_race?.trim()
     return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
@@ -248,7 +217,7 @@ export default function EmailsPage() {
       emailRow.recipient_mode === 'specific_mentors'
         ? 'specific_mentors'
         : 'all_in_season'
-    const { sendDate, sendTime } = isoToDateAndQuarterTime(
+    const { sendDate, sendTime } = isoToSendDateAndTime(
       emailRow.scheduled_send_at
     )
     setForm({
@@ -387,7 +356,7 @@ export default function EmailsPage() {
   const handleMarkSent = async (row) => {
     if (
       !window.confirm(
-        `Mark this email as sent?\nScheduled: ${formatDt(row.scheduled_send_at)}`
+        `Mark this email as sent?\nScheduled: ${formatDateTime(row.scheduled_send_at)}`
       )
     ) {
       return
@@ -643,12 +612,12 @@ export default function EmailsPage() {
         <div className="practice-row-main">
           <span className="practice-date">
             {isSent
-              ? `Sent · ${formatDt(row.task_completed_at)}`
-              : `Scheduled · ${formatDt(row.scheduled_send_at)}`}
+              ? `Sent · ${formatDateTime(row.task_completed_at)}`
+              : `Scheduled · ${formatDateTime(row.scheduled_send_at)}`}
           </span>
           {isSent ? (
             <span className="muted">
-              Originally scheduled {formatDt(row.scheduled_send_at)}
+              Originally scheduled {formatDateTime(row.scheduled_send_at)}
             </span>
           ) : null}
           <div className="email-recipients-block">
@@ -856,7 +825,7 @@ export default function EmailsPage() {
         >
           {activeEmail?.task_completed_at ? (
             <p className="muted">
-              Completed at {formatDt(activeEmail.task_completed_at)} — you can
+              Completed at {formatDateTime(activeEmail.task_completed_at)} — you can
               still edit template and practices if needed.
             </p>
           ) : null}
@@ -897,7 +866,7 @@ export default function EmailsPage() {
       >
         <p className="delete-prompt">
           Delete this scheduled email (
-          {activeEmail ? formatDt(activeEmail.scheduled_send_at) : ''})?
+          {activeEmail ? formatDateTime(activeEmail.scheduled_send_at) : ''})?
         </p>
         {modalError ? (
           <p className="error modal-error" role="alert">

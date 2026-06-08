@@ -64,15 +64,7 @@ class MentorEmailReplySubmitTests(TestCase):
                     "attendance": PracticeAttendanceReply.ATTENDING,
                     "pace": "",
                 }
-                for p in self.practices[:3]
-            ]
-            + [
-                {
-                    "practice": p.id,
-                    "attendance": PracticeAttendanceReply.NOT_ATTENDING,
-                    "pace": "",
-                }
-                for p in self.practices[3:]
+                for p in self.practices
             ],
         }
 
@@ -89,7 +81,7 @@ class MentorEmailReplySubmitTests(TestCase):
         attending = stored.filter(
             attendance=PracticeAttendanceReply.ATTENDING
         ).count()
-        self.assertEqual(attending, 3)
+        self.assertEqual(attending, 4)
         self.practices[0].refresh_from_db()
         assignment = MentorPracticeAssignment.objects.get(
             mentor=self.mentor,

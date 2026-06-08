@@ -1,6 +1,14 @@
 import { apiPath } from './config.js'
 
 const SEASON_LIST = apiPath('/api/season/')
+const SERVER_CONFIG = apiPath('/api/config/')
+
+/** @returns {Promise<{ time_zone: string }>} */
+export async function fetchServerConfig() {
+  const res = await fetch(SERVER_CONFIG, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
 
 /** @returns {string} */
 function getCookie(name) {

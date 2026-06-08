@@ -3,25 +3,18 @@ import { useParams, useSearchParams } from 'react-router-dom'
 
 import { fetchMentorEmailReply, putMentorEmailReply } from '../api'
 import { Modal } from '../components/Modal'
+import { formatPracticeWhen } from '../datetime.js'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 const ATTENDING = new Set(['attending', 'first_half', 'second_half'])
 const SUBMIT_SUCCESS_MESSAGE =
   'Thank you for taking the time to indicate which practices you can attend!'
+const PARTIAL_MONTH_NOTE =
+  'This email may not include a full month of practices. Please remember what ' +
+  'you selected when you receive the next reply request.'
 
 /** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null, pace?: string }} PracticeReplyRow */
-
-function formatPracticeWhen(iso, nyrrRace) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return String(iso)
-  const datePart = d.toLocaleDateString(undefined, { dateStyle: 'medium' })
-  const weekday = d.toLocaleDateString(undefined, { weekday: 'long' })
-  const timePart = d.toLocaleTimeString(undefined, { timeStyle: 'short' })
-  const when = `${datePart}, ${weekday}, ${timePart}`
-  const race = nyrrRace?.trim()
-  return race ? `${when} · NYRR Race: ${race}` : when
-}
 
 function formatPaceLabel(pace) {
   const trimmed = pace?.trim()
@@ -74,7 +67,7 @@ export default function MentorReplyPage() {
   const [practices, setPractices] = useState([])
   /** @type {string[]} */
   const [paceChoices, setPaceChoices] = useState([])
-  const [minAtPractice, setMinAtPractice] = useState(3)
+  const [showsPartialMonth, setShowsPartialMonth] = useState(false)
   const [emailReceivedConfirmed, setEmailReceivedConfirmed] = useState(false)
   /** @type {Record<number, string>} */
   const [attendanceByPractice, setAttendanceByPractice] = useState({})
@@ -111,7 +104,7 @@ export default function MentorReplyPage() {
         setPaceChoices(
           Array.isArray(data.pace_choices) ? data.pace_choices : []
         )
-        setMinAtPractice(data.min_at_practice_attendance ?? 3)
+        setShowsPartialMonth(Boolean(data.shows_partial_month))
         setEmailReceivedConfirmed(Boolean(data.email_received_confirmed))
         const defaultPace = m?.pace ?? ''
         setAttendanceByPractice(initialAttendanceMap(plist))
@@ -135,12 +128,6 @@ export default function MentorReplyPage() {
 
   const isAtPractice = mentor?.type === AT_PRACTICE
   const isRemote = mentor?.type === REMOTE
-
-  const attendingCount = useMemo(() => {
-    return practices.filter((p) =>
-      isAttending(attendanceByPractice[p.id])
-    ).length
-  }, [practices, attendanceByPractice])
 
   const introMessage = useMemo(() => {
     if (!mentor) return ''
@@ -173,9 +160,6 @@ export default function MentorReplyPage() {
   }
 
   function validateBeforeSubmit() {
-    if (isAtPractice && attendingCount < minAtPractice) {
-      return `Select at least ${minAtPractice} practices you can attend.`
-    }
     if (isRemote && !emailReceivedConfirmed) {
       return 'Please confirm that you received the email.'
     }
@@ -308,10 +292,9 @@ export default function MentorReplyPage() {
                   </label>
                 ) : null}
 
-                {isAtPractice ? (
-                  <p className="muted mentor-reply-hint">
-                    Select at least {minAtPractice} practices (
-                    {attendingCount} selected).
+                {isAtPractice && showsPartialMonth ? (
+                  <p className="muted mentor-reply-partial-month">
+                    {PARTIAL_MONTH_NOTE}
                   </p>
                 ) : null}
 

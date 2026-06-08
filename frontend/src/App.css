@@ -603,6 +603,10 @@
   margin: 0.5rem 0 0;
 }
 
+.mentor-reply-partial-month {
+  margin: 0 0 1rem;
+}
+
 .mentor-reply-pace-label {
   display: flex;
   flex-direction: column;

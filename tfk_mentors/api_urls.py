@@ -12,6 +12,7 @@ from .views import (
     ScheduledEmailViewSet,
     SeasonViewSet,
     SiteAuthView,
+    SiteConfigView,
 )
 
 router = DefaultRouter()
@@ -37,6 +38,7 @@ router.register(
 )
 
 urlpatterns = [
+    path("config/", SiteConfigView.as_view(), name="site-config"),
     path("auth/session/", SiteAuthView.as_view(), name="site-auth"),
     path(
         "mentor-email-reply/",

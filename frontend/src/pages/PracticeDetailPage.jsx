@@ -12,6 +12,7 @@ import {
   fetchPractice,
   fetchSeasons,
 } from '../api'
+import { formatDateTime } from '../datetime.js'
 
 function byName(a, b) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -262,10 +263,7 @@ export default function PracticeDetailPage() {
         {!loading && practice && (
           <>
             <p className="muted">
-              {new Date(practice.date).toLocaleString(undefined, {
-                dateStyle: 'medium',
-                timeStyle: 'short',
-              })}
+              {formatDateTime(practice.date)}
               {' · '}
               Season {seasonById.get(practice.season)?.year ?? practice.season}
             </p>

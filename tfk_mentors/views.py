@@ -1,6 +1,8 @@
+import calendar
 import csv
 import io
 import uuid
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -29,7 +31,6 @@ from .models import (
     Season,
 )
 
-MIN_AT_PRACTICE_ATTENDANCE = 3
 ATTENDING_REPLY_VALUES = frozenset(
     {
         PracticeAttendanceReply.ATTENDING,
@@ -432,12 +433,31 @@ def season_year_for_scheduled_email(scheduled):
     return scheduled.resolve_season_year()
 
 
-def count_attending_replies(replies_by_practice_id):
-    return sum(
-        1
-        for att in replies_by_practice_id.values()
-        if att in ATTENDING_REPLY_VALUES
-    )
+def display_timezone():
+    return ZoneInfo(settings.TIME_ZONE)
+
+
+def practice_local_date(practice):
+    return practice.date.astimezone(display_timezone())
+
+
+def email_shows_partial_month(practices):
+    """True when listed practices do not cover a full calendar month."""
+    by_month = {}
+    for practice in practices:
+        local = practice_local_date(practice)
+        key = (local.year, local.month)
+        last_day = calendar.monthrange(local.year, local.month)[1]
+        if key not in by_month:
+            by_month[key] = {"min": local.day, "max": local.day, "last": last_day}
+        else:
+            stats = by_month[key]
+            stats["min"] = min(stats["min"], local.day)
+            stats["max"] = max(stats["max"], local.day)
+    for stats in by_month.values():
+        if stats["min"] > 1 or stats["max"] < stats["last"]:
+            return True
+    return False
 
 
 def validate_practice_attendance(practice, mentor, attendance):
@@ -519,6 +539,16 @@ class SiteAuthView(APIView):
         return Response({"detail": "Logged out."})
 
 
+class SiteConfigView(APIView):
+    """Public site config for the SPA (server timezone, etc.)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({"time_zone": settings.TIME_ZONE})
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 class MentorScheduledEmailReplyView(APIView):
     """Public mentor reply page backed by opaque UUID token (?token= or path)."""
@@ -581,6 +611,7 @@ class MentorScheduledEmailReplyView(APIView):
             )
         season_year = season_year_for_scheduled_email(scheduled)
         assigned_pace = scheduled.resolve_pace_for_mentor(mentor)
+        practice_list = list(practices)
         return Response(
             {
                 "mentor": mentor_reply_payload(mentor),
@@ -590,7 +621,7 @@ class MentorScheduledEmailReplyView(APIView):
                 "practices": practice_payload,
                 "pace_choices": [c.value for c in PaceTypes],
                 "email_received_confirmed": mt.email_received_confirmed,
-                "min_at_practice_attendance": MIN_AT_PRACTICE_ATTENDANCE,
+                "shows_partial_month": email_shows_partial_month(practice_list),
             }
         )
 
@@ -659,18 +690,6 @@ class MentorScheduledEmailReplyView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if mentor.type == MentorTypes.PRACTICE:
-            attending_count = count_attending_replies(incoming_attendance)
-            if attending_count < MIN_AT_PRACTICE_ATTENDANCE:
-                return Response(
-                    {
-                        "detail": (
-                            f"Select at least {MIN_AT_PRACTICE_ATTENDANCE} practices "
-                            "you can attend."
-                        ),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
         rows = []
         for pid, att in incoming_attendance.items():
             practice = practices_by_id[pid]

@@ -9,6 +9,12 @@ import {
   patchPractice,
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
+import {
+  dateAndQuarterTimeToIso,
+  formatDateTime,
+  formatWallClockTime,
+  isoToDateAndQuarterTime,
+} from '../datetime.js'
 
 function sortSeasonsByYearDesc(list) {
   return [...list].sort(
@@ -26,47 +32,20 @@ function sortPracticesByDateDesc(list) {
 
 const pad2 = (n) => String(n).padStart(2, '0')
 
-/** Every 15 minutes from 00:00 through 23:45 (value `HH:mm` for forms). */
 const QUARTER_TIME_OPTIONS = (() => {
   const out = []
   for (let q = 0; q < 96; q += 1) {
     const h = Math.floor(q / 4)
     const m = (q % 4) * 15
-    const d = new Date(2000, 0, 1, h, m, 0, 0)
     const value = `${pad2(h)}:${pad2(m)}`
-    const label = d.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    out.push({ value, label })
+    out.push({ value, label: formatWallClockTime(h, m) })
   }
   return out
 })()
 
-/** Map an API datetime to calendar date + nearest quarter-hour slot. */
-function isoToDateAndQuarterTime(iso) {
-  if (!iso) return { practiceDate: '', practiceTime: '09:00' }
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return { practiceDate: '', practiceTime: '09:00' }
-  const totalMin = d.getHours() * 60 + d.getMinutes()
-  const snapped = Math.min(23 * 60 + 45, Math.round(totalMin / 15) * 15)
-  const hh = Math.floor(snapped / 60)
-  const mm = snapped % 60
-  return {
-    practiceDate: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
-    practiceTime: `${pad2(hh)}:${pad2(mm)}`,
-  }
-}
-
-/** Build ISO string in local time from `YYYY-MM-DD` + `HH:mm` (quarter-hour). */
-function dateAndQuarterTimeToIso(practiceDate, practiceTime) {
-  if (!practiceDate?.trim() || !practiceTime?.trim()) return ''
-  const [y, mo, da] = practiceDate.split('-').map((x) => Number.parseInt(x, 10))
-  const [hh, mm] = practiceTime.split(':').map((x) => Number.parseInt(x, 10))
-  if ([y, mo, da, hh, mm].some((n) => Number.isNaN(n))) return ''
-  const d = new Date(y, mo - 1, da, hh, mm, 0, 0)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toISOString()
+function isoToPracticeDateAndTime(iso) {
+  const { date, time } = isoToDateAndQuarterTime(iso)
+  return { practiceDate: date, practiceTime: time }
 }
 
 function emptyPracticeForm(defaultSeasonId) {
@@ -164,7 +143,7 @@ export default function PracticesPage() {
   const openEdit = (practice) => {
     setModalError('')
     setActivePractice(practice)
-    const { practiceDate, practiceTime } = isoToDateAndQuarterTime(
+    const { practiceDate, practiceTime } = isoToPracticeDateAndTime(
       practice.date
     )
     setForm({
@@ -344,10 +323,7 @@ export default function PracticesPage() {
                 <div className="practice-row-main">
                   <span className="practice-date">
                     {p.date
-                      ? new Date(p.date).toLocaleString(undefined, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })
+                      ? formatDateTime(p.date)
                       : '—'}
                   </span>
                   <span className="practice-race">
@@ -663,10 +639,7 @@ export default function PracticesPage() {
           Delete this practice on{' '}
           <strong>
             {activePractice?.date
-              ? new Date(activePractice.date).toLocaleString(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })
+              ? formatDateTime(activePractice.date)
               : '—'}
           </strong>
           {activePractice?.nyrr_race ? (
