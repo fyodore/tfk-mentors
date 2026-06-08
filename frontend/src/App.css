@@ -589,6 +589,11 @@
   margin: 0 0 1rem;
 }
 
+.mentor-reply-success {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+}
+
 .mentor-reply-email-confirm {
   display: block;
   margin: 1rem 0;

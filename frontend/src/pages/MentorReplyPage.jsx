@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 
 import { fetchMentorEmailReply, putMentorEmailReply } from '../api'
+import { Modal } from '../components/Modal'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 const ATTENDING = new Set(['attending', 'first_half', 'second_half'])
+const SUBMIT_SUCCESS_MESSAGE =
+  'Thank you for taking the time to indicate which practices you can attend!'
 
 /** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null, pace?: string }} PracticeReplyRow */
 
@@ -78,7 +81,8 @@ export default function MentorReplyPage() {
   /** @type {Record<number, string>} */
   const [paceByPractice, setPaceByPractice] = useState({})
   const [busy, setBusy] = useState(false)
-  const [saveOk, setSaveOk] = useState(null)
+  const [submitted, setSubmitted] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -93,7 +97,8 @@ export default function MentorReplyPage() {
       }
       setLoading(true)
       setError(null)
-      setSaveOk(null)
+      setSubmitted(false)
+      setConfirmOpen(false)
       try {
         const data = await fetchMentorEmailReply(rawToken)
         if (cancelled) return
@@ -111,6 +116,7 @@ export default function MentorReplyPage() {
         const defaultPace = m?.pace ?? ''
         setAttendanceByPractice(initialAttendanceMap(plist))
         setPaceByPractice(initialPaceMap(plist, defaultPace))
+        setSubmitted(plist.some((p) => p.attendance != null))
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
@@ -186,17 +192,10 @@ export default function MentorReplyPage() {
     return null
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
+  async function submitReply() {
     if (!rawToken) return
-    const validationError = validateBeforeSubmit()
-    if (validationError) {
-      setError(validationError)
-      return
-    }
     setBusy(true)
     setError(null)
-    setSaveOk(null)
     try {
       const replies = practices.map((p) => {
         const attendance = attendanceByPractice[p.id] ?? 'not_attending'
@@ -207,12 +206,30 @@ export default function MentorReplyPage() {
         replies,
         ...(isRemote ? { email_received_confirmed: true } : {}),
       })
-      setSaveOk('Thank you — your response was saved.')
+      setSubmitted(true)
+      setConfirmOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!rawToken || submitted) return
+    const validationError = validateBeforeSubmit()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setError(null)
+    setConfirmOpen(true)
+  }
+
+  function handleConfirmSubmit() {
+    if (busy) return
+    submitReply()
   }
 
   if (loading) {
@@ -245,11 +262,11 @@ export default function MentorReplyPage() {
             {error}
           </p>
         )}
-        {saveOk && (
-          <p className="muted" role="status">
-            {saveOk}
+        {submitted ? (
+          <p className="mentor-reply-success" role="status">
+            {SUBMIT_SUCCESS_MESSAGE}
           </p>
-        )}
+        ) : null}
 
             <p className="mentor-reply-greeting">
               Hello <strong>{mentor.first_name}</strong>
@@ -271,7 +288,7 @@ export default function MentorReplyPage() {
               <p className="muted">
                 No practices were attached to this message.
               </p>
-            ) : (
+            ) : submitted ? null : (
               <form className="mentor-reply-form" onSubmit={handleSubmit}>
                 {introMessage ? (
                   <p className="mentor-reply-intro">{introMessage}</p>
@@ -423,6 +440,40 @@ export default function MentorReplyPage() {
                 </div>
               </form>
             )}
+
+        <Modal
+          open={confirmOpen}
+          title="Submit your response?"
+          closeDisabled={busy}
+          onClose={() => {
+            if (!busy) setConfirmOpen(false)
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => setConfirmOpen(false)}
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={handleConfirmSubmit}
+              >
+                {busy ? 'Submitting…' : 'Submit'}
+              </button>
+            </>
+          }
+        >
+          <p>
+            Once you submit, any updates to your availability will need to be
+            sent to Ted.
+          </p>
+        </Modal>
       </main>
     </>
   )
