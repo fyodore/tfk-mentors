@@ -654,7 +654,16 @@ class ScheduledEmailMentorPracticeReply(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="practice_replies",
     )
-    practice = models.ForeignKey(Practice, on_delete=models.CASCADE)
+    mentor = models.ForeignKey(
+        Mentor,
+        on_delete=models.CASCADE,
+        related_name="scheduled_email_practice_replies",
+    )
+    practice = models.ForeignKey(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="mentor_email_replies",
+    )
     attendance = models.CharField(max_length=20, choices=PracticeAttendanceReply.choices)
     pace = models.CharField(
         max_length=11,

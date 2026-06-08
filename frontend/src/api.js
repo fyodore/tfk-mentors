@@ -318,6 +318,15 @@ export async function fetchPractice(id) {
   return res.json()
 }
 
+/** @param {number|string} id */
+export async function fetchPracticeMentorReplies(id) {
+  const res = await fetch(`${PRACTICE_LIST}${id}/mentor-replies/`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {unknown} data */
 export function normalizeCoachPracticeAssignmentList(data) {
   if (!data || typeof data !== 'object') return []

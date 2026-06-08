@@ -11,9 +11,27 @@ import {
   fetchMentorPracticeAssignments,
   fetchMentors,
   fetchPractice,
+  fetchPracticeMentorReplies,
   fetchSeasons,
   patchPractice,
 } from '../api'
+
+const ATTENDANCE_LABELS = {
+  attending: 'Attending',
+  first_half: 'First half',
+  second_half: 'Second half',
+}
+
+function formatAttendanceLabel(attendance) {
+  return ATTENDANCE_LABELS[attendance] ?? attendance
+}
+
+function formatPaceLabel(pace) {
+  const trimmed = pace?.trim()
+  if (!trimmed) return ''
+  if (/min\/mile/i.test(trimmed)) return trimmed
+  return `${trimmed} min/mile`
+}
 
 function byName(a, b) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -31,6 +49,7 @@ export default function PracticeDetailPage() {
   const [mentors, setMentors] = useState([])
   const [coachAssignments, setCoachAssignments] = useState([])
   const [mentorAssignments, setMentorAssignments] = useState([])
+  const [mentorReplies, setMentorReplies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -67,13 +86,14 @@ export default function PracticeDetailPage() {
     setLoading(true)
     setError(null)
     try {
-      const [p, sList, cList, mList, caList, maList] = await Promise.all([
+      const [p, sList, cList, mList, caList, maList, replyList] = await Promise.all([
         fetchPractice(practiceId),
         fetchSeasons(),
         fetchCoaches(),
         fetchMentors(),
         fetchCoachPracticeAssignments(),
         fetchMentorPracticeAssignments(),
+        fetchPracticeMentorReplies(practiceId),
       ])
       setPractice(p)
       setSeasons(sList)
@@ -81,6 +101,7 @@ export default function PracticeDetailPage() {
       setMentors([...mList].sort(byName))
       setCoachAssignments(caList.filter((a) => a.practice === practiceId))
       setMentorAssignments(maList.filter((a) => a.practice === practiceId))
+      setMentorReplies(Array.isArray(replyList) ? replyList : [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -102,13 +123,14 @@ export default function PracticeDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const [p, sList, cList, mList, caList, maList] = await Promise.all([
+        const [p, sList, cList, mList, caList, maList, replyList] = await Promise.all([
           fetchPractice(practiceId),
           fetchSeasons(),
           fetchCoaches(),
           fetchMentors(),
           fetchCoachPracticeAssignments(),
           fetchMentorPracticeAssignments(),
+          fetchPracticeMentorReplies(practiceId),
         ])
         if (!cancelled) {
           setPractice(p)
@@ -117,6 +139,7 @@ export default function PracticeDetailPage() {
           setMentors([...mList].sort(byName))
           setCoachAssignments(caList.filter((a) => a.practice === practiceId))
           setMentorAssignments(maList.filter((a) => a.practice === practiceId))
+          setMentorReplies(Array.isArray(replyList) ? replyList : [])
         }
       } catch (e) {
         if (!cancelled) {
@@ -277,6 +300,29 @@ export default function PracticeDetailPage() {
               {' · '}
               Season {seasonById.get(practice.season)?.year ?? practice.season}
             </p>
+
+            <h2>Mentors who can attend</h2>
+            <p className="muted practice-detail-hint">
+              From mentor email replies for this practice.
+            </p>
+            <ul className="practice-list">
+              {mentorReplies.map((r) => (
+                <li key={r.id} className="practice-row">
+                  <div className="practice-row-main">
+                    <span className="practice-date">
+                      {r.first_name} {r.last_name}
+                    </span>
+                    <span className="muted">
+                      {formatAttendanceLabel(r.attendance)}
+                      {r.pace ? ` · ${formatPaceLabel(r.pace)}` : ''}
+                    </span>
+                  </div>
+                </li>
+              ))}
+              {mentorReplies.length === 0 && (
+                <li className="muted">No mentors have confirmed attendance yet.</li>
+              )}
+            </ul>
 
             <h2>Coaches + Pace</h2>
             <ul className="practice-list">

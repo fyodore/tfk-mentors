@@ -305,6 +305,25 @@ class PracticeViewSet(viewsets.ModelViewSet):
     )
     serializer_class = PracticeSerializer
 
+    @action(detail=True, methods=["get"], url_path="mentor-replies")
+    def mentor_replies(self, request, pk=None):
+        """Mentors who confirmed they can attend this practice (from email replies)."""
+        practice = self.get_object()
+        replies = (
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                practice=practice,
+                attendance__in=ATTENDING_REPLY_VALUES,
+            )
+            .select_related(
+                "mentor",
+                "mentor_token__scheduled_email",
+            )
+            .order_by("mentor__last_name", "mentor__first_name", "-updated_at")
+        )
+        return Response(
+            [practice_mentor_reply_payload(r) for r in replies]
+        )
+
 
 class RequestsViewSet(viewsets.ModelViewSet):
     """Full CRUD for Requests at /api/requests/."""
@@ -332,6 +351,24 @@ def mentor_reply_payload(mentor):
         "season_years": list(
             mentor.seasons.order_by("-year").values_list("year", flat=True)
         ),
+    }
+
+
+def practice_mentor_reply_payload(reply):
+    """Serialized mentor attendance reply for admin practice view."""
+    mentor = reply.mentor
+    scheduled = reply.mentor_token.scheduled_email
+    return {
+        "id": reply.id,
+        "mentor_id": mentor.id,
+        "first_name": mentor.first_name,
+        "last_name": mentor.last_name,
+        "mentor_type": mentor.type,
+        "attendance": reply.attendance,
+        "pace": reply.pace or "",
+        "responded_at": reply.updated_at.isoformat(),
+        "scheduled_email_id": scheduled.id,
+        "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
     }
 
 
@@ -590,6 +627,7 @@ class MentorScheduledEmailReplyView(APIView):
             rows.append(
                 ScheduledEmailMentorPracticeReply(
                     mentor_token=mt,
+                    mentor=mentor,
                     practice_id=pid,
                     attendance=att,
                     pace=pace if att in ATTENDING_REPLY_VALUES else "",
