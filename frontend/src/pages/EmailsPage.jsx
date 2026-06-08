@@ -19,7 +19,7 @@ Thank you for being a mentor for the {{ year }} NYC Marathon season.
 Please confirm which practices you can attend using this personal link:
 {{ link }}
 
-Your pace group for these sessions is {{ pace }}.
+Your fastest pace group for these sessions is {{ pace }} min/mile.
 
 Thanks,
 Your friendly Mentor Coordinator Ted`
