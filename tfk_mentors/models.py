@@ -231,6 +231,27 @@ class Practice(TimeStampedModel):
     def set_mentors(self, mentors):
         self.mentors.set(mentors)
 
+    def latest_attending_mentor_replies(self):
+        """Latest attending reply per mentor linked via ScheduledEmailMentorPracticeReply."""
+        attending_values = (
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.FIRST_HALF,
+            PracticeAttendanceReply.SECOND_HALF,
+        )
+        replies = (
+            self.mentor_email_replies.filter(attendance__in=attending_values)
+            .select_related("mentor", "mentor_token__scheduled_email")
+            .order_by("-updated_at")
+        )
+        latest_by_mentor = {}
+        for reply in replies:
+            if reply.mentor_id not in latest_by_mentor:
+                latest_by_mentor[reply.mentor_id] = reply
+        return sorted(
+            latest_by_mentor.values(),
+            key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
+        )
+
 
 class CoachPracticeAssignment(TimeStampedModel):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)

@@ -506,8 +506,7 @@ const MENTOR_EMAIL_REPLY = apiPath('/api/mentor-email-reply')
 
 /** @param {string} token raw UUID from URL (?token= or path) */
 export async function fetchMentorEmailReply(token) {
-  const q = new URLSearchParams({ token })
-  const url = `${MENTOR_EMAIL_REPLY}/?${q}`
+  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
@@ -521,14 +520,12 @@ export async function fetchMentorEmailReply(token) {
  * }} payload
  */
 export async function putMentorEmailReply(token, payload) {
-  const q = new URLSearchParams({ token })
-  const url = `${MENTOR_EMAIL_REPLY}/?${q}`
+  const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, {
     method: 'PUT',
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...csrfHeaders(),
     },
     body: JSON.stringify(payload),
   })

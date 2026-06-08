@@ -5,7 +5,7 @@ import uuid
 from django.conf import settings
 from django.db import transaction
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -307,21 +307,13 @@ class PracticeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="mentor-replies")
     def mentor_replies(self, request, pk=None):
-        """Mentors who confirmed they can attend this practice (from email replies)."""
+        """Mentors assigned to this practice from email confirmation replies."""
         practice = self.get_object()
-        replies = (
-            ScheduledEmailMentorPracticeReply.objects.filter(
-                practice=practice,
-                attendance__in=ATTENDING_REPLY_VALUES,
-            )
-            .select_related(
-                "mentor",
-                "mentor_token__scheduled_email",
-            )
-            .order_by("mentor__last_name", "mentor__first_name", "-updated_at")
-        )
         return Response(
-            [practice_mentor_reply_payload(r) for r in replies]
+            [
+                practice_mentor_reply_payload(r)
+                for r in practice.latest_attending_mentor_replies()
+            ]
         )
 
 
@@ -365,7 +357,7 @@ def practice_mentor_reply_payload(reply):
         "last_name": mentor.last_name,
         "mentor_type": mentor.type,
         "attendance": reply.attendance,
-        "pace": reply.pace or "",
+        "pace": reply.pace or mentor.pace or "",
         "responded_at": reply.updated_at.isoformat(),
         "scheduled_email_id": scheduled.id,
         "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
@@ -463,7 +455,7 @@ class SiteAuthView(APIView):
         return Response({"detail": "Logged out."})
 
 
-@method_decorator(ensure_csrf_cookie, name="dispatch")
+@method_decorator(csrf_exempt, name="dispatch")
 class MentorScheduledEmailReplyView(APIView):
     """Public mentor reply page backed by opaque UUID token (?token= or path)."""
 
@@ -642,7 +634,26 @@ class MentorScheduledEmailReplyView(APIView):
             mt.save(update_fields=["email_received_confirmed", "updated_at"])
             mt.practice_replies.all().delete()
             ScheduledEmailMentorPracticeReply.objects.bulk_create(rows)
-        return Response({"detail": "Saved.", "saved": len(rows)})
+        saved_replies = (
+            ScheduledEmailMentorPracticeReply.objects.filter(mentor_token=mt)
+            .select_related("practice")
+            .order_by("practice__date")
+        )
+        return Response(
+            {
+                "detail": "Saved.",
+                "saved": len(rows),
+                "mentor_id": mentor.id,
+                "replies": [
+                    {
+                        "practice": r.practice_id,
+                        "attendance": r.attendance,
+                        "pace": r.pace or "",
+                    }
+                    for r in saved_replies
+                ],
+            }
+        )
 
 
 class ScheduledEmailViewSet(viewsets.ModelViewSet):
