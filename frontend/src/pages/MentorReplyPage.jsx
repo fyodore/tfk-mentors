@@ -59,6 +59,7 @@ export default function MentorReplyPage() {
   const [error, setError] = useState(null)
   const [mentor, setMentor] = useState(null)
   const [seasonYear, setSeasonYear] = useState(null)
+  const [assignedPace, setAssignedPace] = useState('')
   /** @type {PracticeReplyRow[]} */
   const [practices, setPractices] = useState([])
   /** @type {string[]} */
@@ -92,6 +93,7 @@ export default function MentorReplyPage() {
         const m = data.mentor ?? null
         setMentor(m)
         setSeasonYear(data.season_year ?? null)
+        setAssignedPace(data.assigned_pace ?? data.mentor?.pace ?? '')
         const plist = Array.isArray(data.practices) ? data.practices : []
         setPractices(plist)
         setPaceChoices(
@@ -249,6 +251,12 @@ export default function MentorReplyPage() {
               <p className="mentor-reply-thanks">
                 Thank you for mentoring for the{' '}
                 <strong>{seasonYear}</strong> season.
+              </p>
+            ) : null}
+            {(assignedPace || mentor.pace) ? (
+              <p className="mentor-reply-pace-assigned">
+                Your assigned pace group is{' '}
+                <strong>{assignedPace || mentor.pace}</strong>.
               </p>
             ) : null}
 

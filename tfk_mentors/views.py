@@ -487,10 +487,12 @@ class MentorScheduledEmailReplyView(APIView):
                 }
             )
         season_year = season_year_for_scheduled_email(scheduled)
+        assigned_pace = scheduled.resolve_pace_for_mentor(mentor)
         return Response(
             {
                 "mentor": mentor_reply_payload(mentor),
                 "season_year": season_year,
+                "assigned_pace": assigned_pace or "",
                 "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
                 "practices": practice_payload,
                 "pace_choices": [c.value for c in PaceTypes],
