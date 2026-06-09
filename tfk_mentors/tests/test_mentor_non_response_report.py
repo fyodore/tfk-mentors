@@ -70,8 +70,12 @@ class MentorNonResponseReportTests(TestCase):
     def test_pending_mentor_listed_without_reply(self):
         response = self.client.get("/api/reports/mentor-non-responses/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        practice_row = response.data[0]
+        self.assertEqual(response.data["summary"]["mentors_emailed"], 2)
+        self.assertEqual(response.data["summary"]["mentors_responded"], 1)
+        self.assertEqual(len(response.data["practices"]), 1)
+        practice_row = response.data["practices"][0]
         self.assertTrue(practice_row["email_sent"])
+        self.assertEqual(practice_row["mentors_emailed"], 2)
+        self.assertEqual(practice_row["mentors_responded"], 1)
         self.assertEqual(len(practice_row["pending_mentors"]), 1)
         self.assertEqual(practice_row["pending_mentors"][0]["email"], "bob@example.com")

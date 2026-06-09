@@ -538,6 +538,20 @@ def mentors_from_practice_replies(practice):
     )
 
 
+def mentor_pace_counts_from_rows(mentor_rows):
+    """Count attending mentors per pace group for report display."""
+    counts = {choice.value: 0 for choice in PaceTypes}
+    for row in mentor_rows:
+        pace = row.get("pace") or ""
+        if pace in counts:
+            counts[pace] += 1
+    return [
+        {"pace": choice.value, "count": counts[choice.value]}
+        for choice in PaceTypes
+        if counts[choice.value] > 0
+    ]
+
+
 def build_practice_roster_report(practices):
     """Serialize practices with attending coaches and mentors for admin reports."""
     report = []
@@ -580,6 +594,7 @@ def build_practice_roster_report(practices):
                 "full_practice": practice.full_practice,
                 "coaches": coaches,
                 "mentors": mentors,
+                "mentor_pace_counts": mentor_pace_counts_from_rows(mentors),
             }
         )
     return report
@@ -663,11 +678,22 @@ def build_mentor_non_response_report(practices):
         )
 
     report = []
+    total_emailed = 0
+    total_responded = 0
     for practice in practices:
         scheduled = practice_to_email.get(practice.id)
         pending = []
+        mentors_emailed = 0
+        mentors_responded = 0
         if scheduled is not None:
-            for token in scheduled.mentor_tokens.all():
+            tokens = list(scheduled.mentor_tokens.all())
+            mentors_emailed = len(tokens)
+            mentors_responded = sum(
+                1 for token in tokens if (token.id, practice.id) in replied_pairs
+            )
+            total_emailed += mentors_emailed
+            total_responded += mentors_responded
+            for token in tokens:
                 if (token.id, practice.id) in replied_pairs:
                     continue
                 mentor = token.mentor
@@ -702,10 +728,18 @@ def build_mentor_non_response_report(practices):
                 if scheduled
                 else None,
                 "email_sent": scheduled is not None,
+                "mentors_emailed": mentors_emailed,
+                "mentors_responded": mentors_responded,
                 "pending_mentors": pending,
             }
         )
-    return report
+    return {
+        "summary": {
+            "mentors_emailed": total_emailed,
+            "mentors_responded": total_responded,
+        },
+        "practices": report,
+    }
 
 
 class MentorNonResponseReportView(APIView):

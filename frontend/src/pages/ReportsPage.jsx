@@ -124,6 +124,11 @@ function downloadExcel(filename, practices) {
   XLSX.writeFile(workbook, filename)
 }
 
+function formatPaceCounts(counts) {
+  if (!Array.isArray(counts) || counts.length === 0) return ''
+  return counts.map(({ pace, count }) => `${pace}: ${count}`).join(' · ')
+}
+
 export default function ReportsPage() {
   const [seasons, setSeasons] = useState([])
   const [report, setReport] = useState([])
@@ -170,7 +175,9 @@ export default function ReportsPage() {
       .then(([rosterData, pendingData]) => {
         if (!cancelled) {
           setReport(Array.isArray(rosterData) ? rosterData : [])
-          setPendingReport(Array.isArray(pendingData) ? pendingData : [])
+          setPendingReport(
+            Array.isArray(pendingData?.practices) ? pendingData.practices : []
+          )
           setPracticeFilter('')
         }
       })
@@ -214,6 +221,16 @@ export default function ReportsPage() {
     if (!practiceFilter) return sortedReport
     return sortedReport.filter((p) => String(p.id) === practiceFilter)
   }, [sortedReport, practiceFilter])
+
+  const filteredEmailStats = useMemo(() => {
+    let mentors_emailed = 0
+    let mentors_responded = 0
+    for (const practice of filteredPendingReport) {
+      mentors_emailed += practice.mentors_emailed ?? 0
+      mentors_responded += practice.mentors_responded ?? 0
+    }
+    return { mentors_emailed, mentors_responded }
+  }, [filteredPendingReport])
 
   const displayPractices = useMemo(
     () => sortPracticePeople(filteredReport, sortKey, sortDirection),
@@ -335,6 +352,33 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {!loading && !error && (
+          <div className="reports-stats" aria-label="Email response summary">
+            <div className="reports-stat">
+              <span className="reports-stat-value">
+                {filteredEmailStats.mentors_emailed}
+              </span>
+              <span className="reports-stat-label">Mentors emailed</span>
+            </div>
+            <div className="reports-stat">
+              <span className="reports-stat-value">
+                {filteredEmailStats.mentors_responded}
+              </span>
+              <span className="reports-stat-label">Responded</span>
+            </div>
+            <div className="reports-stat">
+              <span className="reports-stat-value">
+                {Math.max(
+                  0,
+                  filteredEmailStats.mentors_emailed -
+                    filteredEmailStats.mentors_responded
+                )}
+              </span>
+              <span className="reports-stat-label">Awaiting response</span>
+            </div>
+          </div>
+        )}
+
         {loading && <p className="muted">Loading report…</p>}
         {error && (
           <p className="error" role="alert">
@@ -364,6 +408,11 @@ export default function ReportsPage() {
                     {practice.people.length} attendee
                     {practice.people.length === 1 ? '' : 's'}
                   </p>
+                  {practice.mentor_pace_counts?.length > 0 ? (
+                    <p className="report-pace-counts muted">
+                      Mentors by pace: {formatPaceCounts(practice.mentor_pace_counts)}
+                    </p>
+                  ) : null}
                 </header>
 
                 {practice.people.length === 0 ? (
@@ -458,6 +507,9 @@ export default function ReportsPage() {
                       {practice.full_practice ? ' · Full practice' : ' · Partial'}
                       {practice.email_sent && practice.scheduled_send_at
                         ? ` · Email sent ${formatDateTime(practice.scheduled_send_at)}`
+                        : ''}
+                      {practice.email_sent
+                        ? ` · ${practice.mentors_responded ?? 0}/${practice.mentors_emailed ?? 0} responded`
                         : ''}
                     </p>
                   </header>

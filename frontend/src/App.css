@@ -652,6 +652,42 @@
   padding: 0.35rem 0.5rem;
 }
 
+.reports-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.reports-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 7rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.reports-stat-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.reports-stat-label {
+  font-size: 0.88rem;
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.report-pace-counts {
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+}
+
 .reports-section-pending {
   margin-top: 2.5rem;
   padding-top: 1.5rem;
