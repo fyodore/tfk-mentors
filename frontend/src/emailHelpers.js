@@ -80,10 +80,10 @@ export function practiceLabelsForIds(ids, labelForId) {
   }))
 }
 
-/** @param {{ reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number } }} row */
+/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number } }} row */
 export function sentEmailReplyStats(row) {
-  if (!row.reply_stats) return null
-  const stats = row.reply_stats
+  if (!row.task_completed_at) return null
+  const stats = row.reply_stats ?? {}
   return {
     emailed: stats.mentors_emailed ?? 0,
     replied: stats.mentors_replied ?? stats.mentors_responded ?? 0,
