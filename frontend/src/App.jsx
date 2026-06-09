@@ -8,6 +8,7 @@ import MentorReplyPage from './pages/MentorReplyPage.jsx'
 import MentorsPage from './pages/MentorsPage.jsx'
 import PracticeDetailPage from './pages/PracticeDetailPage.jsx'
 import PracticesPage from './pages/PracticesPage.jsx'
+import ReportsPage from './pages/ReportsPage.jsx'
 import SeasonsPage from './pages/SeasonsPage.jsx'
 
 import './App.css'
@@ -75,6 +76,14 @@ export default function App() {
           element={
             <Protected>
               <EmailsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <Protected>
+              <ReportsPage />
             </Protected>
           }
         />

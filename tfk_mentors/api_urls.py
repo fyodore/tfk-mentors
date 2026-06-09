@@ -7,6 +7,7 @@ from .views import (
     MentorPracticeAssignmentViewSet,
     MentorScheduledEmailReplyView,
     MentorViewSet,
+    PracticeRosterReportView,
     PracticeViewSet,
     RequestsViewSet,
     ScheduledEmailViewSet,
@@ -40,6 +41,11 @@ router.register(
 urlpatterns = [
     path("config/", SiteConfigView.as_view(), name="site-config"),
     path("auth/session/", SiteAuthView.as_view(), name="site-auth"),
+    path(
+        "reports/practice-roster/",
+        PracticeRosterReportView.as_view(),
+        name="practice-roster-report",
+    ),
     path(
         "mentor-email-reply/",
         MentorScheduledEmailReplyView.as_view(),

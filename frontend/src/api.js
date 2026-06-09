@@ -571,3 +571,20 @@ export async function putMentorEmailReply(token, payload) {
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
+
+const PRACTICE_ROSTER_REPORT = apiPath('/api/reports/practice-roster/')
+
+/** @param {{ season?: number|string }} [params] */
+export async function fetchPracticeRosterReport(params = {}) {
+  const qs = new URLSearchParams()
+  if (params.season != null && params.season !== '') {
+    qs.set('season', String(params.season))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await fetch(`${PRACTICE_ROSTER_REPORT}${suffix}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}

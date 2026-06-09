@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from rest_framework import status, viewsets
@@ -519,6 +520,103 @@ def validate_reply_pace(mentor, attendance, pace):
         return
     if pace and pace not in PACE_VALUES:
         raise ValueError("Invalid pace choice.")
+
+
+def mentors_from_practice_replies(practice):
+    """Latest attending mentor reply per mentor, using prefetched replies when available."""
+    latest_by_mentor = {}
+    for reply in practice.mentor_email_replies.all():
+        if reply.attendance not in ATTENDING_REPLY_VALUES:
+            continue
+        existing = latest_by_mentor.get(reply.mentor_id)
+        if existing is None or reply.updated_at > existing.updated_at:
+            latest_by_mentor[reply.mentor_id] = reply
+    return sorted(
+        latest_by_mentor.values(),
+        key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
+    )
+
+
+def build_practice_roster_report(practices):
+    """Serialize practices with attending coaches and mentors for admin reports."""
+    report = []
+    for practice in practices:
+        coaches = []
+        for assignment in practice.coachpracticeassignment_set.all():
+            coach = assignment.coach
+            coaches.append(
+                {
+                    "role": "Coach",
+                    "first_name": coach.first_name,
+                    "last_name": coach.last_name,
+                    "email": coach.email,
+                    "pace": assignment.pace,
+                }
+            )
+
+        mentors = []
+        for reply in mentors_from_practice_replies(practice):
+            mentor = reply.mentor
+            mentors.append(
+                {
+                    "role": "Mentor",
+                    "first_name": mentor.first_name,
+                    "last_name": mentor.last_name,
+                    "email": mentor.email,
+                    "pace": reply.pace or mentor.pace or "",
+                    "mentor_type": mentor.type,
+                    "attendance": reply.attendance,
+                }
+            )
+
+        report.append(
+            {
+                "id": practice.id,
+                "date": practice.date.isoformat(),
+                "nyrr_race": practice.nyrr_race or "",
+                "season": practice.season_id,
+                "season_year": practice.season.year,
+                "full_practice": practice.full_practice,
+                "coaches": coaches,
+                "mentors": mentors,
+            }
+        )
+    return report
+
+
+class PracticeRosterReportView(APIView):
+    """Practice roster report: coaches and attending mentors per practice."""
+
+    def get(self, request):
+        season_raw = (request.query_params.get("season") or "").strip()
+        queryset = (
+            Practice.objects.all()
+            .select_related("season")
+            .prefetch_related(
+                Prefetch(
+                    "coachpracticeassignment_set",
+                    queryset=CoachPracticeAssignment.objects.select_related("coach"),
+                ),
+                Prefetch(
+                    "mentor_email_replies",
+                    queryset=ScheduledEmailMentorPracticeReply.objects.filter(
+                        attendance__in=ATTENDING_REPLY_VALUES
+                    )
+                    .select_related("mentor", "mentor_token__scheduled_email")
+                    .order_by("-updated_at"),
+                ),
+            )
+            .order_by("-date", "-id")
+        )
+        if season_raw:
+            try:
+                queryset = queryset.filter(season_id=int(season_raw))
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(build_practice_roster_report(list(queryset)))
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")

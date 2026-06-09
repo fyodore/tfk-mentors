@@ -27,6 +27,12 @@ const SITE_PAGES = [
     description:
       'Schedule mentor emails with practices; view upcoming and completed sends.',
   },
+  {
+    path: '/reports',
+    title: 'Reports',
+    description:
+      'View practice rosters with coaches and mentors; sort and download CSV.',
+  },
 ]
 
 export default function HomePage() {
