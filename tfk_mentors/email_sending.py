@@ -16,6 +16,10 @@ def default_subject(scheduled_email):
     return "TFK Mentors — practice confirmation"
 
 
+def reminder_subject(scheduled_email):
+    return f"Reminder: {default_subject(scheduled_email)}"
+
+
 def due_scheduled_emails():
     return (
         ScheduledEmail.objects.filter(
@@ -44,6 +48,25 @@ def send_scheduled_email(scheduled_email, *, dry_run=False):
     if dry_run:
         return {"sent": 0, "recipients": len(mentors), "subject": subject}
 
+    _verify_email_delivery()
+
+    with transaction.atomic():
+        for mentor in mentors:
+            body = scheduled_email.render_body_for_mentor(mentor)
+            send_mail(
+                subject=subject,
+                message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[mentor.email],
+                fail_silently=False,
+            )
+        scheduled_email.task_completed_at = timezone.now()
+        scheduled_email.save(update_fields=["task_completed_at", "updated_at"])
+
+    return {"sent": len(mentors), "recipients": len(mentors), "subject": subject}
+
+
+def _verify_email_delivery():
     try:
         if gmail_oauth_configured() and settings.EMAIL_BACKEND.endswith(
             "GmailApiEmailBackend"
@@ -68,17 +91,53 @@ def send_scheduled_email(scheduled_email, *, dry_run=False):
             f"Original error: {exc}"
         ) from exc
 
-    with transaction.atomic():
-        for mentor in mentors:
-            body = scheduled_email.render_body_for_mentor(mentor)
-            send_mail(
-                subject=subject,
-                message=body,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[mentor.email],
-                fail_silently=False,
-            )
-        scheduled_email.task_completed_at = timezone.now()
-        scheduled_email.save(update_fields=["task_completed_at", "updated_at"])
 
-    return {"sent": len(mentors), "recipients": len(mentors), "subject": subject}
+def send_reply_reminders(scheduled_email, *, dry_run=False):
+    """
+    Send reminder emails to mentors who have not yet replied.
+    Only valid for emails that have already been sent.
+    """
+    if not scheduled_email.task_completed_at:
+        raise ValueError(
+            "Reply reminders can only be sent for completed emails."
+        )
+
+    pending = list(scheduled_email.pending_mentors_for_reminder())
+    pending_with_email = [m for m in pending if (m.email or "").strip()]
+    skipped = len(pending) - len(pending_with_email)
+    subject = reminder_subject(scheduled_email)
+
+    if not pending_with_email:
+        return {
+            "sent": 0,
+            "skipped": skipped,
+            "recipients": 0,
+            "subject": subject,
+        }
+
+    if dry_run:
+        return {
+            "sent": 0,
+            "skipped": skipped,
+            "recipients": len(pending_with_email),
+            "subject": subject,
+        }
+
+    _verify_email_delivery()
+
+    for mentor in pending_with_email:
+        body = scheduled_email.render_reminder_body_for_mentor(mentor)
+        send_mail(
+            subject=subject,
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[mentor.email],
+            fail_silently=False,
+        )
+
+    return {
+        "sent": len(pending_with_email),
+        "skipped": skipped,
+        "recipients": len(pending_with_email),
+        "subject": subject,
+    }

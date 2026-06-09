@@ -54,6 +54,7 @@ from .serializers import (
     SeasonSerializer,
     practice_mentor_reply_payload,
 )
+from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 
 
 class SeasonViewSet(viewsets.ModelViewSet):
@@ -1062,6 +1063,31 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = serializer.save()
         instance.sync_mentor_tokens()
+
+    @action(detail=True, methods=["post"], url_path="send-reply-reminders")
+    def send_reply_reminders(self, request, pk=None):
+        scheduled = self.get_object()
+        if not scheduled.task_completed_at:
+            return Response(
+                {
+                    "detail": (
+                        "Reply reminders can only be sent after the email has been sent."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        dry_run = (
+            request.data.get("dry_run") is True
+            if isinstance(request.data, dict)
+            else False
+        )
+        try:
+            result = send_reply_reminders_for_email(scheduled, dry_run=dry_run)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ConnectionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(result)
 
 
 class CoachPracticeAssignmentViewSet(viewsets.ModelViewSet):

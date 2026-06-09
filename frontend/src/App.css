@@ -613,6 +613,15 @@
   font-size: 1rem;
 }
 
+.email-detail-actions {
+  margin-top: 0.85rem;
+}
+
+.email-detail-notice {
+  margin: 0.65rem 0 0;
+  color: var(--text-muted);
+}
+
 .email-detail-list {
   margin: 0.35rem 0 0;
   padding-left: 1.15rem;

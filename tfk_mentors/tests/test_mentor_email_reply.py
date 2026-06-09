@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.db.models import Prefetch
 from django.test import TestCase
@@ -321,3 +322,113 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_pending": 0,
             },
         )
+
+
+class ReplyReminderTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        session = self.client.session
+        session["site_authenticated"] = True
+        session.save()
+        self.season = Season.objects.create(year=2026)
+        self.replied_mentor = Mentor.objects.create(
+            first_name="Pat",
+            last_name="Replied",
+            email="pat@example.com",
+            cell_phone="555-0100",
+            type=MentorTypes.PRACTICE,
+            pace="11-12",
+            split_practice=False,
+        )
+        self.pending_mentor = Mentor.objects.create(
+            first_name="Sam",
+            last_name="Pending",
+            email="sam@example.com",
+            cell_phone="555-0101",
+            type=MentorTypes.PRACTICE,
+            pace="10-11",
+            split_practice=False,
+        )
+        for mentor in (self.replied_mentor, self.pending_mentor):
+            mentor.seasons.add(self.season)
+        now = timezone.now()
+        self.practices = [
+            Practice.objects.create(
+                date=now + timedelta(days=offset),
+                season=self.season,
+                full_practice=True,
+            )
+            for offset in (1, 2)
+        ]
+        self.scheduled = ScheduledEmail.objects.create(
+            scheduled_send_at=now - timedelta(days=1),
+            task_completed_at=now,
+            body_text="Hello {{ first_name }}",
+            recipient_season=self.season,
+        )
+        self.scheduled.practices.set(self.practices)
+        self.scheduled.sync_mentor_tokens()
+        self.replied_token = ScheduledEmailMentorToken.objects.get(
+            scheduled_email=self.scheduled,
+            mentor=self.replied_mentor,
+        )
+        ScheduledEmailMentorPracticeReply.objects.create(
+            mentor_token=self.replied_token,
+            mentor=self.replied_mentor,
+            practice=self.practices[0],
+            attendance=PracticeAttendanceReply.ATTENDING,
+            pace="11-12",
+        )
+
+    def test_pending_mentors_for_reminder_excludes_replied(self):
+        pending = list(self.scheduled.pending_mentors_for_reminder())
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].id, self.pending_mentor.id)
+
+    def test_render_reminder_body_includes_availability_message_and_link(self):
+        body = self.scheduled.render_reminder_body_for_mentor(self.pending_mentor)
+        self.assertIn("At Practice mentors must reply with their availability.", body)
+        link = self.scheduled.reply_absolute_url_for_mentor(self.pending_mentor)
+        self.assertIn(link, body)
+
+    @patch("tfk_mentors.email_sending.send_mail")
+    def test_send_reply_reminders_only_emails_pending(self, mock_send_mail):
+        from tfk_mentors.email_sending import send_reply_reminders
+
+        result = send_reply_reminders(self.scheduled)
+
+        self.assertEqual(result["sent"], 1)
+        self.assertEqual(result["recipients"], 1)
+        self.assertEqual(mock_send_mail.call_count, 1)
+        _, kwargs = mock_send_mail.call_args
+        self.assertEqual(kwargs["recipient_list"], [self.pending_mentor.email])
+        self.assertIn(
+            "At Practice mentors must reply with their availability.",
+            kwargs["message"],
+        )
+        self.assertIn("/mentor-reply?token=", kwargs["message"])
+
+    @patch("tfk_mentors.email_sending.send_mail")
+    def test_api_send_reply_reminders(self, mock_send_mail):
+        response = self.client.post(
+            f"/api/scheduled-email/{self.scheduled.id}/send-reply-reminders/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sent"], 1)
+        self.assertEqual(mock_send_mail.call_count, 1)
+
+    def test_api_send_reply_reminders_requires_sent_email(self):
+        unsent = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=1),
+            body_text="Hello",
+            recipient_season=self.season,
+        )
+        unsent.practices.set(self.practices)
+
+        response = self.client.post(
+            f"/api/scheduled-email/{unsent.id}/send-reply-reminders/"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sent", response.data["detail"].lower())

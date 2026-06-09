@@ -710,32 +710,18 @@ class ScheduledEmail(TimeStampedModel):
             )
         return practice_ids
 
-    def reply_stats(self):
-        """Mentors emailed vs reply-page submissions and practice selections."""
+    def _mentors_replied_ids_for_stats(self, emailed_mentor_ids, practice_ids):
         from django.db.models import Q
 
-        attending_values = {
-            PracticeAttendanceReply.ATTENDING,
-            PracticeAttendanceReply.FIRST_HALF,
-            PracticeAttendanceReply.SECOND_HALF,
-        }
         email_id = self.pk
-        emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
-        mentors_emailed = len(emailed_mentor_ids)
-        practice_ids = self._practice_ids_for_stats(emailed_mentor_ids)
-
         if not practice_ids:
-            mentors_replied = ScheduledEmailMentorToken.objects.filter(
+            qs = ScheduledEmailMentorToken.objects.filter(
                 scheduled_email_id=email_id,
                 email_received_confirmed=True,
-            ).count()
-            return {
-                "mentors_emailed": mentors_emailed,
-                "mentors_replied": mentors_replied,
-                "mentors_selected_practices": 0,
-                "mentors_responded": mentors_replied,
-                "mentors_pending": max(0, mentors_emailed - mentors_replied),
-            }
+            )
+            if emailed_mentor_ids:
+                qs = qs.filter(mentor_id__in=emailed_mentor_ids)
+            return set(qs.values_list("mentor_id", flat=True))
 
         reply_filter = Q(practice_id__in=practice_ids)
         if emailed_mentor_ids:
@@ -764,8 +750,62 @@ class ScheduledEmail(TimeStampedModel):
                 "mentor_id", flat=True
             )
         )
+        return mentors_replied_ids
 
+    def pending_mentors_for_reminder(self):
+        """Mentors who were emailed but have not yet replied."""
+        self.ensure_mentor_tokens_for_stats()
+        emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
+        practice_ids = self._practice_ids_for_stats(emailed_mentor_ids)
+        replied_ids = self._mentors_replied_ids_for_stats(
+            emailed_mentor_ids, practice_ids
+        )
+        pending_ids = emailed_mentor_ids - replied_ids
+        return (
+            Mentor.objects.filter(pk__in=pending_ids)
+            .exclude(email="")
+            .order_by("last_name", "first_name", "id")
+        )
+
+    def reply_stats(self):
+        """Mentors emailed vs reply-page submissions and practice selections."""
+        from django.db.models import Q
+
+        attending_values = {
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.FIRST_HALF,
+            PracticeAttendanceReply.SECOND_HALF,
+        }
+        emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
+        mentors_emailed = len(emailed_mentor_ids)
+        practice_ids = self._practice_ids_for_stats(emailed_mentor_ids)
+
+        mentors_replied_ids = self._mentors_replied_ids_for_stats(
+            emailed_mentor_ids, practice_ids
+        )
         mentors_replied = len(mentors_replied_ids)
+
+        if not practice_ids:
+            return {
+                "mentors_emailed": mentors_emailed,
+                "mentors_replied": mentors_replied,
+                "mentors_selected_practices": 0,
+                "mentors_responded": mentors_replied,
+                "mentors_pending": max(0, mentors_emailed - mentors_replied),
+            }
+
+        reply_filter = Q(practice_id__in=practice_ids)
+        if emailed_mentor_ids:
+            reply_filter &= Q(
+                Q(mentor_id__in=emailed_mentor_ids)
+                | Q(mentor_token__mentor_id__in=emailed_mentor_ids)
+                | Q(mentor_token__scheduled_email_id=self.pk)
+            )
+
+        reply_qs = ScheduledEmailMentorPracticeReply.objects.filter(reply_filter)
+        assignment_filter = Q(practice_id__in=practice_ids)
+        if emailed_mentor_ids:
+            assignment_filter &= Q(mentor_id__in=emailed_mentor_ids)
         mentors_selected_practices = (
             reply_qs.filter(attendance__in=attending_values)
             .values("mentor_id")
@@ -850,6 +890,38 @@ class ScheduledEmail(TimeStampedModel):
             return match.group(0)
 
         return EMAIL_TEMPLATE_PLACEHOLDER_RE.sub(repl, self.body_text)
+
+    def render_reminder_body_for_mentor(self, mentor):
+        """Plain-text reminder for mentors who have not yet replied."""
+        link = self.reply_absolute_url_for_mentor(mentor)
+        year = self.resolve_season_year()
+        lines = [
+            f"Hi {mentor.first_name},",
+            "",
+        ]
+        if year:
+            lines.append(
+                f"This is a reminder about mentor practice availability "
+                f"for the {year} NYC Marathon season."
+            )
+        else:
+            lines.append(
+                "This is a reminder about mentor practice availability."
+            )
+        lines.extend(
+            [
+                "",
+                "At Practice mentors must reply with their availability.",
+                "",
+                "Please use your personal link below to confirm which practices "
+                "you can attend:",
+                link,
+                "",
+                "Thanks,",
+                "Your friendly Mentor Coordinator Ted",
+            ]
+        )
+        return "\n".join(lines)
 
 
 class ScheduledEmailMentorToken(TimeStampedModel):

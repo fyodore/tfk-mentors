@@ -6,6 +6,7 @@ import {
   fetchPractices,
   fetchScheduledEmail,
   fetchSeasons,
+  sendScheduledEmailReplyReminders,
 } from '../api'
 import { practiceLabelsForIds, recipientSummaryText, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
@@ -29,6 +30,15 @@ export default function EmailDetailPage() {
   const [mentors, setMentors] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [reminderBusy, setReminderBusy] = useState(false)
+  const [reminderMessage, setReminderMessage] = useState(null)
+  const [reminderError, setReminderError] = useState(null)
+
+  const reloadEmail = async () => {
+    const emailRow = await fetchScheduledEmail(emailId)
+    setEmail(emailRow)
+    return emailRow
+  }
 
   const seasonYearById = useMemo(() => {
     const m = new Map()
@@ -110,6 +120,36 @@ export default function EmailDetailPage() {
   const isSent = Boolean(email?.task_completed_at)
   const replyStats = email ? sentEmailReplyStats(email) : null
 
+  const handleSendReplyReminders = async () => {
+    if (!email || !replyStats?.pending) return
+    if (
+      !window.confirm(
+        `Send a reminder email to ${replyStats.pending} mentor${
+          replyStats.pending === 1 ? '' : 's'
+        } who ${replyStats.pending === 1 ? 'has' : 'have'} not replied?`
+      )
+    ) {
+      return
+    }
+    setReminderBusy(true)
+    setReminderMessage(null)
+    setReminderError(null)
+    try {
+      const result = await sendScheduledEmailReplyReminders(email.id)
+      await reloadEmail()
+      const sent = result.sent ?? 0
+      setReminderMessage(
+        sent === 1
+          ? 'Reminder sent to 1 mentor.'
+          : `Reminders sent to ${sent} mentors.`
+      )
+    } catch (e) {
+      setReminderError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setReminderBusy(false)
+    }
+  }
+
   return (
     <>
       <AppHeader title="Email" />
@@ -160,6 +200,28 @@ export default function EmailDetailPage() {
                     {replyStats.pending} awaiting response
                   </span>
                 </div>
+              ) : null}
+              {isSent && replyStats && replyStats.pending > 0 ? (
+                <div className="email-detail-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={reminderBusy}
+                    onClick={handleSendReplyReminders}
+                  >
+                    {reminderBusy
+                      ? 'Sending reminders…'
+                      : `Send reminder to ${replyStats.pending} awaiting`}
+                  </button>
+                </div>
+              ) : null}
+              {reminderMessage ? (
+                <p className="email-detail-notice">{reminderMessage}</p>
+              ) : null}
+              {reminderError ? (
+                <p className="error" role="alert">
+                  {reminderError}
+                </p>
               ) : null}
               {email.recipient_mode === 'specific_mentors' &&
               specificMentorNames.length > 0 ? (

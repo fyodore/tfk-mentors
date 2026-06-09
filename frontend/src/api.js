@@ -482,6 +482,21 @@ export async function fetchScheduledEmail(id) {
   return res.json()
 }
 
+/** @param {number|string} id */
+export async function sendScheduledEmailReplyReminders(id) {
+  const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({}),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {Record<string, unknown>} body */
 export async function createScheduledEmail(body) {
   const res = await fetch(SCHEDULED_EMAIL_LIST, {
