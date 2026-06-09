@@ -610,6 +610,20 @@ export default function EmailsPage() {
               Originally scheduled {formatDateTime(row.scheduled_send_at)}
             </span>
           ) : null}
+          {isSent && row.reply_stats ? (
+            <div className="email-reply-stats muted">
+              <span className="email-reply-stat">
+                {row.reply_stats.mentors_emailed} mentor
+                {row.reply_stats.mentors_emailed === 1 ? '' : 's'} emailed
+              </span>
+              <span className="email-reply-stat">
+                {row.reply_stats.mentors_responded} responded
+              </span>
+              <span className="email-reply-stat">
+                {row.reply_stats.mentors_pending} awaiting response
+              </span>
+            </div>
+          ) : null}
           <div className="email-recipients-block">
             <span className="muted email-practices-label">Recipients</span>
             {recipientSummary(row)}

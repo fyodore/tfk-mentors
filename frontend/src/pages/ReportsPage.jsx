@@ -166,6 +166,14 @@ function buildMentorSignupSummary(practices) {
     count: paceToPracticeIds.get(pace)?.size ?? 0,
   })).filter((row) => row.count > 0)
 
+  const mentorsByPace = PACE_GROUPS.map((pace) => ({
+    pace,
+    count: practices.reduce((sum, practice) => {
+      const row = practice.mentor_pace_counts?.find((entry) => entry.pace === pace)
+      return sum + (row?.count ?? 0)
+    }, 0),
+  })).filter((row) => row.count > 0)
+
   const mentors = [...mentorById.values()].sort(
     (a, b) =>
       b.practice_count - a.practice_count ||
@@ -173,7 +181,7 @@ function buildMentorSignupSummary(practices) {
       (a.first_name || '').localeCompare(b.first_name || '')
   )
 
-  return { practicesWithMentors, practicesByPace, mentors }
+  return { practicesWithMentors, practicesByPace, mentorsByPace, mentors }
 }
 
 function formatPaceCounts(counts) {
@@ -186,6 +194,105 @@ function formatPracticePaceCounts(counts) {
   return counts
     .map(({ pace, count }) => `${pace}: ${count} practice${count === 1 ? '' : 's'}`)
     .join(' · ')
+}
+
+function mentorCountFromPaceCounts(counts) {
+  if (!Array.isArray(counts)) return 0
+  return counts.reduce((sum, row) => sum + (row.count ?? 0), 0)
+}
+
+function MentorPaceBreakdownTable({ counts, caption }) {
+  if (!Array.isArray(counts) || counts.length === 0) return null
+  const total = mentorCountFromPaceCounts(counts)
+  if (total === 0) return null
+  return (
+    <div className="report-pace-breakdown-block">
+      {caption ? (
+        <p className="muted report-pace-breakdown-label">{caption}</p>
+      ) : null}
+      <div className="report-table-wrap report-pace-table-wrap">
+        <table className="report-table report-pace-table">
+          <caption className="sr-only">
+            {caption || 'Mentors at this practice by pace'}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Pace</th>
+              <th scope="col">Mentors</th>
+            </tr>
+          </thead>
+          <tbody>
+            {counts.map(({ pace, count }) => (
+              <tr key={pace} className={count === 0 ? 'report-pace-row-zero' : undefined}>
+                <td>{pace}</td>
+                <td>{count}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              <td>{total}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function EmailResponsePaceTable({ counts }) {
+  if (!Array.isArray(counts) || counts.length === 0) return null
+  const totals = counts.reduce(
+    (acc, row) => ({
+      emailed: acc.emailed + (row.emailed ?? 0),
+      responded: acc.responded + (row.responded ?? 0),
+      pending: acc.pending + (row.pending ?? 0),
+    }),
+    { emailed: 0, responded: 0, pending: 0 }
+  )
+  if (totals.emailed === 0) return null
+  return (
+    <div className="report-pace-breakdown-block">
+      <p className="muted report-pace-breakdown-label">
+        Mentor email responses by pace
+      </p>
+      <div className="report-table-wrap report-pace-table-wrap">
+        <table className="report-table report-pace-table">
+          <caption className="sr-only">Mentor email responses by pace</caption>
+          <thead>
+            <tr>
+              <th scope="col">Pace</th>
+              <th scope="col">Emailed</th>
+              <th scope="col">Responded</th>
+              <th scope="col">Awaiting</th>
+            </tr>
+          </thead>
+          <tbody>
+            {counts.map(({ pace, emailed, responded, pending }) => (
+              <tr
+                key={pace}
+                className={emailed === 0 ? 'report-pace-row-zero' : undefined}
+              >
+                <td>{pace}</td>
+                <td>{emailed}</td>
+                <td>{responded}</td>
+                <td>{pending}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              <td>{totals.emailed}</td>
+              <td>{totals.responded}</td>
+              <td>{totals.pending}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 export default function ReportsPage() {
@@ -448,6 +555,12 @@ export default function ReportsPage() {
                 <span className="reports-stat-label">Practices with mentors</span>
               </div>
             </div>
+            {signupSummary.mentorsByPace.length > 0 ? (
+              <p className="muted reports-pace-breakdown">
+                Attending mentors by pace (all filtered practices):{' '}
+                {formatPaceCounts(signupSummary.mentorsByPace)}
+              </p>
+            ) : null}
             {signupSummary.practicesByPace.length > 0 ? (
               <p className="muted reports-pace-breakdown">
                 Practices with mentors by pace:{' '}
@@ -506,7 +619,10 @@ export default function ReportsPage() {
 
         {!loading && !error && displayPractices.length > 0 && (
           <div className="reports-practice-list">
-            {displayPractices.map((practice) => (
+            {displayPractices.map((practice) => {
+              const coachCount = practice.coaches?.length ?? 0
+              const mentorCount = mentorCountFromPaceCounts(practice.mentor_pace_counts)
+              return (
               <section key={practice.id} className="report-practice-block">
                 <header className="report-practice-header">
                   <h3>
@@ -519,15 +635,14 @@ export default function ReportsPage() {
                       : ''}
                     {practice.full_practice ? ' · Full practice' : ' · Partial'}
                     {' · '}
-                    {practice.people.length} attendee
-                    {practice.people.length === 1 ? '' : 's'}
+                    {coachCount} coach{coachCount === 1 ? '' : 'es'}
+                    {' · '}
+                    {mentorCount} mentor{mentorCount === 1 ? '' : 's'}
                   </p>
-                  {practice.mentor_pace_counts?.length > 0 ? (
-                    <p className="report-pace-counts muted">
-                      Mentors at this practice by pace:{' '}
-                      {formatPaceCounts(practice.mentor_pace_counts)}
-                    </p>
-                  ) : null}
+                  <MentorPaceBreakdownTable
+                    counts={practice.mentor_pace_counts}
+                    caption="Mentors at this practice by pace"
+                  />
                 </header>
 
                 {practice.people.length === 0 ? (
@@ -581,7 +696,8 @@ export default function ReportsPage() {
                   </div>
                 )}
               </section>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -627,6 +743,9 @@ export default function ReportsPage() {
                         ? ` · ${practice.mentors_responded ?? 0}/${practice.mentors_emailed ?? 0} responded`
                         : ''}
                     </p>
+                    {practice.email_sent ? (
+                      <EmailResponsePaceTable counts={practice.response_pace_counts} />
+                    ) : null}
                   </header>
 
                   {!practice.email_sent ? (

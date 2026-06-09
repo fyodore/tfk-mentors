@@ -43,8 +43,10 @@ def _load_env_file(path, *, override=False):
             os.environ.setdefault(key, value)
 
 
-# Host-only overrides (copy from .env.local.example). Docker uses compose env_file.
-_load_env_file(BASE_DIR / ".env.local", override=True)
+# Host-only overrides (copy from .env.local.example with TFK_LOCAL_DEV=1).
+# Docker Compose sets DB_HOST=db via .env; do not override that from .env.local.
+if os.environ.get("TFK_LOCAL_DEV") == "1":
+    _load_env_file(BASE_DIR / ".env.local", override=True)
 
 
 # Quick-start development settings - unsuitable for production

@@ -79,3 +79,12 @@ class MentorNonResponseReportTests(TestCase):
         self.assertEqual(practice_row["mentors_responded"], 1)
         self.assertEqual(len(practice_row["pending_mentors"]), 1)
         self.assertEqual(practice_row["pending_mentors"][0]["email"], "bob@example.com")
+        pace_rows = {
+            row["pace"]: row for row in practice_row["response_pace_counts"]
+        }
+        self.assertEqual(pace_rows["8-9"]["emailed"], 1)
+        self.assertEqual(pace_rows["8-9"]["responded"], 1)
+        self.assertEqual(pace_rows["8-9"]["pending"], 0)
+        self.assertEqual(pace_rows["9-10"]["emailed"], 1)
+        self.assertEqual(pace_rows["9-10"]["responded"], 0)
+        self.assertEqual(pace_rows["9-10"]["pending"], 1)

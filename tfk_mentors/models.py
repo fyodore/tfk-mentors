@@ -633,6 +633,32 @@ class ScheduledEmail(TimeStampedModel):
             )
         self.mentor_tokens.exclude(mentor_id__in=mentor_ids).delete()
 
+    def reply_stats(self):
+        """Mentors emailed vs those who submitted replies for every linked practice."""
+        practice_ids = set(self.practices.values_list("pk", flat=True))
+        tokens = list(self.mentor_tokens.all())
+        mentors_emailed = len(tokens)
+        if not practice_ids:
+            return {
+                "mentors_emailed": mentors_emailed,
+                "mentors_responded": 0,
+                "mentors_pending": mentors_emailed,
+            }
+        responded = 0
+        for token in tokens:
+            replied_practices = {
+                reply.practice_id
+                for reply in token.practice_replies.all()
+                if reply.practice_id in practice_ids
+            }
+            if replied_practices == practice_ids:
+                responded += 1
+        return {
+            "mentors_emailed": mentors_emailed,
+            "mentors_responded": responded,
+            "mentors_pending": mentors_emailed - responded,
+        }
+
     def reply_absolute_url_for_mentor(self, mentor):
         """Public mentor reply URL including opaque token (requires sync_mentor_tokens first)."""
         mentor_id = getattr(mentor, "pk", None) or mentor

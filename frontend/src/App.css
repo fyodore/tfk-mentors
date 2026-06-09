@@ -528,6 +528,18 @@
   margin-top: 0.35rem;
 }
 
+.email-reply-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.35rem;
+  font-size: 0.92rem;
+}
+
+.email-reply-stat {
+  font-variant-numeric: tabular-nums;
+}
+
 .recipient-fieldset {
   border: none;
   padding: 0;
@@ -686,6 +698,52 @@
 .report-pace-counts {
   margin: 0.35rem 0 0;
   font-size: 0.92rem;
+}
+
+.report-pace-breakdown-block {
+  margin-top: 0.65rem;
+}
+
+.report-pace-breakdown-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+}
+
+.report-pace-table-wrap {
+  max-width: 22rem;
+}
+
+.report-pace-table th,
+.report-pace-table td {
+  text-align: left;
+}
+
+.report-pace-table td:not(:first-child),
+.report-pace-table th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-pace-table tfoot th,
+.report-pace-table tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+
+.report-pace-row-zero td {
+  opacity: 0.45;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .reports-pace-breakdown {

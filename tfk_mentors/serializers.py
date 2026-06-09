@@ -174,6 +174,7 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
     specific_mentors = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Mentor.objects.all(), required=False
     )
+    reply_stats = serializers.SerializerMethodField()
 
     class Meta:
         model = ScheduledEmail
@@ -186,10 +187,14 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             "recipient_mode",
             "recipient_season",
             "specific_mentors",
+            "reply_stats",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "reply_stats"]
+
+    def get_reply_stats(self, obj):
+        return obj.reply_stats()
 
     def validate(self, attrs):
         instance = self.instance

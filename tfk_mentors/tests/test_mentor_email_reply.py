@@ -151,3 +151,54 @@ class MentorEmailReplySubmitTests(TestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["attendance"], PracticeAttendanceReply.FIRST_HALF)
         self.assertEqual(response.data[0]["pace"], "11-12")
+
+    def test_reply_stats_counts_full_responses(self):
+        self.assertEqual(
+            self.scheduled.reply_stats(),
+            {
+                "mentors_emailed": 1,
+                "mentors_responded": 0,
+                "mentors_pending": 1,
+            },
+        )
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=self.token_row,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="",
+            )
+        self.assertEqual(
+            self.scheduled.reply_stats(),
+            {
+                "mentors_emailed": 1,
+                "mentors_responded": 1,
+                "mentors_pending": 0,
+            },
+        )
+
+    def test_scheduled_email_api_includes_reply_stats(self):
+        self.scheduled.task_completed_at = timezone.now()
+        self.scheduled.save(update_fields=["task_completed_at"])
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=self.token_row,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="",
+            )
+
+        response = self.client.get("/api/scheduled-emails/")
+
+        self.assertEqual(response.status_code, 200)
+        row = next(item for item in response.data if item["id"] == self.scheduled.id)
+        self.assertEqual(
+            row["reply_stats"],
+            {
+                "mentors_emailed": 1,
+                "mentors_responded": 1,
+                "mentors_pending": 0,
+            },
+        )

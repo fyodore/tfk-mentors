@@ -538,17 +538,44 @@ def mentors_from_practice_replies(practice):
     )
 
 
-def mentor_pace_counts_from_rows(mentor_rows):
+def mentor_pace_counts_from_rows(mentor_rows, *, include_zero=False):
     """Count attending mentors per pace group for report display."""
     counts = {choice.value: 0 for choice in PaceTypes}
     for row in mentor_rows:
         pace = row.get("pace") or ""
         if pace in counts:
             counts[pace] += 1
-    return [
+    rows = [
         {"pace": choice.value, "count": counts[choice.value]}
         for choice in PaceTypes
-        if counts[choice.value] > 0
+    ]
+    if include_zero:
+        return rows
+    return [row for row in rows if row["count"] > 0]
+
+
+def email_response_pace_counts(tokens, replied_pairs, practice_id):
+    """Per-pace emailed / responded / pending counts for one practice email."""
+    emailed = {choice.value: 0 for choice in PaceTypes}
+    responded = {choice.value: 0 for choice in PaceTypes}
+    pending = {choice.value: 0 for choice in PaceTypes}
+    for token in tokens:
+        pace = token.mentor.pace or ""
+        if pace not in emailed:
+            continue
+        emailed[pace] += 1
+        if (token.id, practice_id) in replied_pairs:
+            responded[pace] += 1
+        else:
+            pending[pace] += 1
+    return [
+        {
+            "pace": choice.value,
+            "emailed": emailed[choice.value],
+            "responded": responded[choice.value],
+            "pending": pending[choice.value],
+        }
+        for choice in PaceTypes
     ]
 
 
@@ -595,7 +622,9 @@ def build_practice_roster_report(practices):
                 "full_practice": practice.full_practice,
                 "coaches": coaches,
                 "mentors": mentors,
-                "mentor_pace_counts": mentor_pace_counts_from_rows(mentors),
+                "mentor_pace_counts": mentor_pace_counts_from_rows(
+                    mentors, include_zero=True
+                ),
             }
         )
     return report
@@ -715,6 +744,19 @@ def build_mentor_non_response_report(practices):
                     row["first_name"],
                 )
             )
+            response_pace_counts = email_response_pace_counts(
+                tokens, replied_pairs, practice.id
+            )
+        else:
+            response_pace_counts = [
+                {
+                    "pace": choice.value,
+                    "emailed": 0,
+                    "responded": 0,
+                    "pending": 0,
+                }
+                for choice in PaceTypes
+            ]
 
         report.append(
             {
@@ -731,6 +773,7 @@ def build_mentor_non_response_report(practices):
                 "email_sent": scheduled is not None,
                 "mentors_emailed": mentors_emailed,
                 "mentors_responded": mentors_responded,
+                "response_pace_counts": response_pace_counts,
                 "pending_mentors": pending,
             }
         )
@@ -997,7 +1040,16 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
     queryset = (
         ScheduledEmail.objects.all()
         .select_related("recipient_season")
-        .prefetch_related("practices", "specific_mentors")
+        .prefetch_related(
+            "practices",
+            "specific_mentors",
+            Prefetch(
+                "mentor_tokens",
+                queryset=ScheduledEmailMentorToken.objects.prefetch_related(
+                    "practice_replies"
+                ),
+            ),
+        )
         .order_by("-scheduled_send_at", "-id")
     )
     serializer_class = ScheduledEmailSerializer
