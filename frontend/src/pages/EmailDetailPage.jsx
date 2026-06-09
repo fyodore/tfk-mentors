@@ -1,0 +1,189 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+
+import {
+  fetchMentors,
+  fetchPractices,
+  fetchScheduledEmail,
+  fetchSeasons,
+} from '../api'
+import { practiceLabelsForIds, recipientSummaryText } from '../emailHelpers.js'
+import { AppHeader } from '../components/AppHeader.jsx'
+import { formatDateTime } from '../datetime.js'
+
+function sortPracticesByDateAsc(list) {
+  return [...list].sort((a, b) => {
+    const ta = new Date(a.date).getTime()
+    const tb = new Date(b.date).getTime()
+    return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
+  })
+}
+
+export default function EmailDetailPage() {
+  const { id } = useParams()
+  const emailId = Number.parseInt(String(id), 10)
+
+  const [email, setEmail] = useState(null)
+  const [practices, setPractices] = useState([])
+  const [seasons, setSeasons] = useState([])
+  const [mentors, setMentors] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const seasonYearById = useMemo(() => {
+    const m = new Map()
+    for (const s of seasons) m.set(s.id, s.year)
+    return m
+  }, [seasons])
+
+  const practiceById = useMemo(() => {
+    const m = new Map()
+    for (const p of practices) m.set(p.id, p)
+    return m
+  }, [practices])
+
+  const practiceLabel = (p) => {
+    const when = formatDateTime(p.date)
+    const year = seasonYearById.get(p.season) ?? p.season
+    const race = p.nyrr_race?.trim()
+    return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    if (Number.isNaN(emailId)) {
+      setError('Invalid email id.')
+      setLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setLoading(true)
+    setError(null)
+    Promise.all([
+      fetchScheduledEmail(emailId),
+      fetchPractices(),
+      fetchSeasons(),
+      fetchMentors(),
+    ])
+      .then(([emailRow, pList, sList, mList]) => {
+        if (!cancelled) {
+          setEmail(emailRow)
+          setPractices(sortPracticesByDateAsc(pList))
+          setSeasons(sList)
+          setMentors(mList)
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e))
+          setEmail(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [emailId])
+
+  const linkedPractices = useMemo(
+    () =>
+      practiceLabelsForIds(email?.practices ?? [], (pid) => {
+        const p = practiceById.get(pid)
+        return p ? practiceLabel(p) : `Practice #${pid}`
+      }),
+    [email?.practices, practiceById, seasonYearById]
+  )
+
+  const specificMentorNames = useMemo(() => {
+    if (email?.recipient_mode !== 'specific_mentors') return []
+    return (email.specific_mentors ?? []).map((mid) => {
+      const m = mentors.find((x) => x.id === mid)
+      return m ? `${m.first_name} ${m.last_name} · ${m.email}` : `Mentor #${mid}`
+    })
+  }, [email, mentors])
+
+  const isSent = Boolean(email?.task_completed_at)
+
+  return (
+    <>
+      <AppHeader title="Email" />
+
+      <main className="panel email-detail-panel">
+        <p className="email-detail-back">
+          <Link to="/emails" className="nav-back">
+            ← Back to emails
+          </Link>
+        </p>
+
+        {loading && <p className="muted">Loading…</p>}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {!loading && !error && email && (
+          <>
+            <header className="email-detail-header">
+              <h2>
+                {isSent
+                  ? `Sent · ${formatDateTime(email.task_completed_at)}`
+                  : `Scheduled · ${formatDateTime(email.scheduled_send_at)}`}
+              </h2>
+              {isSent ? (
+                <p className="muted">
+                  Originally scheduled {formatDateTime(email.scheduled_send_at)}
+                </p>
+              ) : null}
+            </header>
+
+            <section className="email-detail-section">
+              <h3>Recipients</h3>
+              <p>{recipientSummaryText(email, { seasonYearById, mentors })}</p>
+              {email.recipient_mode === 'specific_mentors' &&
+              specificMentorNames.length > 0 ? (
+                <ul className="email-detail-list">
+                  {specificMentorNames.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+
+            <section className="email-detail-section">
+              <h3>Practices</h3>
+              {linkedPractices.length === 0 ? (
+                <p className="muted">No practices linked.</p>
+              ) : (
+                <ul className="email-detail-list">
+                  {linkedPractices.map(({ id: pid, label }) => (
+                    <li key={pid}>
+                      <Link to={`/practices/${pid}`} className="nav-back">
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="email-detail-section">
+              <h3>Email template</h3>
+              <pre className="email-detail-body">{email.body_text || ''}</pre>
+              <p className="muted email-detail-placeholders">
+                Placeholders: <code>{'{{ first_name }}'}</code>,{' '}
+                <code>{'{{ last_name }}'}</code>, <code>{'{{ year }}'}</code>,{' '}
+                <code>{'{{ pace }}'}</code>, <code>{'{{ link }}'}</code>
+              </p>
+            </section>
+          </>
+        )}
+      </main>
+    </>
+  )
+}

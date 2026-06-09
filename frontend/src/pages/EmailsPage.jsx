@@ -10,6 +10,7 @@ import {
   fetchSeasons,
   patchScheduledEmail,
 } from '../api'
+import { recipientSummaryText } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
@@ -537,39 +538,9 @@ export default function EmailsPage() {
   )
 
   function recipientSummary(row) {
-    const mode =
-      row.recipient_mode === 'specific_mentors'
-        ? 'specific_mentors'
-        : 'all_in_season'
-    if (mode === 'specific_mentors') {
-      const ids = row.specific_mentors || []
-      if (ids.length === 0) {
-        return <span className="muted">No mentors selected.</span>
-      }
-      const names = ids.slice(0, 4).map((id) => {
-        const m = mentors.find((x) => x.id === id)
-        return m ? `${m.first_name} ${m.last_name}` : `#${id}`
-      })
-      const extra = ids.length > 4 ? ` +${ids.length - 4} more` : ''
-      return (
-        <span className="muted">
-          Specific mentors ({ids.length}): {names.join(', ')}
-          {extra}
-        </span>
-      )
-    }
-    const sid = row.recipient_season
-    const year = sid != null ? seasonYearById.get(sid) ?? sid : null
-    const n =
-      sid != null
-        ? mentors.filter(
-            (m) => Array.isArray(m.seasons) && m.seasons.includes(sid)
-          ).length
-        : 0
     return (
       <span className="muted">
-        All mentors in season {year ?? '—'}
-        {sid != null ? ` (${n} mentor${n === 1 ? '' : 's'})` : ''}
+        {recipientSummaryText(row, { seasonYearById, mentors })}
       </span>
     )
   }
@@ -595,35 +566,13 @@ export default function EmailsPage() {
     )
   }
 
-  function renderEmailCard(row, { allowMarkSent }) {
-    const isSent = Boolean(row.task_completed_at)
+  function renderUpcomingEmailCard(row) {
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
           <span className="practice-date">
-            {isSent
-              ? `Sent · ${formatDateTime(row.task_completed_at)}`
-              : `Scheduled · ${formatDateTime(row.scheduled_send_at)}`}
+            Scheduled · {formatDateTime(row.scheduled_send_at)}
           </span>
-          {isSent ? (
-            <span className="muted">
-              Originally scheduled {formatDateTime(row.scheduled_send_at)}
-            </span>
-          ) : null}
-          {isSent && row.reply_stats ? (
-            <div className="email-reply-stats muted">
-              <span className="email-reply-stat">
-                {row.reply_stats.mentors_emailed} mentor
-                {row.reply_stats.mentors_emailed === 1 ? '' : 's'} emailed
-              </span>
-              <span className="email-reply-stat">
-                {row.reply_stats.mentors_responded} responded
-              </span>
-              <span className="email-reply-stat">
-                {row.reply_stats.mentors_pending} awaiting response
-              </span>
-            </div>
-          ) : null}
           <div className="email-recipients-block">
             <span className="muted email-practices-label">Recipients</span>
             {recipientSummary(row)}
@@ -638,16 +587,14 @@ export default function EmailsPage() {
           </p>
         </div>
         <div className="practice-row-actions email-row-actions">
-          {allowMarkSent && !isSent ? (
-            <button
-              type="button"
-              className="btn btn-text"
-              disabled={loading}
-              onClick={() => handleMarkSent(row)}
-            >
-              Mark sent
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="btn btn-text"
+            disabled={loading}
+            onClick={() => handleMarkSent(row)}
+          >
+            Mark sent
+          </button>
           <button
             type="button"
             className="btn btn-text"
@@ -667,6 +614,53 @@ export default function EmailsPage() {
         </div>
       </li>
     )
+  }
+
+  function renderSentEmailCard(row) {
+    return (
+      <li key={row.id} className="practice-row email-row">
+        <div className="practice-row-main">
+          <span className="practice-date">
+            Sent · {formatDateTime(row.task_completed_at)}
+          </span>
+          <span className="muted">
+            Originally scheduled {formatDateTime(row.scheduled_send_at)}
+          </span>
+          <div className="email-recipients-block">
+            <span className="muted email-practices-label">Recipients</span>
+            {recipientSummary(row)}
+          </div>
+        </div>
+        <div className="practice-row-actions email-row-actions">
+          <Link to={`/emails/${row.id}`} className="btn btn-text">
+            View
+          </Link>
+          <button
+            type="button"
+            className="btn btn-text"
+            disabled={loading}
+            onClick={() => openEdit(row)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="btn btn-text btn-text-danger"
+            disabled={loading}
+            onClick={() => openDelete(row)}
+          >
+            Delete
+          </button>
+        </div>
+      </li>
+    )
+  }
+
+  function renderEmailCard(row, { allowMarkSent }) {
+    if (allowMarkSent) {
+      return renderUpcomingEmailCard(row)
+    }
+    return renderSentEmailCard(row)
   }
 
   return (

@@ -473,6 +473,15 @@ export async function fetchScheduledEmails() {
   return normalizeScheduledEmailList(data)
 }
 
+/** @param {number|string} id */
+export async function fetchScheduledEmail(id) {
+  const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {Record<string, unknown>} body */
 export async function createScheduledEmail(body) {
   const res = await fetch(SCHEDULED_EMAIL_LIST, {
