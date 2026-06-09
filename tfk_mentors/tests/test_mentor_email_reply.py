@@ -182,6 +182,19 @@ class MentorEmailReplySubmitTests(TestCase):
             },
         )
 
+    def test_reply_stats_counts_partial_reply(self):
+        ScheduledEmailMentorPracticeReply.objects.create(
+            mentor_token=self.token_row,
+            mentor=self.mentor,
+            practice=self.practices[0],
+            attendance=PracticeAttendanceReply.ATTENDING,
+            pace="",
+        )
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 1)
+        self.assertEqual(stats["mentors_pending"], 0)
+
     def test_reply_stats_replied_without_selecting_practices(self):
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(

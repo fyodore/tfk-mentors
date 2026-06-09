@@ -10,7 +10,7 @@ import {
   fetchSeasons,
   patchScheduledEmail,
 } from '../api'
-import { recipientSummaryText } from '../emailHelpers.js'
+import { recipientSummaryText, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
@@ -617,6 +617,7 @@ export default function EmailsPage() {
   }
 
   function renderSentEmailCard(row) {
+    const replyStats = sentEmailReplyStats(row)
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
@@ -630,6 +631,21 @@ export default function EmailsPage() {
             <span className="muted email-practices-label">Recipients</span>
             {recipientSummary(row)}
           </div>
+          {replyStats ? (
+            <div className="email-reply-stats" aria-label="Reply summary">
+              <span className="email-reply-stat">
+                {replyStats.replied} mentor{replyStats.replied === 1 ? '' : 's'}{' '}
+                replied
+              </span>
+              <span className="email-reply-stat">
+                {replyStats.selectedPractices} selected practice
+                {replyStats.selectedPractices === 1 ? '' : 's'}
+              </span>
+              <span className="email-reply-stat">
+                {replyStats.pending} awaiting response
+              </span>
+            </div>
+          ) : null}
         </div>
         <div className="practice-row-actions email-row-actions">
           <Link to={`/emails/${row.id}`} className="btn btn-text">

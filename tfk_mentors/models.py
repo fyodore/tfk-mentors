@@ -669,8 +669,7 @@ class ScheduledEmail(TimeStampedModel):
                 for reply in token.practice_replies.all()
                 if reply.practice_id in practice_ids
             ]
-            replied_practices = {reply.practice_id for reply in replies}
-            if replied_practices != practice_ids:
+            if not replies:
                 continue
             mentors_replied += 1
             if any(reply.attendance in attending_values for reply in replies):

@@ -7,7 +7,7 @@ import {
   fetchScheduledEmail,
   fetchSeasons,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText } from '../emailHelpers.js'
+import { practiceLabelsForIds, recipientSummaryText, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -108,6 +108,7 @@ export default function EmailDetailPage() {
   }, [email, mentors])
 
   const isSent = Boolean(email?.task_completed_at)
+  const replyStats = email ? sentEmailReplyStats(email) : null
 
   return (
     <>
@@ -145,6 +146,21 @@ export default function EmailDetailPage() {
             <section className="email-detail-section">
               <h3>Recipients</h3>
               <p>{recipientSummaryText(email, { seasonYearById, mentors })}</p>
+              {isSent && replyStats ? (
+                <div className="email-reply-stats" aria-label="Reply summary">
+                  <span className="email-reply-stat">
+                    {replyStats.replied} mentor{replyStats.replied === 1 ? '' : 's'}{' '}
+                    replied
+                  </span>
+                  <span className="email-reply-stat">
+                    {replyStats.selectedPractices} selected practice
+                    {replyStats.selectedPractices === 1 ? '' : 's'}
+                  </span>
+                  <span className="email-reply-stat">
+                    {replyStats.pending} awaiting response
+                  </span>
+                </div>
+              ) : null}
               {email.recipient_mode === 'specific_mentors' &&
               specificMentorNames.length > 0 ? (
                 <ul className="email-detail-list">
