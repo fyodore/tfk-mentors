@@ -861,5 +861,6 @@
 @media (prefers-color-scheme: dark) {
   .report-table th {
     background: var(--panel, #1a1a1a);
+    color: #f5f5f5;
   }
 }

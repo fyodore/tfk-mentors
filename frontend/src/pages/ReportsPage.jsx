@@ -168,10 +168,13 @@ function buildMentorSignupSummary(practices) {
 
   const mentorsByPace = PACE_GROUPS.map((pace) => ({
     pace,
-    count: practices.reduce((sum, practice) => {
-      const row = practice.mentor_pace_counts?.find((entry) => entry.pace === pace)
-      return sum + (row?.count ?? 0)
-    }, 0),
+    count: practices.reduce(
+      (sum, practice) =>
+        sum +
+        (practice.mentors ?? []).filter((mentor) => (mentor.pace?.trim() || '') === pace)
+          .length,
+      0
+    ),
   })).filter((row) => row.count > 0)
 
   const mentors = [...mentorById.values()].sort(
@@ -196,14 +199,44 @@ function formatPracticePaceCounts(counts) {
     .join(' · ')
 }
 
+function buildMentorPaceCounts(mentors) {
+  const counts = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+  let other = 0
+  for (const mentor of mentors ?? []) {
+    const pace = (mentor.pace ?? '').trim()
+    if (Object.hasOwn(PACE_ORDER, pace)) {
+      counts[pace] += 1
+    } else {
+      other += 1
+    }
+  }
+  const rows = PACE_GROUPS.map((pace) => ({ pace, count: counts[pace] }))
+  if (other > 0) {
+    rows.push({ pace: 'Other', count: other })
+  }
+  return rows
+}
+
 function mentorCountFromPaceCounts(counts) {
   if (!Array.isArray(counts)) return 0
   return counts.reduce((sum, row) => sum + (row.count ?? 0), 0)
 }
 
-function MentorPaceBreakdownTable({ counts, caption }) {
-  if (!Array.isArray(counts) || counts.length === 0) return null
-  const total = mentorCountFromPaceCounts(counts)
+function effectiveMentorPaceCounts(mentors, counts) {
+  const mentorTotal = mentors?.length ?? 0
+  const apiTotal = mentorCountFromPaceCounts(counts)
+  if (mentorTotal > 0 && apiTotal !== mentorTotal) {
+    return buildMentorPaceCounts(mentors)
+  }
+  if (Array.isArray(counts) && counts.length > 0) {
+    return counts
+  }
+  return buildMentorPaceCounts(mentors)
+}
+
+function MentorPaceBreakdownTable({ mentors, counts, caption }) {
+  const resolvedCounts = effectiveMentorPaceCounts(mentors, counts)
+  const total = mentors?.length ?? mentorCountFromPaceCounts(resolvedCounts)
   if (total === 0) return null
   return (
     <div className="report-pace-breakdown-block">
@@ -222,7 +255,7 @@ function MentorPaceBreakdownTable({ counts, caption }) {
             </tr>
           </thead>
           <tbody>
-            {counts.map(({ pace, count }) => (
+            {resolvedCounts.map(({ pace, count }) => (
               <tr key={pace} className={count === 0 ? 'report-pace-row-zero' : undefined}>
                 <td>{pace}</td>
                 <td>{count}</td>
@@ -621,7 +654,7 @@ export default function ReportsPage() {
           <div className="reports-practice-list">
             {displayPractices.map((practice) => {
               const coachCount = practice.coaches?.length ?? 0
-              const mentorCount = mentorCountFromPaceCounts(practice.mentor_pace_counts)
+              const mentorCount = practice.mentors?.length ?? 0
               return (
               <section key={practice.id} className="report-practice-block">
                 <header className="report-practice-header">
@@ -640,6 +673,7 @@ export default function ReportsPage() {
                     {mentorCount} mentor{mentorCount === 1 ? '' : 's'}
                   </p>
                   <MentorPaceBreakdownTable
+                    mentors={practice.mentors}
                     counts={practice.mentor_pace_counts}
                     caption="Mentors at this practice by pace"
                   />

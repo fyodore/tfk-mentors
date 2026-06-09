@@ -342,7 +342,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
 
         if request.method == "POST":
             mentor_id = request.data.get("mentor")
-            pace = (request.data.get("pace") or "").strip()
+            pace = normalize_pace((request.data.get("pace") or "").strip())
             try:
                 mentor_id = int(mentor_id)
             except (TypeError, ValueError):
@@ -363,7 +363,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if not pace:
-                pace = mentor.pace
+                pace = normalize_pace(mentor.pace or "")
             if pace not in PACE_VALUES:
                 return Response(
                     {"detail": "Invalid pace choice."},
@@ -509,6 +509,7 @@ def validate_practice_attendance(practice, mentor, attendance):
 
 def validate_reply_pace(mentor, attendance, pace):
     """Raise ValueError if pace is missing or invalid for this reply."""
+    pace = normalize_pace(pace) if pace else ""
     if attendance not in ATTENDING_REPLY_VALUES:
         if pace:
             raise ValueError("Pace should only be set when attending a practice.")
@@ -542,7 +543,7 @@ def mentor_pace_counts_from_rows(mentor_rows, *, include_zero=False):
     """Count attending mentors per pace group for report display."""
     counts = {choice.value: 0 for choice in PaceTypes}
     for row in mentor_rows:
-        pace = row.get("pace") or ""
+        pace = normalize_pace(row.get("pace") or "")
         if pace in counts:
             counts[pace] += 1
     rows = [
@@ -606,7 +607,7 @@ def build_practice_roster_report(practices):
                     "first_name": mentor.first_name,
                     "last_name": mentor.last_name,
                     "email": mentor.email,
-                    "pace": reply.pace or mentor.pace or "",
+                    "pace": normalize_pace(reply.pace or mentor.pace or ""),
                     "mentor_type": mentor.type,
                     "attendance": reply.attendance,
                 }
@@ -954,7 +955,7 @@ class MentorScheduledEmailReplyView(APIView):
                 )
             pid = item.get("practice")
             att = item.get("attendance")
-            pace = item.get("pace") or ""
+            pace = normalize_pace(item.get("pace") or "")
             try:
                 pid = int(pid)
             except (TypeError, ValueError):
@@ -986,7 +987,7 @@ class MentorScheduledEmailReplyView(APIView):
         rows = []
         for pid, att in incoming_attendance.items():
             practice = practices_by_id[pid]
-            pace = incoming_pace.get(pid) or ""
+            pace = normalize_pace(incoming_pace.get(pid) or "")
             try:
                 validate_practice_attendance(practice, mentor, att)
                 validate_reply_pace(mentor, att, pace)

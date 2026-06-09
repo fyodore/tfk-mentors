@@ -84,7 +84,7 @@ def practice_mentor_reply_payload(reply):
         "last_name": mentor.last_name,
         "mentor_type": mentor.type,
         "attendance": reply.attendance,
-        "pace": reply.pace or mentor.pace or "",
+        "pace": normalize_pace(reply.pace or mentor.pace or ""),
         "responded_at": reply.updated_at.isoformat(),
         "scheduled_email_id": scheduled.id,
         "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),

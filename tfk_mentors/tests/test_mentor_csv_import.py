@@ -27,6 +27,9 @@ class NormalizePaceTests(TestCase):
 class MentorCsvImportTests(TestCase):
     def setUp(self):
         self.client = APIClient()
+        session = self.client.session
+        session["site_authenticated"] = True
+        session.save()
         self.season = Season.objects.create(year=2026)
 
     def _import_csv(self, body):
@@ -46,6 +49,37 @@ class MentorCsvImportTests(TestCase):
         response = self._import_csv(csv_body)
         self.assertEqual(response.status_code, 200)
         mentor = Mentor.objects.get(email="runner@example.com")
+        self.assertEqual(mentor.pace, "8-9")
+
+    def test_import_updates_existing_mentor_double_dash_pace(self):
+        mentor = Mentor.objects.create(
+            first_name="Jane",
+            last_name="Doe",
+            email="runner@example.com",
+            cell_phone="5551234567",
+            type="At Practice",
+            pace="9-10",
+        )
+        mentor.seasons.add(self.season)
+        csv_body = (
+            "email,season_year,first_name,last_name,cell_phone,type,pace\n"
+            "runner@example.com,2026,Jane,Doe,5551234567,At Practice,8--9\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor.refresh_from_db()
+        self.assertEqual(mentor.pace, "8-9")
+
+    def test_model_save_normalizes_double_dash_pace(self):
+        mentor = Mentor(
+            first_name="Jane",
+            last_name="Doe",
+            email="runner@example.com",
+            cell_phone="5551234567",
+            type="At Practice",
+            pace="8--9",
+        )
+        mentor.save()
         self.assertEqual(mentor.pace, "8-9")
 
     def test_import_reports_invalid_pace(self):

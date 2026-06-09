@@ -197,6 +197,11 @@ class Mentor(TimeStampedModel):
     def set_pace(self, value):
         self.pace = value
 
+    def save(self, *args, **kwargs):
+        if self.pace:
+            self.pace = normalize_pace(self.pace)
+        super().save(*args, **kwargs)
+
     def get_split_practice(self):
         return self.split_practice
 
@@ -281,7 +286,7 @@ class Practice(TimeStampedModel):
         ).delete()
 
         for reply in attending_replies:
-            pace = reply.pace or reply.mentor.pace
+            pace = normalize_pace(reply.pace or reply.mentor.pace or "")
             MentorPracticeAssignment.objects.update_or_create(
                 mentor_id=reply.mentor_id,
                 practice=self,
@@ -360,6 +365,8 @@ class MentorPracticeAssignment(TimeStampedModel):
             )
 
     def save(self, *args, **kwargs):
+        if self.pace:
+            self.pace = normalize_pace(self.pace)
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -781,3 +788,8 @@ class ScheduledEmailMentorPracticeReply(TimeStampedModel):
                 name="unique_mentor_token_practice_reply",
             )
         ]
+
+    def save(self, *args, **kwargs):
+        if self.pace:
+            self.pace = normalize_pace(self.pace)
+        super().save(*args, **kwargs)
