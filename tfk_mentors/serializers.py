@@ -194,7 +194,6 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at", "reply_stats"]
 
     def get_reply_stats(self, obj):
-        obj.sync_mentor_tokens()
         return obj.reply_stats()
 
     def validate(self, attrs):

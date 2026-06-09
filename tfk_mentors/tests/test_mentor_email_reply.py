@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db.models import Prefetch
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -214,6 +215,28 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_pending": 0,
             },
         )
+
+    def test_reply_stats_ignores_stale_prefetched_tokens(self):
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=self.token_row,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="",
+            )
+        scheduled = (
+            ScheduledEmail.objects.prefetch_related(
+                Prefetch(
+                    "mentor_tokens",
+                    queryset=ScheduledEmailMentorToken.objects.none(),
+                )
+            )
+            .get(pk=self.scheduled.pk)
+        )
+        stats = scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 1)
 
     def test_scheduled_email_api_includes_reply_stats(self):
         self.scheduled.task_completed_at = timezone.now()

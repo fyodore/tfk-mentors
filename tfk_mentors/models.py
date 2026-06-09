@@ -642,44 +642,44 @@ class ScheduledEmail(TimeStampedModel):
 
     def reply_stats(self):
         """Mentors emailed vs reply-page submissions and practice selections."""
-        practice_ids = set(self.practices.values_list("pk", flat=True))
-        tokens = list(self.mentor_tokens.all())
-        mentors_emailed = len(tokens)
         attending_values = {
             PracticeAttendanceReply.ATTENDING,
             PracticeAttendanceReply.FIRST_HALF,
             PracticeAttendanceReply.SECOND_HALF,
         }
-        if not practice_ids:
-            mentors_replied = sum(
-                1 for token in tokens if token.email_received_confirmed
-            )
+        email_id = self.pk
+        tokens_qs = ScheduledEmailMentorToken.objects.filter(scheduled_email_id=email_id)
+        mentors_emailed = tokens_qs.count()
+        if mentors_emailed == 0:
+            mentors_emailed = self.get_target_mentors().count()
+
+        has_practices = self.practices.exists()
+        if not has_practices:
+            mentors_replied = tokens_qs.filter(email_received_confirmed=True).count()
             return {
                 "mentors_emailed": mentors_emailed,
                 "mentors_replied": mentors_replied,
                 "mentors_selected_practices": 0,
                 "mentors_responded": mentors_replied,
-                "mentors_pending": mentors_emailed - mentors_replied,
+                "mentors_pending": max(0, mentors_emailed - mentors_replied),
             }
-        mentors_replied = 0
-        mentors_selected_practices = 0
-        for token in tokens:
-            replies = [
-                reply
-                for reply in token.practice_replies.all()
-                if reply.practice_id in practice_ids
-            ]
-            if not replies:
-                continue
-            mentors_replied += 1
-            if any(reply.attendance in attending_values for reply in replies):
-                mentors_selected_practices += 1
+
+        reply_qs = ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor_token__scheduled_email_id=email_id,
+        )
+        mentors_replied = reply_qs.values("mentor_id").distinct().count()
+        mentors_selected_practices = (
+            reply_qs.filter(attendance__in=attending_values)
+            .values("mentor_id")
+            .distinct()
+            .count()
+        )
         return {
             "mentors_emailed": mentors_emailed,
             "mentors_replied": mentors_replied,
             "mentors_selected_practices": mentors_selected_practices,
             "mentors_responded": mentors_replied,
-            "mentors_pending": mentors_emailed - mentors_replied,
+            "mentors_pending": max(0, mentors_emailed - mentors_replied),
         }
 
     def reply_absolute_url_for_mentor(self, mentor):
