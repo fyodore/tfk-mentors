@@ -52,6 +52,15 @@ function comparePeople(a, b, sortKey, direction) {
   )
 }
 
+/** @param {Array<{ date?: string, id?: number }>} practices */
+function sortPracticesByDateAsc(practices) {
+  return [...practices].sort((a, b) => {
+    const ta = a.date ? new Date(a.date).getTime() : 0
+    const tb = b.date ? new Date(b.date).getTime() : 0
+    return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || (a.id ?? 0) - (b.id ?? 0)
+  })
+}
+
 /** @param {Array<{ coaches?: unknown[], mentors?: unknown[] }>} practices */
 function sortPracticePeople(practices, sortKey, direction) {
   return practices.map((practice) => {
@@ -124,7 +133,7 @@ export default function ReportsPage() {
   const [seasonFilter, setSeasonFilter] = useState('')
   const [practiceFilter, setPracticeFilter] = useState('')
   /** @type {[SortKey, function(SortKey): void]} */
-  const [sortKey, setSortKey] = useState('name')
+  const [sortKey, setSortKey] = useState('pace')
   const [sortDirection, setSortDirection] = useState('asc')
 
   const sortedSeasons = useMemo(
@@ -176,10 +185,12 @@ export default function ReportsPage() {
     }
   }, [seasonFilter])
 
+  const sortedReport = useMemo(() => sortPracticesByDateAsc(report), [report])
+
   const filteredReport = useMemo(() => {
-    if (!practiceFilter) return report
-    return report.filter((p) => String(p.id) === practiceFilter)
-  }, [report, practiceFilter])
+    if (!practiceFilter) return sortedReport
+    return sortedReport.filter((p) => String(p.id) === practiceFilter)
+  }, [sortedReport, practiceFilter])
 
   const displayPractices = useMemo(
     () => sortPracticePeople(filteredReport, sortKey, sortDirection),
@@ -223,7 +234,7 @@ export default function ReportsPage() {
         </div>
 
         <p className="muted reports-intro">
-          Coaches and attending mentors for each practice. Sort rows by name, email, or pace.
+          Coaches and attending mentors for each practice (soonest first). Rows default to pace order within each practice.
         </p>
 
         <div className="reports-filters">
@@ -255,10 +266,10 @@ export default function ReportsPage() {
               className="field-input field-select"
               value={practiceFilter}
               onChange={(e) => setPracticeFilter(e.target.value)}
-              disabled={loading || report.length === 0}
+              disabled={loading || sortedReport.length === 0}
             >
               <option value="">All practices</option>
-              {report.map((p) => (
+              {sortedReport.map((p) => (
                 <option key={p.id} value={String(p.id)}>
                   {p.date ? formatDateTime(p.date) : `Practice #${p.id}`}
                   {p.nyrr_race?.trim() ? ` · ${p.nyrr_race.trim()}` : ''}

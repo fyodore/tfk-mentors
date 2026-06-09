@@ -606,7 +606,7 @@ class PracticeRosterReportView(APIView):
                     .order_by("-updated_at"),
                 ),
             )
-            .order_by("-date", "-id")
+            .order_by("date", "id")
         )
         if season_raw:
             try:

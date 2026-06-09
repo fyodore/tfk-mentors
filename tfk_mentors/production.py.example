@@ -4,6 +4,9 @@ Production settings template. Copy to production.py on the server (gitignored):
     cp tfk_mentors/production.py.example tfk_mentors/production.py
 
 Apache/mod_wsgi loads production.py automatically when that file exists (see wsgi.py).
+manage.py does the same on the server (cron, migrate, etc.).
+
+Do not run makemigrations on production — only migrate after deploying migration files from git.
 """
 import os
 
