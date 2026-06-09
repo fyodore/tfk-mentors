@@ -8,10 +8,23 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const isSent = Boolean(row.task_completed_at)
   const emailed =
     isSent && stats ? stats.mentors_emailed : null
-  const responded =
-    isSent && stats ? stats.mentors_responded : null
+  const replied =
+    isSent && stats
+      ? (stats.mentors_replied ?? stats.mentors_responded ?? 0)
+      : null
+  const selectedPractices =
+    isSent && stats ? (stats.mentors_selected_practices ?? 0) : null
   const pending =
     isSent && stats ? stats.mentors_pending : null
+
+  function responseSummarySuffix() {
+    if (!isSent || !stats) return ''
+    return (
+      ` · ${replied} replied` +
+      ` · ${selectedPractices} selected practice${selectedPractices === 1 ? '' : 's'}` +
+      ` · ${pending} awaiting response`
+    )
+  }
 
   if (mode === 'specific_mentors') {
     const ids = row.specific_mentors || []
@@ -19,12 +32,10 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
     if (count === 0) {
       return 'Specific mentors — none selected'
     }
-    let text = `Specific mentors (${count} mentor${count === 1 ? '' : 's'} emailed`
-    if (isSent && stats) {
-      text += ` · ${responded} responded · ${pending} awaiting response`
-    }
-    text += ')'
-    return text
+    return (
+      `Specific mentors (${count} mentor${count === 1 ? '' : 's'} emailed` +
+      `${responseSummarySuffix()})`
+    )
   }
 
   const sid = row.recipient_season
@@ -38,11 +49,7 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const count = emailed ?? seasonCount
   let text = `All mentors in season ${year ?? '—'}`
   if (sid != null || count > 0) {
-    text += ` (${count} mentor${count === 1 ? '' : 's'} emailed`
-    if (isSent && stats) {
-      text += ` · ${responded} responded · ${pending} awaiting response`
-    }
-    text += ')'
+    text += ` (${count} mentor${count === 1 ? '' : 's'} emailed${responseSummarySuffix()})`
   }
   return text
 }

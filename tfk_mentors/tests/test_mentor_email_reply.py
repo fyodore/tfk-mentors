@@ -157,6 +157,8 @@ class MentorEmailReplySubmitTests(TestCase):
             self.scheduled.reply_stats(),
             {
                 "mentors_emailed": 1,
+                "mentors_replied": 0,
+                "mentors_selected_practices": 0,
                 "mentors_responded": 0,
                 "mentors_pending": 1,
             },
@@ -173,6 +175,28 @@ class MentorEmailReplySubmitTests(TestCase):
             self.scheduled.reply_stats(),
             {
                 "mentors_emailed": 1,
+                "mentors_replied": 1,
+                "mentors_selected_practices": 1,
+                "mentors_responded": 1,
+                "mentors_pending": 0,
+            },
+        )
+
+    def test_reply_stats_replied_without_selecting_practices(self):
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=self.token_row,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.NOT_ATTENDING,
+                pace="",
+            )
+        self.assertEqual(
+            self.scheduled.reply_stats(),
+            {
+                "mentors_emailed": 1,
+                "mentors_replied": 1,
+                "mentors_selected_practices": 0,
                 "mentors_responded": 1,
                 "mentors_pending": 0,
             },
@@ -190,7 +214,7 @@ class MentorEmailReplySubmitTests(TestCase):
                 pace="",
             )
 
-        response = self.client.get("/api/scheduled-emails/")
+        response = self.client.get("/api/scheduled-email/")
 
         self.assertEqual(response.status_code, 200)
         row = next(item for item in response.data if item["id"] == self.scheduled.id)
@@ -198,6 +222,8 @@ class MentorEmailReplySubmitTests(TestCase):
             row["reply_stats"],
             {
                 "mentors_emailed": 1,
+                "mentors_replied": 1,
+                "mentors_selected_practices": 1,
                 "mentors_responded": 1,
                 "mentors_pending": 0,
             },

@@ -641,29 +641,46 @@ class ScheduledEmail(TimeStampedModel):
         self.mentor_tokens.exclude(mentor_id__in=mentor_ids).delete()
 
     def reply_stats(self):
-        """Mentors emailed vs those who submitted replies for every linked practice."""
+        """Mentors emailed vs reply-page submissions and practice selections."""
         practice_ids = set(self.practices.values_list("pk", flat=True))
         tokens = list(self.mentor_tokens.all())
         mentors_emailed = len(tokens)
+        attending_values = {
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.FIRST_HALF,
+            PracticeAttendanceReply.SECOND_HALF,
+        }
         if not practice_ids:
+            mentors_replied = sum(
+                1 for token in tokens if token.email_received_confirmed
+            )
             return {
                 "mentors_emailed": mentors_emailed,
-                "mentors_responded": 0,
-                "mentors_pending": mentors_emailed,
+                "mentors_replied": mentors_replied,
+                "mentors_selected_practices": 0,
+                "mentors_responded": mentors_replied,
+                "mentors_pending": mentors_emailed - mentors_replied,
             }
-        responded = 0
+        mentors_replied = 0
+        mentors_selected_practices = 0
         for token in tokens:
-            replied_practices = {
-                reply.practice_id
+            replies = [
+                reply
                 for reply in token.practice_replies.all()
                 if reply.practice_id in practice_ids
-            }
-            if replied_practices == practice_ids:
-                responded += 1
+            ]
+            replied_practices = {reply.practice_id for reply in replies}
+            if replied_practices != practice_ids:
+                continue
+            mentors_replied += 1
+            if any(reply.attendance in attending_values for reply in replies):
+                mentors_selected_practices += 1
         return {
             "mentors_emailed": mentors_emailed,
-            "mentors_responded": responded,
-            "mentors_pending": mentors_emailed - responded,
+            "mentors_replied": mentors_replied,
+            "mentors_selected_practices": mentors_selected_practices,
+            "mentors_responded": mentors_replied,
+            "mentors_pending": mentors_emailed - mentors_replied,
         }
 
     def reply_absolute_url_for_mentor(self, mentor):
