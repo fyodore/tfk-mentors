@@ -216,6 +216,32 @@ class MentorEmailReplySubmitTests(TestCase):
             },
         )
 
+    def test_reply_stats_counts_mentor_assignments_without_reply_rows(self):
+        self.scheduled.task_completed_at = timezone.now()
+        self.scheduled.save(update_fields=["task_completed_at"])
+        MentorPracticeAssignment.objects.create(
+            mentor=self.mentor,
+            practice=self.practices[0],
+            pace="11-12",
+        )
+
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 1)
+
+    def test_reply_stats_finds_practices_without_email_m2m_link(self):
+        self.scheduled.task_completed_at = timezone.now()
+        self.scheduled.practices.clear()
+        self.scheduled.save(update_fields=["task_completed_at"])
+        MentorPracticeAssignment.objects.create(
+            mentor=self.mentor,
+            practice=self.practices[0],
+            pace="11-12",
+        )
+
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+
     def test_reply_stats_counts_replies_on_linked_practices_from_other_email_token(self):
         """Replies saved under a newer email's token still count for the earlier send."""
         older_sent = self.scheduled
