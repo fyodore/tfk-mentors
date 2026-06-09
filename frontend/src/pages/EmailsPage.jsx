@@ -10,6 +10,7 @@ import {
   fetchSeasons,
   patchScheduledEmail,
 } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
   buildQuarterTimeOptions,
@@ -656,32 +657,7 @@ export default function EmailsPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>TFK Mentors</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Home
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/mentors" className="nav-back">
-            Mentors
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/seasons" className="nav-back">
-            Seasons
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">
-            Practices
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/coaches" className="nav-back">
-            Coaches
-          </Link>
-          <span aria-hidden> · </span>
-          Emails
-        </p>
-      </header>
+      <AppHeader />
 
       <main className="panel emails-panel">
         <div className="practices-toolbar">

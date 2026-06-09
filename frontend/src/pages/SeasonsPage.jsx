@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { createSeason, deleteSeason, fetchSeasons, patchSeason } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 
 function sortSeasons(list) {
@@ -136,32 +136,7 @@ export default function SeasonsPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>TFK Mentors</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Home
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/mentors" className="nav-back">
-            Mentors
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">
-            Practices
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/coaches" className="nav-back">
-            Coaches
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/emails" className="nav-back">
-            Emails
-          </Link>
-          <span aria-hidden> · </span>
-          Seasons
-        </p>
-      </header>
+      <AppHeader />
 
       <main className="panel seasons-panel">
         <div className="seasons-toolbar">

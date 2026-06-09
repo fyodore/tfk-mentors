@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import {
   createMentor,
@@ -9,6 +8,7 @@ import {
   importMentorsCsv,
   patchMentor,
 } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 
 const MENTOR_TYPES = ['At Practice', 'Remote']
@@ -408,22 +408,7 @@ export default function MentorsPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>TFK Mentors</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">Home</Link>
-          <span aria-hidden> · </span>
-          <Link to="/seasons" className="nav-back">Seasons</Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">Practices</Link>
-          <span aria-hidden> · </span>
-          <Link to="/coaches" className="nav-back">Coaches</Link>
-          <span aria-hidden> · </span>
-          <Link to="/emails" className="nav-back">Emails</Link>
-          <span aria-hidden> · </span>
-          Mentors
-        </p>
-      </header>
+      <AppHeader />
 
       <main className="panel mentors-panel">
         <div className="practices-toolbar">

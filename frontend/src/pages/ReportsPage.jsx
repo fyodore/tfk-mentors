@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 
 import { fetchPracticeRosterReport, fetchSeasons } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
+
+const ROSTER_HEADERS = [
+  'Practice Date',
+  'Season',
+  'NYRR Race',
+  'Role',
+  'First Name',
+  'Last Name',
+  'Email',
+  'Pace',
+]
+
+const PACE_COLUMN_INDEX = ROSTER_HEADERS.indexOf('Pace')
 
 const PACE_ORDER = {
   '8-9': 1,
@@ -47,55 +61,58 @@ function sortPracticePeople(practices, sortKey, direction) {
   })
 }
 
-function csvEscape(value) {
-  const text = String(value ?? '')
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`
-  return text
-}
-
 /** @param {ReturnType<typeof sortPracticePeople>} practices */
-function buildCsv(practices) {
-  const header = [
-    'Practice Date',
-    'Season',
-    'NYRR Race',
-    'Role',
-    'First Name',
-    'Last Name',
-    'Email',
-    'Pace',
-  ]
-  const lines = [header.join(',')]
+function buildRosterRows(practices) {
+  const rows = [ROSTER_HEADERS]
   for (const practice of practices) {
     const when = practice.date ? formatDateTime(practice.date) : ''
     for (const person of practice.people) {
-      lines.push(
-        [
-          when,
-          practice.season_year ?? practice.season,
-          practice.nyrr_race ?? '',
-          person.role,
-          person.first_name,
-          person.last_name,
-          person.email,
-          person.pace,
-        ]
-          .map(csvEscape)
-          .join(',')
-      )
+      rows.push([
+        when,
+        practice.season_year ?? practice.season,
+        practice.nyrr_race ?? '',
+        person.role,
+        person.first_name,
+        person.last_name,
+        person.email ?? '',
+        person.pace ?? '',
+      ])
     }
   }
-  return `${lines.join('\n')}\n`
+  return rows
 }
 
-function downloadCsv(filename, content) {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
+/** @param {ReturnType<typeof sortPracticePeople>} practices */
+function downloadExcel(filename, practices) {
+  const rows = buildRosterRows(practices)
+  const worksheet = XLSX.utils.aoa_to_sheet(rows)
+
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const cellAddress = XLSX.utils.encode_cell({
+      r: rowIndex,
+      c: PACE_COLUMN_INDEX,
+    })
+    const cell = worksheet[cellAddress]
+    if (!cell) continue
+    cell.t = 's'
+    cell.v = String(cell.v ?? '')
+    cell.z = '@'
+  }
+
+  worksheet['!cols'] = [
+    { wch: 24 },
+    { wch: 8 },
+    { wch: 22 },
+    { wch: 8 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 28 },
+    { wch: 8 },
+  ]
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Practice roster')
+  XLSX.writeFile(workbook, filename)
 }
 
 export default function ReportsPage() {
@@ -183,27 +200,14 @@ export default function ReportsPage() {
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
-  function handleDownloadCsv() {
+  function handleDownloadExcel() {
     const stamp = new Date().toISOString().slice(0, 10)
-    downloadCsv(`practice-roster-report-${stamp}.csv`, buildCsv(displayPractices))
+    downloadExcel(`practice-roster-report-${stamp}.xlsx`, displayPractices)
   }
 
   return (
     <>
-      <header className="app-header">
-        <h1>Reports</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Home
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">
-            Practices
-          </Link>
-          <span aria-hidden> · </span>
-          Reports
-        </p>
-      </header>
+      <AppHeader title="Reports" />
 
       <main className="panel reports-panel">
         <div className="reports-toolbar">
@@ -212,9 +216,9 @@ export default function ReportsPage() {
             type="button"
             className="btn btn-secondary"
             disabled={loading || displayPractices.length === 0}
-            onClick={handleDownloadCsv}
+            onClick={handleDownloadExcel}
           >
-            Download CSV
+            Download Excel
           </button>
         </div>
 

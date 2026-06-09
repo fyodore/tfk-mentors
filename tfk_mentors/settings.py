@@ -24,6 +24,29 @@ def _env_list(name, default):
     ]
 
 
+def _load_env_file(path, *, override=False):
+    """Load KEY=VALUE lines into os.environ."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if not key:
+            continue
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
+
+
+# Host-only overrides (copy from .env.local.example). Docker uses compose env_file.
+_load_env_file(BASE_DIR / ".env.local", override=True)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -118,7 +141,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME", "postgres"),
         "USER": os.environ.get("DB_USER", "postgres"),
         "PASSWORD": os.environ.get("DB_PASSWORD", "postgres"),
-        "HOST": os.environ.get("DB_HOST", "db"),
+        "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "5432"),
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 
 import {
   createCoachPracticeAssignment,
@@ -12,6 +12,7 @@ import {
   fetchPractice,
   fetchSeasons,
 } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
 function byName(a, b) {
@@ -244,18 +245,7 @@ export default function PracticeDetailPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>Practice View</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">Home</Link>
-          <span aria-hidden> · </span>
-          <Link to="/mentors" className="nav-back">Mentors</Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">Practices</Link>
-          <span aria-hidden> · </span>
-          <Link to="/emails" className="nav-back">Emails</Link>
-        </p>
-      </header>
+      <AppHeader title="Practice View" />
 
       <main className="panel">
         {loading && <p className="muted">Loading…</p>}

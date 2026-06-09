@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import {
   createCoach,
@@ -9,6 +8,7 @@ import {
   importCoachesCsv,
   patchCoach,
 } from '../api'
+import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 
 function sortSeasonsByYearDesc(list) {
@@ -384,32 +384,7 @@ export default function CoachesPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>TFK Mentors</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Home
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/mentors" className="nav-back">
-            Mentors
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/seasons" className="nav-back">
-            Seasons
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/practices" className="nav-back">
-            Practices
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/emails" className="nav-back">
-            Emails
-          </Link>
-          <span aria-hidden> · </span>
-          Coaches
-        </p>
-      </header>
+      <AppHeader />
 
       <main className="panel coaches-panel">
         <div className="practices-toolbar">

@@ -9,6 +9,7 @@ import {
   patchPractice,
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
+import { AppHeader } from '../components/AppHeader.jsx'
 import {
   buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,
@@ -231,32 +232,7 @@ export default function PracticesPage() {
 
   return (
     <>
-      <header className="app-header">
-        <h1>TFK Mentors</h1>
-        <p className="tagline">
-          <Link to="/" className="nav-back">
-            Home
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/mentors" className="nav-back">
-            Mentors
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/seasons" className="nav-back">
-            Seasons
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/coaches" className="nav-back">
-            Coaches
-          </Link>
-          <span aria-hidden> · </span>
-          <Link to="/emails" className="nav-back">
-            Emails
-          </Link>
-          <span aria-hidden> · </span>
-          Practices
-        </p>
-      </header>
+      <AppHeader />
 
       <main className="panel practices-panel">
         <div className="practices-toolbar">
