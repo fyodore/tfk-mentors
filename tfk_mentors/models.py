@@ -298,10 +298,19 @@ class Practice(TimeStampedModel):
     def get_or_create_mentor_reply_token(self, mentor):
         """Token for storing admin or mentor replies tied to this practice."""
         scheduled = (
-            ScheduledEmail.objects.filter(practices=self)
-            .order_by("-scheduled_send_at", "-id")
+            ScheduledEmail.objects.filter(
+                practices=self,
+                task_completed_at__isnull=False,
+            )
+            .order_by("-task_completed_at", "-scheduled_send_at", "-id")
             .first()
         )
+        if scheduled is None:
+            scheduled = (
+                ScheduledEmail.objects.filter(practices=self)
+                .order_by("-scheduled_send_at", "-id")
+                .first()
+            )
         if scheduled is None:
             raise ValidationError(
                 "Link a scheduled email to this practice before assigning mentors."
@@ -648,14 +657,24 @@ class ScheduledEmail(TimeStampedModel):
             PracticeAttendanceReply.SECOND_HALF,
         }
         email_id = self.pk
-        tokens_qs = ScheduledEmailMentorToken.objects.filter(scheduled_email_id=email_id)
-        mentors_emailed = tokens_qs.count()
-        if mentors_emailed == 0:
-            mentors_emailed = self.get_target_mentors().count()
+        practice_ids = list(self.practices.values_list("pk", flat=True))
 
-        has_practices = self.practices.exists()
-        if not has_practices:
-            mentors_replied = tokens_qs.filter(email_received_confirmed=True).count()
+        emailed_mentor_ids = set(
+            ScheduledEmailMentorToken.objects.filter(
+                scheduled_email_id=email_id
+            ).values_list("mentor_id", flat=True)
+        )
+        if not emailed_mentor_ids:
+            emailed_mentor_ids = set(
+                self.get_target_mentors().values_list("pk", flat=True)
+            )
+        mentors_emailed = len(emailed_mentor_ids)
+
+        if not practice_ids:
+            mentors_replied = ScheduledEmailMentorToken.objects.filter(
+                scheduled_email_id=email_id,
+                email_received_confirmed=True,
+            ).count()
             return {
                 "mentors_emailed": mentors_emailed,
                 "mentors_replied": mentors_replied,
@@ -664,15 +683,32 @@ class ScheduledEmail(TimeStampedModel):
                 "mentors_pending": max(0, mentors_emailed - mentors_replied),
             }
 
-        reply_qs = ScheduledEmailMentorPracticeReply.objects.filter(
-            mentor_token__scheduled_email_id=email_id,
+        # Replies stored on this email's tokens.
+        mentors_replied_ids = set(
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                mentor_token__scheduled_email_id=email_id,
+            ).values_list("mentor_id", flat=True)
         )
-        mentors_replied = reply_qs.values("mentor_id").distinct().count()
+        # Replies on this email's practices from recipients (may use another send's token).
+        if emailed_mentor_ids:
+            mentors_replied_ids.update(
+                ScheduledEmailMentorPracticeReply.objects.filter(
+                    practice_id__in=practice_ids,
+                    mentor_id__in=emailed_mentor_ids,
+                ).values_list("mentor_id", flat=True)
+            )
+        mentors_replied = len(mentors_replied_ids)
         mentors_selected_practices = (
-            reply_qs.filter(attendance__in=attending_values)
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                practice_id__in=practice_ids,
+                mentor_id__in=mentors_replied_ids,
+                attendance__in=attending_values,
+            )
             .values("mentor_id")
             .distinct()
             .count()
+            if mentors_replied_ids
+            else 0
         )
         return {
             "mentors_emailed": mentors_emailed,

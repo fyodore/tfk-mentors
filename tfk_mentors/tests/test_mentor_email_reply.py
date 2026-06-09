@@ -216,6 +216,37 @@ class MentorEmailReplySubmitTests(TestCase):
             },
         )
 
+    def test_reply_stats_counts_replies_on_linked_practices_from_other_email_token(self):
+        """Replies saved under a newer email's token still count for the earlier send."""
+        older_sent = self.scheduled
+        older_sent.task_completed_at = timezone.now() - timedelta(days=7)
+        older_sent.save(update_fields=["task_completed_at"])
+
+        newer_send = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=7),
+            body_text="Follow up",
+            recipient_season=self.season,
+        )
+        newer_send.practices.set(self.practices)
+        newer_send.sync_mentor_tokens()
+        newer_token = ScheduledEmailMentorToken.objects.get(
+            scheduled_email=newer_send,
+            mentor=self.mentor,
+        )
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=newer_token,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="11-12",
+            )
+
+        stats = older_sent.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 1)
+        self.assertEqual(stats["mentors_pending"], 0)
+
     def test_reply_stats_ignores_stale_prefetched_tokens(self):
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(
