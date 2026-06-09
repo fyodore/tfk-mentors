@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 
-import { fetchPracticeRosterReport, fetchSeasons } from '../api'
+import { fetchMentorNonResponseReport, fetchPracticeRosterReport, fetchSeasons } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -127,6 +127,7 @@ function downloadExcel(filename, practices) {
 export default function ReportsPage() {
   const [seasons, setSeasons] = useState([])
   const [report, setReport] = useState([])
+  const [pendingReport, setPendingReport] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -162,12 +163,14 @@ export default function ReportsPage() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetchPracticeRosterReport(
-      seasonFilter ? { season: seasonFilter } : {}
-    )
-      .then((data) => {
+    Promise.all([
+      fetchPracticeRosterReport(seasonFilter ? { season: seasonFilter } : {}),
+      fetchMentorNonResponseReport(seasonFilter ? { season: seasonFilter } : {}),
+    ])
+      .then(([rosterData, pendingData]) => {
         if (!cancelled) {
-          setReport(Array.isArray(data) ? data : [])
+          setReport(Array.isArray(rosterData) ? rosterData : [])
+          setPendingReport(Array.isArray(pendingData) ? pendingData : [])
           setPracticeFilter('')
         }
       })
@@ -175,6 +178,7 @@ export default function ReportsPage() {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
           setReport([])
+          setPendingReport([])
         }
       })
       .finally(() => {
@@ -184,6 +188,25 @@ export default function ReportsPage() {
       cancelled = true
     }
   }, [seasonFilter])
+
+  const sortedPendingReport = useMemo(
+    () => sortPracticesByDateAsc(pendingReport),
+    [pendingReport]
+  )
+
+  const filteredPendingReport = useMemo(() => {
+    if (!practiceFilter) return sortedPendingReport
+    return sortedPendingReport.filter((p) => String(p.id) === practiceFilter)
+  }, [sortedPendingReport, practiceFilter])
+
+  const totalPendingMentors = useMemo(
+    () =>
+      filteredPendingReport.reduce(
+        (sum, practice) => sum + (practice.pending_mentors?.length ?? 0),
+        0
+      ),
+    [filteredPendingReport]
+  )
 
   const sortedReport = useMemo(() => sortPracticesByDateAsc(report), [report])
 
@@ -397,6 +420,81 @@ export default function ReportsPage() {
             ))}
           </div>
         )}
+
+        <section className="reports-section reports-section-pending" aria-labelledby="pending-heading">
+          <div className="reports-toolbar">
+            <h2 id="pending-heading">Mentors without responses</h2>
+            {!loading && !error ? (
+              <p className="muted reports-pending-summary">
+                {totalPendingMentors} mentor
+                {totalPendingMentors === 1 ? '' : 's'} still need to respond
+              </p>
+            ) : null}
+          </div>
+
+          <p className="muted reports-intro">
+            Mentors on the latest sent email for each practice who have not submitted any reply yet (sorted by pace).
+          </p>
+
+          {!loading && !error && filteredPendingReport.length === 0 && (
+            <p className="muted">No practices match the current filters.</p>
+          )}
+
+          {!loading && !error && filteredPendingReport.length > 0 && (
+            <div className="reports-practice-list">
+              {filteredPendingReport.map((practice) => (
+                <section key={`pending-${practice.id}`} className="report-practice-block">
+                  <header className="report-practice-header">
+                    <h3>
+                      {practice.date
+                        ? formatDateTime(practice.date)
+                        : `Practice #${practice.id}`}
+                    </h3>
+                    <p className="muted">
+                      Season {practice.season_year ?? practice.season}
+                      {practice.nyrr_race?.trim()
+                        ? ` · ${practice.nyrr_race.trim()}`
+                        : ''}
+                      {practice.full_practice ? ' · Full practice' : ' · Partial'}
+                      {practice.email_sent && practice.scheduled_send_at
+                        ? ` · Email sent ${formatDateTime(practice.scheduled_send_at)}`
+                        : ''}
+                    </p>
+                  </header>
+
+                  {!practice.email_sent ? (
+                    <p className="muted">No mentor email has been sent for this practice yet.</p>
+                  ) : practice.pending_mentors?.length === 0 ? (
+                    <p className="muted">All mentors have responded.</p>
+                  ) : (
+                    <div className="report-table-wrap">
+                      <table className="report-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Pace</th>
+                            <th scope="col">Type</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {practice.pending_mentors.map((mentor) => (
+                            <tr key={mentor.mentor_id}>
+                              <td>{fullName(mentor.first_name, mentor.last_name)}</td>
+                              <td>{mentor.email || '—'}</td>
+                              <td>{mentor.pace || '—'}</td>
+                              <td>{mentor.mentor_type || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </>
   )

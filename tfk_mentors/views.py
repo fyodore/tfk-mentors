@@ -41,6 +41,7 @@ ATTENDING_REPLY_VALUES = frozenset(
     }
 )
 PACE_VALUES = frozenset(c.value for c in PaceTypes)
+PACE_SORT = {choice.value: index for index, choice in enumerate(PaceTypes)}
 from .serializers import (
     CoachSerializer,
     CoachPracticeAssignmentSerializer,
@@ -589,9 +590,16 @@ class PracticeRosterReportView(APIView):
 
     def get(self, request):
         season_raw = (request.query_params.get("season") or "").strip()
+        if season_raw:
+            try:
+                int(season_raw)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         queryset = (
-            Practice.objects.all()
-            .select_related("season")
+            _practice_report_queryset(season_raw)
             .prefetch_related(
                 Prefetch(
                     "coachpracticeassignment_set",
@@ -606,17 +614,116 @@ class PracticeRosterReportView(APIView):
                     .order_by("-updated_at"),
                 ),
             )
-            .order_by("date", "id")
         )
+        return Response(build_practice_roster_report(list(queryset)))
+
+
+def _practice_report_queryset(season_raw):
+    queryset = Practice.objects.all().select_related("season").order_by("date", "id")
+    if season_raw:
+        queryset = queryset.filter(season_id=int(season_raw))
+    return queryset
+
+
+def _latest_sent_emails_by_practice(practice_ids):
+    """Most recent sent scheduled email per practice (for reply tracking)."""
+    practice_to_email = {}
+    if not practice_ids:
+        return practice_to_email
+    emails = (
+        ScheduledEmail.objects.filter(
+            practices__in=practice_ids,
+            task_completed_at__isnull=False,
+        )
+        .distinct()
+        .prefetch_related("practices", "mentor_tokens__mentor")
+        .order_by("-scheduled_send_at", "-id")
+    )
+    practice_id_set = set(practice_ids)
+    for email in emails:
+        for practice in email.practices.all():
+            if practice.id in practice_id_set and practice.id not in practice_to_email:
+                practice_to_email[practice.id] = email
+    return practice_to_email
+
+
+def build_mentor_non_response_report(practices):
+    """Mentors on the latest sent email for each practice who have not submitted a reply."""
+    practice_ids = [practice.id for practice in practices]
+    practice_to_email = _latest_sent_emails_by_practice(practice_ids)
+    email_ids = {email.id for email in practice_to_email.values()}
+
+    replied_pairs = set()
+    if email_ids:
+        replied_pairs = set(
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                mentor_token__scheduled_email_id__in=email_ids,
+                practice_id__in=practice_ids,
+            ).values_list("mentor_token_id", "practice_id")
+        )
+
+    report = []
+    for practice in practices:
+        scheduled = practice_to_email.get(practice.id)
+        pending = []
+        if scheduled is not None:
+            for token in scheduled.mentor_tokens.all():
+                if (token.id, practice.id) in replied_pairs:
+                    continue
+                mentor = token.mentor
+                pending.append(
+                    {
+                        "mentor_id": mentor.id,
+                        "first_name": mentor.first_name,
+                        "last_name": mentor.last_name,
+                        "email": mentor.email,
+                        "pace": mentor.pace,
+                        "mentor_type": mentor.type,
+                    }
+                )
+            pending.sort(
+                key=lambda row: (
+                    PACE_SORT.get(row["pace"], 99),
+                    row["last_name"],
+                    row["first_name"],
+                )
+            )
+
+        report.append(
+            {
+                "id": practice.id,
+                "date": practice.date.isoformat(),
+                "nyrr_race": practice.nyrr_race or "",
+                "season": practice.season_id,
+                "season_year": practice.season.year,
+                "full_practice": practice.full_practice,
+                "scheduled_email_id": scheduled.id if scheduled else None,
+                "scheduled_send_at": scheduled.scheduled_send_at.isoformat()
+                if scheduled
+                else None,
+                "email_sent": scheduled is not None,
+                "pending_mentors": pending,
+            }
+        )
+    return report
+
+
+class MentorNonResponseReportView(APIView):
+    """Mentors who have not replied to practices on the latest sent mentor email."""
+
+    def get(self, request):
+        season_raw = (request.query_params.get("season") or "").strip()
         if season_raw:
             try:
-                queryset = queryset.filter(season_id=int(season_raw))
+                int(season_raw)
             except ValueError:
                 return Response(
                     {"detail": "Invalid season id."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-        return Response(build_practice_roster_report(list(queryset)))
+        return Response(
+            build_mentor_non_response_report(list(_practice_report_queryset(season_raw)))
+        )
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")

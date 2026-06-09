@@ -652,6 +652,16 @@
   padding: 0.35rem 0.5rem;
 }
 
+.reports-section-pending {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.reports-pending-summary {
+  margin: 0;
+}
+
 .reports-toolbar {
   display: flex;
   flex-wrap: wrap;

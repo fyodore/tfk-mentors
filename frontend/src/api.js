@@ -588,3 +588,20 @@ export async function fetchPracticeRosterReport(params = {}) {
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
+
+const MENTOR_NON_RESPONSE_REPORT = apiPath('/api/reports/mentor-non-responses/')
+
+/** @param {{ season?: number|string }} [params] */
+export async function fetchMentorNonResponseReport(params = {}) {
+  const qs = new URLSearchParams()
+  if (params.season != null && params.season !== '') {
+    qs.set('season', String(params.season))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await fetch(`${MENTOR_NON_RESPONSE_REPORT}${suffix}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
