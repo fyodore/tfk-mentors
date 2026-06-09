@@ -574,6 +574,7 @@ def build_practice_roster_report(practices):
             mentor = reply.mentor
             mentors.append(
                 {
+                    "mentor_id": mentor.id,
                     "role": "Mentor",
                     "first_name": mentor.first_name,
                     "last_name": mentor.last_name,

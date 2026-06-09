@@ -124,9 +124,68 @@ function downloadExcel(filename, practices) {
   XLSX.writeFile(workbook, filename)
 }
 
+const PACE_GROUPS = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
+
+/** @param {Array<{ mentors?: Array<{ mentor_id?: number, email?: string, pace?: string, first_name?: string, last_name?: string, mentor_type?: string }>, id?: number }>} practices */
+function buildMentorSignupSummary(practices) {
+  /** @type {Map<number|string, { mentor_id?: number, first_name?: string, last_name?: string, email?: string, pace?: string, mentor_type?: string, practice_count: number }>} */
+  const mentorById = new Map()
+  /** @type {Map<string, Set<number>>} */
+  const paceToPracticeIds = new Map(PACE_GROUPS.map((pace) => [pace, new Set()]))
+  let practicesWithMentors = 0
+
+  for (const practice of practices) {
+    const mentors = practice.mentors ?? []
+    if (mentors.length === 0) continue
+    practicesWithMentors += 1
+    const pacesInPractice = new Set()
+    for (const mentor of mentors) {
+      const pace = mentor.pace?.trim() || ''
+      if (PACE_ORDER[pace]) pacesInPractice.add(pace)
+      const key = mentor.mentor_id ?? mentor.email ?? fullName(mentor.first_name, mentor.last_name)
+      if (!mentorById.has(key)) {
+        mentorById.set(key, {
+          mentor_id: mentor.mentor_id,
+          first_name: mentor.first_name,
+          last_name: mentor.last_name,
+          email: mentor.email,
+          pace: mentor.pace,
+          mentor_type: mentor.mentor_type,
+          practice_count: 0,
+        })
+      }
+      mentorById.get(key).practice_count += 1
+    }
+    for (const pace of pacesInPractice) {
+      paceToPracticeIds.get(pace)?.add(practice.id)
+    }
+  }
+
+  const practicesByPace = PACE_GROUPS.map((pace) => ({
+    pace,
+    count: paceToPracticeIds.get(pace)?.size ?? 0,
+  })).filter((row) => row.count > 0)
+
+  const mentors = [...mentorById.values()].sort(
+    (a, b) =>
+      b.practice_count - a.practice_count ||
+      (a.last_name || '').localeCompare(b.last_name || '') ||
+      (a.first_name || '').localeCompare(b.first_name || '')
+  )
+
+  return { practicesWithMentors, practicesByPace, mentors }
+}
+
 function formatPaceCounts(counts) {
   if (!Array.isArray(counts) || counts.length === 0) return ''
   return counts.map(({ pace, count }) => `${pace}: ${count}`).join(' · ')
+}
+
+function formatPracticePaceCounts(counts) {
+  if (!Array.isArray(counts) || counts.length === 0) return ''
+  return counts
+    .map(({ pace, count }) => `${pace}: ${count} practice${count === 1 ? '' : 's'}`)
+    .join(' · ')
 }
 
 export default function ReportsPage() {
@@ -231,6 +290,11 @@ export default function ReportsPage() {
     }
     return { mentors_emailed, mentors_responded }
   }, [filteredPendingReport])
+
+  const signupSummary = useMemo(
+    () => buildMentorSignupSummary(filteredReport),
+    [filteredReport]
+  )
 
   const displayPractices = useMemo(
     () => sortPracticePeople(filteredReport, sortKey, sortDirection),
@@ -353,30 +417,44 @@ export default function ReportsPage() {
         </div>
 
         {!loading && !error && (
-          <div className="reports-stats" aria-label="Email response summary">
-            <div className="reports-stat">
-              <span className="reports-stat-value">
-                {filteredEmailStats.mentors_emailed}
-              </span>
-              <span className="reports-stat-label">Mentors emailed</span>
+          <>
+            <div className="reports-stats" aria-label="Email response summary">
+              <div className="reports-stat">
+                <span className="reports-stat-value">
+                  {filteredEmailStats.mentors_emailed}
+                </span>
+                <span className="reports-stat-label">Mentors emailed</span>
+              </div>
+              <div className="reports-stat">
+                <span className="reports-stat-value">
+                  {filteredEmailStats.mentors_responded}
+                </span>
+                <span className="reports-stat-label">Responded</span>
+              </div>
+              <div className="reports-stat">
+                <span className="reports-stat-value">
+                  {Math.max(
+                    0,
+                    filteredEmailStats.mentors_emailed -
+                      filteredEmailStats.mentors_responded
+                  )}
+                </span>
+                <span className="reports-stat-label">Awaiting response</span>
+              </div>
+              <div className="reports-stat">
+                <span className="reports-stat-value">
+                  {signupSummary.practicesWithMentors}
+                </span>
+                <span className="reports-stat-label">Practices with mentors</span>
+              </div>
             </div>
-            <div className="reports-stat">
-              <span className="reports-stat-value">
-                {filteredEmailStats.mentors_responded}
-              </span>
-              <span className="reports-stat-label">Responded</span>
-            </div>
-            <div className="reports-stat">
-              <span className="reports-stat-value">
-                {Math.max(
-                  0,
-                  filteredEmailStats.mentors_emailed -
-                    filteredEmailStats.mentors_responded
-                )}
-              </span>
-              <span className="reports-stat-label">Awaiting response</span>
-            </div>
-          </div>
+            {signupSummary.practicesByPace.length > 0 ? (
+              <p className="muted reports-pace-breakdown">
+                Practices with mentors by pace:{' '}
+                {formatPracticePaceCounts(signupSummary.practicesByPace)}
+              </p>
+            ) : null}
+          </>
         )}
 
         {loading && <p className="muted">Loading report…</p>}
@@ -388,6 +466,42 @@ export default function ReportsPage() {
 
         {!loading && !error && displayPractices.length === 0 && (
           <p className="muted">No practices match the current filters.</p>
+        )}
+
+        {!loading && !error && signupSummary.mentors.length > 0 && (
+          <section
+            className="reports-section reports-section-signups"
+            aria-labelledby="signup-heading"
+          >
+            <h2 id="signup-heading">Mentor signups</h2>
+            <p className="muted reports-intro">
+              Attending mentors and how many practices each has signed up for (soonest practices first in roster below).
+            </p>
+            <div className="report-table-wrap">
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Pace</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Practices signed up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {signupSummary.mentors.map((mentor) => (
+                    <tr key={mentor.mentor_id ?? mentor.email}>
+                      <td>{fullName(mentor.first_name, mentor.last_name)}</td>
+                      <td>{mentor.email || '—'}</td>
+                      <td>{mentor.pace || '—'}</td>
+                      <td>{mentor.mentor_type || '—'}</td>
+                      <td>{mentor.practice_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         {!loading && !error && displayPractices.length > 0 && (
@@ -410,7 +524,8 @@ export default function ReportsPage() {
                   </p>
                   {practice.mentor_pace_counts?.length > 0 ? (
                     <p className="report-pace-counts muted">
-                      Mentors by pace: {formatPaceCounts(practice.mentor_pace_counts)}
+                      Mentors at this practice by pace:{' '}
+                      {formatPaceCounts(practice.mentor_pace_counts)}
                     </p>
                   ) : null}
                 </header>
