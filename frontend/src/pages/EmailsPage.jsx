@@ -10,7 +10,7 @@ import {
   fetchSeasons,
   patchScheduledEmail,
 } from '../api'
-import { recipientSummaryText, sentEmailReplyStats } from '../emailHelpers.js'
+import { recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
