@@ -80,14 +80,22 @@ export function practiceLabelsForIds(ids, labelForId) {
   }))
 }
 
-/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number } }} row */
-export function sentEmailReplyStats(row) {
+/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number }, recipient_mode?: string, recipient_season?: number|null, specific_mentors?: number[] }} row @param {{ emailedCount?: number }} [options] */
+export function sentEmailReplyStats(row, options = {}) {
   if (!row.task_completed_at) return null
   const stats = row.reply_stats ?? {}
+  const emailedFromStats = stats.mentors_emailed ?? 0
+  const emailed = Math.max(emailedFromStats, options.emailedCount ?? 0)
+  const replied = stats.mentors_replied ?? stats.mentors_responded ?? 0
+  const pendingFromStats = stats.mentors_pending
+  const pending =
+    pendingFromStats != null && pendingFromStats > 0
+      ? pendingFromStats
+      : Math.max(0, emailed - replied)
   return {
-    emailed: stats.mentors_emailed ?? 0,
-    replied: stats.mentors_replied ?? stats.mentors_responded ?? 0,
+    emailed,
+    replied,
     selectedPractices: stats.mentors_selected_practices ?? 0,
-    pending: stats.mentors_pending ?? 0,
+    pending,
   }
 }

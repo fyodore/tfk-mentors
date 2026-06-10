@@ -8,7 +8,7 @@ import {
   fetchSeasons,
   sendScheduledEmailReplyReminders,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText, sentEmailReplyStats } from '../emailHelpers.js'
+import { practiceLabelsForIds, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -118,7 +118,10 @@ export default function EmailDetailPage() {
   }, [email, mentors])
 
   const isSent = Boolean(email?.task_completed_at)
-  const replyStats = email ? sentEmailReplyStats(email) : null
+  const emailedCount = email ? scheduledRecipientCount(email, mentors) : 0
+  const replyStats = email
+    ? sentEmailReplyStats(email, { emailedCount })
+    : null
 
   const handleSendReplyReminders = async () => {
     if (!email || !replyStats?.pending) return

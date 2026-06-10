@@ -617,7 +617,8 @@ export default function EmailsPage() {
   }
 
   function renderSentEmailCard(row) {
-    const replyStats = sentEmailReplyStats(row)
+    const emailedCount = scheduledRecipientCount(row, mentors)
+    const replyStats = sentEmailReplyStats(row, { emailedCount })
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">

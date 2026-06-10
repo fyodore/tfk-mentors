@@ -195,7 +195,9 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
 
     def get_reply_stats(self, obj):
         if obj.task_completed_at:
-            obj.ensure_mentor_tokens_for_stats()
+            email = ScheduledEmail.objects.get(pk=obj.pk)
+            email.ensure_mentor_tokens_for_stats()
+            return email.reply_stats()
         return obj.reply_stats()
 
     def validate(self, attrs):

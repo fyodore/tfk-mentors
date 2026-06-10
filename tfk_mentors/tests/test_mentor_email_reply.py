@@ -432,3 +432,92 @@ class ReplyReminderTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("sent", response.data["detail"].lower())
+
+
+class BulkEmailReplyStatsTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        session = self.client.session
+        session["site_authenticated"] = True
+        session.save()
+        self.season = Season.objects.create(year=2026)
+        now = timezone.now()
+        self.practices = [
+            Practice.objects.create(
+                date=now + timedelta(days=offset),
+                season=self.season,
+                full_practice=True,
+            )
+            for offset in (1, 2, 3, 4)
+        ]
+        self.mentors = [
+            Mentor.objects.create(
+                first_name=f"M{i}",
+                last_name=f"Test{i}",
+                email=f"mentor{i}@example.com",
+                cell_phone=f"555-01{i:02d}",
+                type=MentorTypes.PRACTICE,
+                pace="11-12",
+                split_practice=False,
+            )
+            for i in range(62)
+        ]
+        for mentor in self.mentors:
+            mentor.seasons.add(self.season)
+        self.scheduled = ScheduledEmail.objects.create(
+            scheduled_send_at=now - timedelta(days=1),
+            task_completed_at=now,
+            body_text="Hello {{ first_name }} {{ link }}",
+            recipient_season=self.season,
+        )
+        self.scheduled.practices.set(self.practices)
+        self.scheduled.sync_mentor_tokens()
+
+    def test_reply_stats_for_bulk_season_send(self):
+        replying = self.mentors[:14]
+        for mentor in replying:
+            token = ScheduledEmailMentorToken.objects.get(
+                scheduled_email=self.scheduled,
+                mentor=mentor,
+            )
+            for practice in self.practices:
+                ScheduledEmailMentorPracticeReply.objects.create(
+                    mentor_token=token,
+                    mentor=mentor,
+                    practice=practice,
+                    attendance=PracticeAttendanceReply.ATTENDING,
+                    pace="11-12",
+                )
+
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_emailed"], 62)
+        self.assertEqual(stats["mentors_replied"], 14)
+        self.assertEqual(stats["mentors_selected_practices"], 14)
+        self.assertEqual(stats["mentors_pending"], 48)
+
+        response = self.client.get("/api/scheduled-email/")
+        self.assertEqual(response.status_code, 200)
+        row = next(item for item in response.data if item["id"] == self.scheduled.id)
+        self.assertEqual(row["reply_stats"]["mentors_replied"], 14)
+
+    def test_reply_stats_counts_token_replies_without_recipient_season(self):
+        """Replies still count if recipient season was cleared after send."""
+        replying = self.mentors[:3]
+        for mentor in replying:
+            token = ScheduledEmailMentorToken.objects.get(
+                scheduled_email=self.scheduled,
+                mentor=mentor,
+            )
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=token,
+                mentor=mentor,
+                practice=self.practices[0],
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="11-12",
+            )
+        self.scheduled.recipient_season = None
+        self.scheduled.save(update_fields=["recipient_season"])
+
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 3)
+        self.assertGreaterEqual(stats["mentors_emailed"], 3)
