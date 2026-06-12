@@ -40,6 +40,11 @@ router.register(
 )
 
 urlpatterns = [
+    path(
+        "scheduled-email/<int:pk>/pending-mentors/",
+        ScheduledEmailViewSet.as_view({"get": "pending_mentors"}),
+        name="scheduled-email-pending-mentors",
+    ),
     path("config/", SiteConfigView.as_view(), name="site-config"),
     path("auth/session/", SiteAuthView.as_view(), name="site-auth"),
     path(

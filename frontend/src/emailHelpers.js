@@ -92,6 +92,59 @@ export function formatMentorName(mentor) {
   return mentor?.id != null ? `Mentor #${mentor.id}` : 'Unknown mentor'
 }
 
+/** @param {{ practices?: Array<{ id: number, scheduled_email_id?: number|null, pending_mentors?: Array<{ mentor_id?: number, id?: number, first_name?: string, last_name?: string, email?: string, mentor_type?: string, type?: string }> }> }} report @param {number} emailId @param {number[]} practiceIds */
+export function pendingMentorsFromNonResponseReport(report, emailId, practiceIds) {
+  const practiceIdSet = new Set(practiceIds)
+  const practices = (report?.practices ?? []).filter((practice) => {
+    if (!practiceIdSet.has(practice.id)) return false
+    if (
+      practice.scheduled_email_id != null &&
+      practice.scheduled_email_id !== emailId
+    ) {
+      return false
+    }
+    return true
+  })
+  if (practices.length === 0) return []
+
+  const pendingLists = practices.map((practice) => practice.pending_mentors ?? [])
+  const mentorKey = (row) => row.mentor_id ?? row.id
+
+  let sharedIds = new Set(
+    (pendingLists[0] ?? []).map(mentorKey).filter((id) => id != null)
+  )
+  for (let i = 1; i < pendingLists.length; i += 1) {
+    const practiceIdsSet = new Set(
+      (pendingLists[i] ?? []).map(mentorKey).filter((id) => id != null)
+    )
+    sharedIds = new Set([...sharedIds].filter((id) => practiceIdsSet.has(id)))
+  }
+
+  const rowById = new Map()
+  for (const list of pendingLists) {
+    for (const row of list) {
+      const id = mentorKey(row)
+      if (id != null && !rowById.has(id)) rowById.set(id, row)
+    }
+  }
+
+  return [...sharedIds]
+    .map((id) => rowById.get(id))
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
+        (a.first_name ?? '').localeCompare(b.first_name ?? '') ||
+        mentorKey(a) - mentorKey(b)
+    )
+    .map((row) => ({
+      id: mentorKey(row),
+      name: formatMentorName(row),
+      email: row.email ?? '',
+      type: row.type ?? row.mentor_type ?? '',
+    }))
+}
+
 /** @param {unknown} rows */
 export function normalizePendingMentorRows(rows) {
   if (!Array.isArray(rows)) return []
