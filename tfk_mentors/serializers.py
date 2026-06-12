@@ -221,38 +221,35 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             "pending_mentors",
         ]
 
+    def _sent_email_stats(self, obj):
+        """Fresh reply stats for a sent email (cached per serializer instance)."""
+        cache = self.context.setdefault("_scheduled_email_stats_cache", {})
+        if obj.pk in cache:
+            return cache[obj.pk]
+        email = ScheduledEmail.objects.get(pk=obj.pk)
+        stats = email.reply_stats()
+        cache[obj.pk] = stats
+        return stats
+
     def get_reply_stats(self, obj):
         if obj.task_completed_at:
-            email = ScheduledEmail.objects.get(pk=obj.pk)
-            email.ensure_mentor_tokens_for_stats()
-            return email.reply_stats()
+            return self._sent_email_stats(obj)
         return obj.reply_stats()
 
     def get_pending_mentors(self, obj):
         if not obj.task_completed_at:
             return []
-        email = ScheduledEmail.objects.get(pk=obj.pk)
-        email.ensure_mentor_tokens_for_stats()
-        mentors = list(email.pending_mentors())
-        if not mentors:
-            pending_ids = email.reply_stats().get("pending_mentor_ids") or []
-            if pending_ids:
-                mentors = list(
-                    Mentor.objects.filter(pk__in=pending_ids).order_by(
-                        "last_name", "first_name", "id"
-                    )
-                )
-        return [
-            {
-                "id": mentor.id,
-                "first_name": mentor.first_name,
-                "last_name": mentor.last_name,
-                "name": f"{mentor.first_name} {mentor.last_name}".strip(),
-                "email": mentor.email,
-                "type": mentor.type,
-            }
-            for mentor in mentors
-        ]
+        stats = self._sent_email_stats(obj)
+        pending = stats.get("pending_mentors")
+        if isinstance(pending, list):
+            return pending
+        pending_ids = stats.get("pending_mentor_ids") or []
+        if not pending_ids:
+            return []
+        mentors = Mentor.objects.filter(pk__in=pending_ids).order_by(
+            "last_name", "first_name", "id"
+        )
+        return ScheduledEmail.serialize_pending_mentor_rows(mentors)
 
     def validate(self, attrs):
         instance = self.instance

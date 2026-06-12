@@ -205,17 +205,14 @@ class MentorEmailReplySubmitTests(TestCase):
         self.assertEqual(response.data[0]["pace"], "11-12")
 
     def test_reply_stats_counts_full_responses(self):
-        self.assertEqual(
-            self.scheduled.reply_stats(),
-            {
-                "mentors_emailed": 1,
-                "mentors_replied": 0,
-                "mentors_selected_practices": 0,
-                "mentors_responded": 0,
-                "mentors_pending": 1,
-                "pending_mentor_ids": [self.mentor.id],
-            },
-        )
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_emailed"], 1)
+        self.assertEqual(stats["mentors_replied"], 0)
+        self.assertEqual(stats["mentors_pending"], 1)
+        self.assertEqual(stats["pending_mentor_ids"], [self.mentor.id])
+        self.assertEqual(len(stats["pending_mentors"]), 1)
+        self.assertEqual(stats["pending_mentors"][0]["email"], self.mentor.email)
+
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(
                 mentor_token=self.token_row,
@@ -224,17 +221,11 @@ class MentorEmailReplySubmitTests(TestCase):
                 attendance=PracticeAttendanceReply.ATTENDING,
                 pace="",
             )
-        self.assertEqual(
-            self.scheduled.reply_stats(),
-            {
-                "mentors_emailed": 1,
-                "mentors_replied": 1,
-                "mentors_selected_practices": 1,
-                "mentors_responded": 1,
-                "mentors_pending": 0,
-                "pending_mentor_ids": [],
-            },
-        )
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_pending"], 0)
+        self.assertEqual(stats["pending_mentor_ids"], [])
+        self.assertEqual(stats["pending_mentors"], [])
 
     def test_reply_stats_counts_partial_reply(self):
         ScheduledEmailMentorPracticeReply.objects.create(
@@ -258,17 +249,12 @@ class MentorEmailReplySubmitTests(TestCase):
                 attendance=PracticeAttendanceReply.NOT_ATTENDING,
                 pace="",
             )
-        self.assertEqual(
-            self.scheduled.reply_stats(),
-            {
-                "mentors_emailed": 1,
-                "mentors_replied": 1,
-                "mentors_selected_practices": 0,
-                "mentors_responded": 1,
-                "mentors_pending": 0,
-                "pending_mentor_ids": [],
-            },
-        )
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 0)
+        self.assertEqual(stats["mentors_pending"], 0)
+        self.assertEqual(stats["pending_mentor_ids"], [])
+        self.assertEqual(stats["pending_mentors"], [])
 
     def test_reply_stats_counts_mentor_assignments_without_reply_rows(self):
         self.scheduled.task_completed_at = timezone.now()
@@ -365,17 +351,13 @@ class MentorEmailReplySubmitTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         row = next(item for item in response.data if item["id"] == self.scheduled.id)
-        self.assertEqual(
-            row["reply_stats"],
-            {
-                "mentors_emailed": 1,
-                "mentors_replied": 1,
-                "mentors_selected_practices": 1,
-                "mentors_responded": 1,
-                "mentors_pending": 0,
-                "pending_mentor_ids": [],
-            },
-        )
+        stats = row["reply_stats"]
+        self.assertEqual(stats["mentors_emailed"], 1)
+        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_selected_practices"], 1)
+        self.assertEqual(stats["mentors_pending"], 0)
+        self.assertEqual(stats["pending_mentor_ids"], [])
+        self.assertEqual(stats["pending_mentors"], [])
 
 
 class ReplyReminderTests(TestCase):
@@ -449,10 +431,11 @@ class ReplyReminderTests(TestCase):
         self.assertEqual(pending_row["email"], self.pending_mentor.email)
         self.assertEqual(pending_row["first_name"], self.pending_mentor.first_name)
         self.assertEqual(pending_row["last_name"], self.pending_mentor.last_name)
-        self.assertEqual(
-            pending_row["name"],
-            f"{self.pending_mentor.first_name} {self.pending_mentor.last_name}",
-        )
+        self.assertEqual(pending_row["name"], f"{self.pending_mentor.first_name} {self.pending_mentor.last_name}")
+        stats = response.data["reply_stats"]
+        self.assertEqual(stats["mentors_pending"], 1)
+        self.assertEqual(len(stats["pending_mentors"]), 1)
+        self.assertEqual(stats["pending_mentors"][0]["email"], self.pending_mentor.email)
 
     def test_render_reminder_body_includes_availability_message_and_link(self):
         body = self.scheduled.render_reminder_body_for_mentor(self.pending_mentor)
@@ -616,6 +599,35 @@ class BulkEmailReplyStatsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         row = next(item for item in response.data if item["id"] == self.scheduled.id)
         self.assertEqual(row["reply_stats"]["mentors_replied"], 14)
+
+    def test_scheduled_email_detail_includes_pending_mentors_for_bulk_send(self):
+        replying = self.mentors[:60]
+        for mentor in replying:
+            token = ScheduledEmailMentorToken.objects.get(
+                scheduled_email=self.scheduled,
+                mentor=mentor,
+            )
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=token,
+                mentor=mentor,
+                practice=self.practices[0],
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="11-12",
+            )
+
+        response = self.client.get(f"/api/scheduled-email/{self.scheduled.id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["reply_stats"]["mentors_replied"], 60)
+        self.assertEqual(response.data["reply_stats"]["mentors_pending"], 2)
+        self.assertEqual(len(response.data["reply_stats"]["pending_mentor_ids"]), 2)
+        self.assertEqual(len(response.data["reply_stats"]["pending_mentors"]), 2)
+        self.assertEqual(len(response.data["pending_mentors"]), 2)
+        pending_emails = {row["email"] for row in response.data["pending_mentors"]}
+        expected_emails = {
+            self.mentors[60].email,
+            self.mentors[61].email,
+        }
+        self.assertEqual(pending_emails, expected_emails)
 
     def test_reply_stats_counts_token_replies_without_recipient_season(self):
         """Replies still count if recipient season was cleared after send."""

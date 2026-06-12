@@ -767,25 +767,50 @@ class ScheduledEmail(TimeStampedModel):
 
         return replied_ids
 
-    def pending_mentors(self):
+    def _pending_mentor_ids_for_stats(self, emailed_mentor_ids, practice_ids):
+        """Mentors still awaiting a reply for this send."""
+        replied_ids = self._mentors_replied_ids_for_stats(
+            emailed_mentor_ids, practice_ids
+        )
+        return emailed_mentor_ids - replied_ids
+
+    def query_pending_mentors(self):
         """Mentors who were emailed but have not yet replied."""
         self.ensure_mentor_tokens_for_stats()
         emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
         practice_ids = self._linked_practice_ids_for_stats(emailed_mentor_ids)
-        replied_ids = self._mentors_replied_ids_for_stats(
+        pending_ids = self._pending_mentor_ids_for_stats(
             emailed_mentor_ids, practice_ids
         )
-        pending_ids = emailed_mentor_ids - replied_ids
         return Mentor.objects.filter(pk__in=pending_ids).order_by(
             "last_name", "first_name", "id"
         )
 
+    def pending_mentors(self):
+        """Alias kept for callers expecting ``pending_mentors()``."""
+        return self.query_pending_mentors()
+
     def pending_mentors_for_reminder(self):
         """Pending mentors with an email address (can receive reminders)."""
-        return self.pending_mentors().exclude(email="")
+        return self.query_pending_mentors().exclude(email="")
+
+    @staticmethod
+    def serialize_pending_mentor_rows(mentors):
+        return [
+            {
+                "id": mentor.id,
+                "first_name": mentor.first_name,
+                "last_name": mentor.last_name,
+                "name": f"{mentor.first_name} {mentor.last_name}".strip(),
+                "email": mentor.email,
+                "type": mentor.type,
+            }
+            for mentor in mentors
+        ]
 
     def reply_stats(self):
         """Mentors emailed vs reply-page submissions and practice selections."""
+        self.ensure_mentor_tokens_for_stats()
         attending_values = {
             PracticeAttendanceReply.ATTENDING,
             PracticeAttendanceReply.FIRST_HALF,
@@ -799,7 +824,9 @@ class ScheduledEmail(TimeStampedModel):
             emailed_mentor_ids, practice_ids
         )
         mentors_replied = len(mentors_replied_ids)
-        pending_ids = emailed_mentor_ids - mentors_replied_ids
+        pending_ids = self._pending_mentor_ids_for_stats(
+            emailed_mentor_ids, practice_ids
+        )
 
         selected_ids = set(
             ScheduledEmailMentorPracticeReply.objects.filter(
@@ -823,6 +850,12 @@ class ScheduledEmail(TimeStampedModel):
                 ).values_list("mentor_id", flat=True)
             )
 
+        pending_mentors = list(
+            Mentor.objects.filter(pk__in=pending_ids).order_by(
+                "last_name", "first_name", "id"
+            )
+        )
+
         return {
             "mentors_emailed": mentors_emailed,
             "mentors_replied": mentors_replied,
@@ -830,6 +863,7 @@ class ScheduledEmail(TimeStampedModel):
             "mentors_responded": mentors_replied,
             "mentors_pending": max(0, len(pending_ids)),
             "pending_mentor_ids": sorted(pending_ids),
+            "pending_mentors": self.serialize_pending_mentor_rows(pending_mentors),
         }
 
     def reply_absolute_url_for_mentor(self, mentor):

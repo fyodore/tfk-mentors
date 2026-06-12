@@ -92,8 +92,18 @@ export function formatMentorName(mentor) {
   return mentor?.id != null ? `Mentor #${mentor.id}` : 'Unknown mentor'
 }
 
-/** @param {{ pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }>, reply_stats?: { pending_mentor_ids?: number[] } }} email @param {Array<{ id: number, first_name?: string, last_name?: string, email?: string, type?: string }>} mentors */
+/** @param {{ pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }>, reply_stats?: { pending_mentor_ids?: number[], pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }> } }} email @param {Array<{ id: number, first_name?: string, last_name?: string, email?: string, type?: string }>} mentors */
 export function pendingMentorsForEmail(email, mentors) {
+  const fromStats = email?.reply_stats?.pending_mentors
+  if (Array.isArray(fromStats) && fromStats.length > 0) {
+    return fromStats.map((m) => ({
+      id: m.id,
+      name: formatMentorName(m),
+      email: m.email ?? '',
+      type: m.type ?? '',
+    }))
+  }
+
   const fromApi = email?.pending_mentors
   if (Array.isArray(fromApi) && fromApi.length > 0) {
     return fromApi.map((m) => ({
