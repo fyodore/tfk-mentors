@@ -7,6 +7,7 @@ export function Modal({
   footer,
   onClose,
   closeDisabled = false,
+  panelClassName = '',
 }) {
   if (!open) return null
 
@@ -17,7 +18,7 @@ export function Modal({
         role="dialog"
         aria-modal
         aria-labelledby="modal-heading"
-        className="modal-panel"
+        className={`modal-panel${panelClassName ? ` ${panelClassName}` : ''}`}
       >
         <div className="modal-head">
           <h3 id="modal-heading">{title}</h3>

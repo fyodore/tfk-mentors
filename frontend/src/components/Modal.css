@@ -32,6 +32,19 @@
   text-align: left;
 }
 
+.modal-panel-wide {
+  width: min(100%, 40rem);
+}
+
+.email-mentor-multiselect {
+  width: 100%;
+  min-width: 0;
+}
+
+.email-mentor-multiselect option {
+  white-space: normal;
+}
+
 .modal-head {
   display: flex;
   align-items: center;

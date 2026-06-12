@@ -495,7 +495,7 @@ export default function EmailsPage() {
           </label>
           <select
             id={`${formId}-mentors`}
-            className="field-input field-select"
+            className="field-input field-select email-mentor-multiselect"
             value={form.specific_mentors}
             onChange={(e) => {
               setForm((f) => ({
@@ -510,7 +510,7 @@ export default function EmailsPage() {
           >
             {mentorsSorted.map((m) => (
               <option key={m.id} value={String(m.id)}>
-                {m.last_name}, {m.first_name} · {m.email}
+                {m.last_name}, {m.first_name} · {m.email} · {m.type}
               </option>
             ))}
           </select>
@@ -798,6 +798,7 @@ export default function EmailsPage() {
       <Modal
         open={modal === 'create'}
         title="Schedule email"
+        panelClassName="modal-panel-wide"
         onClose={closeModal}
         closeDisabled={busy}
         footer={
@@ -838,6 +839,7 @@ export default function EmailsPage() {
       <Modal
         open={modal === 'edit'}
         title="Edit scheduled email"
+        panelClassName="modal-panel-wide"
         onClose={closeModal}
         closeDisabled={busy}
         footer={
