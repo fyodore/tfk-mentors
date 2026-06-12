@@ -149,7 +149,12 @@ class Mentor(TimeStampedModel):
     cell_phone = models.CharField(max_length=20)
     type = models.CharField(choices=MentorTypes, max_length=11)
     seasons = models.ManyToManyField(Season)
-    pace = models.CharField(choices=PaceTypes, max_length=11)
+    pace = models.CharField(
+        choices=PaceTypes,
+        max_length=11,
+        blank=True,
+        default="",
+    )
     split_practice = models.BooleanField(default=False)
     practices = models.ManyToManyField(
         "Practice",
@@ -196,6 +201,13 @@ class Mentor(TimeStampedModel):
 
     def set_pace(self, value):
         self.pace = value
+
+    def clean(self):
+        super().clean()
+        if self.type != MentorTypes.REMOTE and not (self.pace or "").strip():
+            raise ValidationError(
+                {"pace": "Pace is required for At Practice mentors."}
+            )
 
     def save(self, *args, **kwargs):
         if self.pace:
@@ -755,7 +767,7 @@ class ScheduledEmail(TimeStampedModel):
 
         return replied_ids
 
-    def pending_mentors_for_reminder(self):
+    def pending_mentors(self):
         """Mentors who were emailed but have not yet replied."""
         self.ensure_mentor_tokens_for_stats()
         emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
@@ -764,11 +776,13 @@ class ScheduledEmail(TimeStampedModel):
             emailed_mentor_ids, practice_ids
         )
         pending_ids = emailed_mentor_ids - replied_ids
-        return (
-            Mentor.objects.filter(pk__in=pending_ids)
-            .exclude(email="")
-            .order_by("last_name", "first_name", "id")
+        return Mentor.objects.filter(pk__in=pending_ids).order_by(
+            "last_name", "first_name", "id"
         )
+
+    def pending_mentors_for_reminder(self):
+        """Pending mentors with an email address (can receive reminders)."""
+        return self.pending_mentors().exclude(email="")
 
     def reply_stats(self):
         """Mentors emailed vs reply-page submissions and practice selections."""

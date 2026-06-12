@@ -613,6 +613,16 @@
   font-size: 1rem;
 }
 
+.email-pending-mentors {
+  margin-top: 0.85rem;
+}
+
+.email-pending-mentors-heading {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .email-detail-actions {
   margin-top: 0.85rem;
 }

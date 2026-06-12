@@ -259,11 +259,18 @@ class MentorViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
+            mentor_type = (row.get("type") or "").strip()
+            if mentor_type and mentor_type not in {
+                c.value for c in MentorTypes
+            }:
+                errors.append(f"row {row_num}: invalid type '{mentor_type}'")
+                continue
+
             defaults = {
                 "first_name": (row.get("first_name") or "").strip(),
                 "last_name": (row.get("last_name") or "").strip(),
                 "cell_phone": (row.get("cell_phone") or row.get("cell") or "").strip(),
-                "type": (row.get("type") or "").strip(),
+                "type": mentor_type,
                 "pace": pace,
                 "split_practice": parse_bool(row.get("split_practice") or ""),
             }
@@ -271,12 +278,17 @@ class MentorViewSet(viewsets.ModelViewSet):
             mentor = Mentor.objects.filter(email=email).first()
             if mentor is None:
                 mentor = Mentor(email=email, **defaults)
-                required_new = ["first_name", "last_name", "cell_phone", "type", "pace"]
+                required_new = ["first_name", "last_name", "cell_phone", "type"]
                 missing_new = [f for f in required_new if not getattr(mentor, f)]
                 if missing_new:
                     errors.append(
                         f"row {row_num}: missing required fields for new mentor: "
                         + ", ".join(missing_new)
+                    )
+                    continue
+                if defaults["type"] != MentorTypes.REMOTE and not pace:
+                    errors.append(
+                        f"row {row_num}: pace is required for At Practice mentors"
                     )
                     continue
                 mentor.save()
@@ -286,9 +298,26 @@ class MentorViewSet(viewsets.ModelViewSet):
                 changed = False
                 for field in ["first_name", "last_name", "cell_phone", "type", "pace"]:
                     value = defaults[field]
+                    if field == "pace":
+                        if defaults["type"] == MentorTypes.REMOTE and not value:
+                            if mentor.pace:
+                                mentor.pace = ""
+                                changed = True
+                            continue
+                        if defaults["type"] != MentorTypes.REMOTE and not value:
+                            continue
                     if value and getattr(mentor, field) != value:
                         setattr(mentor, field, value)
                         changed = True
+                if (
+                    defaults["type"] != MentorTypes.REMOTE
+                    and not mentor.pace
+                    and not defaults["pace"]
+                ):
+                    errors.append(
+                        f"row {row_num}: pace is required for At Practice mentors"
+                    )
+                    continue
                 if "split_practice" in row and mentor.split_practice != defaults["split_practice"]:
                     mentor.split_practice = defaults["split_practice"]
                     changed = True

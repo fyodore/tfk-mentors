@@ -5,6 +5,7 @@ from .models import (
     CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
+    MentorTypes,
     PaceTypes,
     Practice,
     Requests,
@@ -66,11 +67,30 @@ class MentorSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_pace(self, value):
+        if not (value or "").strip():
+            return ""
         normalized = normalize_pace(value)
         valid = {choice.value for choice in PaceTypes}
         if normalized not in valid:
             raise serializers.ValidationError(f'"{value}" is not a valid choice.')
         return normalized
+
+    def validate(self, attrs):
+        mentor_type = attrs.get(
+            "type",
+            getattr(self.instance, "type", None) if self.instance else None,
+        )
+        pace = attrs.get(
+            "pace",
+            getattr(self.instance, "pace", "") if self.instance else "",
+        )
+        if mentor_type == MentorTypes.REMOTE:
+            attrs["pace"] = pace or ""
+        elif not (pace or "").strip():
+            raise serializers.ValidationError(
+                {"pace": "Pace is required for At Practice mentors."}
+            )
+        return attrs
 
 
 def practice_mentor_reply_payload(reply):
@@ -175,6 +195,7 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
         many=True, queryset=Mentor.objects.all(), required=False
     )
     reply_stats = serializers.SerializerMethodField()
+    pending_mentors = serializers.SerializerMethodField()
 
     class Meta:
         model = ScheduledEmail
@@ -188,10 +209,17 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             "recipient_season",
             "specific_mentors",
             "reply_stats",
+            "pending_mentors",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "reply_stats"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+            "reply_stats",
+            "pending_mentors",
+        ]
 
     def get_reply_stats(self, obj):
         if obj.task_completed_at:
@@ -199,6 +227,21 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             email.ensure_mentor_tokens_for_stats()
             return email.reply_stats()
         return obj.reply_stats()
+
+    def get_pending_mentors(self, obj):
+        if not obj.task_completed_at:
+            return []
+        email = ScheduledEmail.objects.get(pk=obj.pk)
+        return [
+            {
+                "id": mentor.id,
+                "first_name": mentor.first_name,
+                "last_name": mentor.last_name,
+                "email": mentor.email,
+                "type": mentor.type,
+            }
+            for mentor in email.pending_mentors()
+        ]
 
     def validate(self, attrs):
         instance = self.instance

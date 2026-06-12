@@ -8,8 +8,10 @@ import { formatPracticeWhen } from '../datetime.js'
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 const ATTENDING = new Set(['attending', 'first_half', 'second_half'])
-const SUBMIT_SUCCESS_MESSAGE =
+const SUBMIT_SUCCESS_AT_PRACTICE =
   'Thank you for taking the time to indicate which practices you can attend!'
+const SUBMIT_SUCCESS_REMOTE =
+  'Thank you for taking the time to indicate you can read and selecting any practices you can attend!'
 const PARTIAL_MONTH_NOTE =
   'This email may not include a full month of practices. Please remember what ' +
   'you selected when you receive the next reply request.'
@@ -248,7 +250,7 @@ export default function MentorReplyPage() {
         )}
         {submitted ? (
           <p className="mentor-reply-success" role="status">
-            {SUBMIT_SUCCESS_MESSAGE}
+            {isRemote ? SUBMIT_SUCCESS_REMOTE : SUBMIT_SUCCESS_AT_PRACTICE}
           </p>
         ) : null}
 

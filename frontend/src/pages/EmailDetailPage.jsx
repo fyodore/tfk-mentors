@@ -205,18 +205,37 @@ export default function EmailDetailPage() {
                 </div>
               ) : null}
               {isSent && replyStats && replyStats.pending > 0 ? (
-                <div className="email-detail-actions">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={reminderBusy}
-                    onClick={handleSendReplyReminders}
-                  >
-                    {reminderBusy
-                      ? 'Sending reminders…'
-                      : `Send reminder to ${replyStats.pending} awaiting`}
-                  </button>
-                </div>
+                <>
+                  {Array.isArray(email.pending_mentors) &&
+                  email.pending_mentors.length > 0 ? (
+                    <div className="email-pending-mentors">
+                      <h4 className="email-pending-mentors-heading">
+                        Mentors awaiting response ({email.pending_mentors.length})
+                      </h4>
+                      <ul className="email-detail-list">
+                        {email.pending_mentors.map((m) => (
+                          <li key={m.id}>
+                            {m.first_name} {m.last_name}
+                            {m.email ? ` · ${m.email}` : ''}
+                            {m.type ? ` · ${m.type}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div className="email-detail-actions">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={reminderBusy}
+                      onClick={handleSendReplyReminders}
+                    >
+                      {reminderBusy
+                        ? 'Sending reminders…'
+                        : `Send reminder to ${replyStats.pending} awaiting`}
+                    </button>
+                  </div>
+                </>
               ) : null}
               {reminderMessage ? (
                 <p className="email-detail-notice">{reminderMessage}</p>

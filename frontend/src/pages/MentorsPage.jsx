@@ -12,6 +12,7 @@ import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 
 const MENTOR_TYPES = ['At Practice', 'Remote']
+const REMOTE_TYPE = 'Remote'
 const PACE_TYPES = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
 
 function sortSeasonsByYearDesc(list) {
@@ -177,7 +178,9 @@ export default function MentorsPage() {
       email: mentor.email ?? '',
       cell_phone: mentor.cell_phone ?? '',
       type: mentor.type ?? 'At Practice',
-      pace: mentor.pace ?? '8-9',
+      pace:
+        mentor.pace ??
+        (mentor.type === REMOTE_TYPE ? '' : '8-9'),
       split_practice: Boolean(mentor.split_practice),
       seasons: Array.isArray(mentor.seasons)
         ? mentor.seasons.map((s) => String(s))
@@ -197,6 +200,10 @@ export default function MentorsPage() {
     if (!form.last_name.trim()) return { error: 'Last name is required.' }
     if (!form.email.trim()) return { error: 'Email is required.' }
     if (!form.cell_phone.trim()) return { error: 'Cell phone is required.' }
+    const isRemote = form.type === REMOTE_TYPE
+    if (!isRemote && !form.pace) {
+      return { error: 'Pace is required for At Practice mentors.' }
+    }
     const seasons = form.seasons
       .map((s) => Number.parseInt(String(s), 10))
       .filter((s) => !Number.isNaN(s))
@@ -207,7 +214,7 @@ export default function MentorsPage() {
         email: form.email.trim(),
         cell_phone: form.cell_phone.trim(),
         type: form.type,
-        pace: form.pace,
+        pace: isRemote ? form.pace || '' : form.pace,
         split_practice: form.split_practice,
         seasons,
       },
@@ -374,7 +381,17 @@ export default function MentorsPage() {
         id={`${formId}-type`}
         className="field-input field-select"
         value={form.type}
-        onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+        onChange={(e) => {
+          const nextType = e.target.value
+          setForm((f) => ({
+            ...f,
+            type: nextType,
+            pace:
+              nextType === REMOTE_TYPE && f.type !== REMOTE_TYPE
+                ? ''
+                : f.pace || (nextType === REMOTE_TYPE ? '' : '8-9'),
+          }))
+        }}
         required
       >
         {MENTOR_TYPES.map((t) => (
@@ -382,14 +399,19 @@ export default function MentorsPage() {
         ))}
       </select>
 
-      <label className="field-label" htmlFor={`${formId}-pace`}>Pace group</label>
+      <label className="field-label" htmlFor={`${formId}-pace`}>
+        Pace group{form.type === REMOTE_TYPE ? ' (optional)' : ''}
+      </label>
       <select
         id={`${formId}-pace`}
         className="field-input field-select"
         value={form.pace}
         onChange={(e) => setForm((f) => ({ ...f, pace: e.target.value }))}
-        required
+        required={form.type !== REMOTE_TYPE}
       >
+        {form.type === REMOTE_TYPE ? (
+          <option value="">None</option>
+        ) : null}
         {PACE_TYPES.map((p) => (
           <option key={p} value={p}>{p}</option>
         ))}
@@ -499,7 +521,8 @@ export default function MentorsPage() {
                   <span className="practice-date">{m.first_name} {m.last_name}</span>
                   <span className="practice-race muted">{m.email}</span>
                   <span className="muted">
-                    {m.cell_phone} · {m.type} · Pace {m.pace}
+                    {m.cell_phone} · {m.type}
+                    {m.pace ? ` · Pace ${m.pace}` : ''}
                     {m.split_practice ? ' · Split practice' : ''} · Seasons{' '}
                     {Array.isArray(m.seasons) && m.seasons.length > 0
                       ? m.seasons.map((id) => seasonYearById.get(id) ?? id).join(', ')
@@ -564,7 +587,8 @@ export default function MentorsPage() {
             CSV format example columns:
             <code> email</code>, <code>season_year</code> (or <code>season</code>/<code>year</code>),
             <code> first_name</code>, <code>last_name</code>, <code>cell_phone</code> (or <code>cell</code>),
-            <code> type</code>, <code>pace</code>, <code>split_practice</code>.
+            <code> type</code>, <code>pace</code> (required for At Practice; optional
+            for Remote), <code>split_practice</code>.
           </p>
           {importMessage ? (
             <p className="muted" role="status">
