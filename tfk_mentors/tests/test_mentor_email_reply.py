@@ -256,7 +256,7 @@ class MentorEmailReplySubmitTests(TestCase):
         self.assertEqual(stats["pending_mentor_ids"], [])
         self.assertEqual(stats["pending_mentors"], [])
 
-    def test_reply_stats_counts_mentor_assignments_without_reply_rows(self):
+    def test_reply_stats_ignores_mentor_assignments_without_reply_rows(self):
         self.scheduled.task_completed_at = timezone.now()
         self.scheduled.save(update_fields=["task_completed_at"])
         MentorPracticeAssignment.objects.create(
@@ -266,10 +266,11 @@ class MentorEmailReplySubmitTests(TestCase):
         )
 
         stats = self.scheduled.reply_stats()
-        self.assertEqual(stats["mentors_replied"], 1)
-        self.assertEqual(stats["mentors_selected_practices"], 1)
+        self.assertEqual(stats["mentors_replied"], 0)
+        self.assertEqual(stats["mentors_selected_practices"], 0)
+        self.assertEqual(stats["mentors_pending"], 1)
 
-    def test_reply_stats_finds_practices_without_email_m2m_link(self):
+    def test_reply_stats_ignores_assignments_without_email_m2m_link(self):
         self.scheduled.task_completed_at = timezone.now()
         self.scheduled.practices.clear()
         self.scheduled.save(update_fields=["task_completed_at"])
@@ -280,10 +281,11 @@ class MentorEmailReplySubmitTests(TestCase):
         )
 
         stats = self.scheduled.reply_stats()
-        self.assertEqual(stats["mentors_replied"], 1)
+        self.assertEqual(stats["mentors_replied"], 0)
+        self.assertEqual(stats["mentors_pending"], 1)
 
-    def test_reply_stats_counts_replies_on_linked_practices_from_other_email_token(self):
-        """Replies saved under a newer email's token still count for the earlier send."""
+    def test_reply_stats_scoped_to_each_sent_email(self):
+        """Replies under a newer email's token do not count toward an earlier send."""
         older_sent = self.scheduled
         older_sent.task_completed_at = timezone.now() - timedelta(days=7)
         older_sent.save(update_fields=["task_completed_at"])
@@ -308,10 +310,90 @@ class MentorEmailReplySubmitTests(TestCase):
                 pace="11-12",
             )
 
-        stats = older_sent.reply_stats()
-        self.assertEqual(stats["mentors_replied"], 1)
-        self.assertEqual(stats["mentors_selected_practices"], 1)
-        self.assertEqual(stats["mentors_pending"], 0)
+        older_stats = older_sent.reply_stats()
+        self.assertEqual(older_stats["mentors_replied"], 0)
+        self.assertEqual(older_stats["mentors_selected_practices"], 0)
+        self.assertEqual(older_stats["mentors_pending"], 1)
+
+        newer_send.task_completed_at = timezone.now()
+        newer_send.save(update_fields=["task_completed_at"])
+        newer_stats = newer_send.reply_stats()
+        self.assertEqual(newer_stats["mentors_replied"], 1)
+        self.assertEqual(newer_stats["mentors_selected_practices"], 1)
+        self.assertEqual(newer_stats["mentors_pending"], 0)
+
+    def test_pending_mentor_lists_differ_per_sent_email(self):
+        """Each sent email exposes its own awaiting mentors on list and detail APIs."""
+        mentor_b = Mentor.objects.create(
+            first_name="Quinn",
+            last_name="Pending",
+            email="quinn@example.com",
+            cell_phone="555-0101",
+            type=MentorTypes.PRACTICE,
+            pace="10-11",
+            split_practice=False,
+        )
+        mentor_b.seasons.add(self.season)
+
+        first_send = self.scheduled
+        first_send.task_completed_at = timezone.now() - timedelta(days=14)
+        first_send.save(update_fields=["task_completed_at"])
+        for practice in self.practices:
+            ScheduledEmailMentorPracticeReply.objects.create(
+                mentor_token=self.token_row,
+                mentor=self.mentor,
+                practice=practice,
+                attendance=PracticeAttendanceReply.ATTENDING,
+                pace="11-12",
+            )
+
+        second_send = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() - timedelta(days=7),
+            task_completed_at=timezone.now() - timedelta(days=7),
+            body_text="Follow up",
+            recipient_season=self.season,
+        )
+        second_send.practices.set(self.practices)
+        second_send.sync_mentor_tokens()
+
+        first_stats = first_send.reply_stats()
+        second_stats = second_send.reply_stats()
+        self.assertEqual(first_stats["mentors_pending"], 0)
+        self.assertEqual(first_stats["pending_mentors"], [])
+        self.assertEqual(second_stats["mentors_pending"], 2)
+        second_pending_emails = {
+            row["email"] for row in second_stats["pending_mentors"]
+        }
+        self.assertEqual(
+            second_pending_emails,
+            {self.mentor.email, mentor_b.email},
+        )
+
+        response = self.client.get("/api/scheduled-email/")
+        self.assertEqual(response.status_code, 200)
+        rows_by_id = {row["id"]: row for row in response.data}
+        first_row = rows_by_id[first_send.id]
+        second_row = rows_by_id[second_send.id]
+        self.assertEqual(first_row["reply_stats"]["mentors_pending"], 0)
+        self.assertEqual(first_row["pending_mentors"], [])
+        self.assertEqual(second_row["reply_stats"]["mentors_pending"], 2)
+        self.assertEqual(
+            {row["email"] for row in second_row["pending_mentors"]},
+            {self.mentor.email, mentor_b.email},
+        )
+        self.assertEqual(
+            {row["email"] for row in second_row["reply_stats"]["pending_mentors"]},
+            {self.mentor.email, mentor_b.email},
+        )
+
+        pending_response = self.client.get(
+            f"/api/scheduled-email/{second_send.id}/pending-mentors/"
+        )
+        self.assertEqual(pending_response.status_code, 200)
+        self.assertEqual(
+            {row["email"] for row in pending_response.data["pending_mentors"]},
+            {self.mentor.email, mentor_b.email},
+        )
 
     def test_reply_stats_ignores_stale_prefetched_tokens(self):
         for practice in self.practices:

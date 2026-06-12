@@ -6,12 +6,13 @@ import {
   deleteScheduledEmail,
   fetchMentors,
   fetchPractices,
+  fetchScheduledEmailPendingMentors,
   fetchScheduledEmails,
   fetchSeasons,
   patchScheduledEmail,
   sendScheduledEmailNow,
 } from '../api'
-import { pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import { normalizePendingMentorRows, pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
@@ -72,6 +73,7 @@ export default function EmailsPage() {
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sendingEmailId, setSendingEmailId] = useState(null)
+  const [pendingMentorsByEmailId, setPendingMentorsByEmailId] = useState({})
 
   const sortedSeasons = useMemo(
     () =>
@@ -135,6 +137,47 @@ export default function EmailsPage() {
       })
   }, [emails])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadMissingPendingMentors() {
+      const rowsNeedingFetch = sentEmails.filter((row) => {
+        const stats = sentEmailReplyStats(row)
+        if (!stats || stats.pending <= 0) return false
+        return pendingMentorsForEmail(row, mentors).length === 0
+      })
+
+      if (rowsNeedingFetch.length === 0) return
+
+      const results = await Promise.allSettled(
+        rowsNeedingFetch.map(async (row) => {
+          const data = await fetchScheduledEmailPendingMentors(row.id)
+          return {
+            id: row.id,
+            mentors: normalizePendingMentorRows(data?.pending_mentors),
+          }
+        })
+      )
+
+      if (cancelled) return
+
+      setPendingMentorsByEmailId((prev) => {
+        const next = { ...prev }
+        for (const result of results) {
+          if (result.status !== 'fulfilled') continue
+          next[result.value.id] = result.value.mentors
+        }
+        return next
+      })
+    }
+
+    loadMissingPendingMentors()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sentEmails, mentors])
+
   async function reloadAll() {
     const [eList, pList, sList, mList] = await Promise.all([
       fetchScheduledEmails(),
@@ -146,6 +189,7 @@ export default function EmailsPage() {
     setPractices(pList)
     setSeasons(sList)
     setMentors(mList)
+    setPendingMentorsByEmailId({})
   }
 
   useEffect(() => {
@@ -656,9 +700,12 @@ export default function EmailsPage() {
   }
 
   function renderSentEmailCard(row) {
-    const emailedCount = scheduledRecipientCount(row, mentors)
-    const replyStats = sentEmailReplyStats(row, { emailedCount })
-    const pendingMentors = pendingMentorsForEmail(row, mentors)
+    const replyStats = sentEmailReplyStats(row)
+    const pendingMentorsFromRow = pendingMentorsForEmail(row, mentors)
+    const pendingMentors =
+      pendingMentorsFromRow.length > 0
+        ? pendingMentorsFromRow
+        : (pendingMentorsByEmailId[row.id] ?? [])
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">

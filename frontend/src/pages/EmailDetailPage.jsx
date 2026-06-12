@@ -7,11 +7,10 @@ import {
   fetchScheduledEmail,
   fetchScheduledEmailPendingMentors,
   fetchSeasons,
-  fetchMentorNonResponseReport,
   previewScheduledEmailReplyReminders,
   sendScheduledEmailReplyReminders,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, pendingMentorsFromNonResponseReport, normalizePendingMentorRows, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, normalizePendingMentorRows, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -124,10 +123,7 @@ export default function EmailDetailPage() {
   }, [email, mentors])
 
   const isSent = Boolean(email?.task_completed_at)
-  const emailedCount = email ? scheduledRecipientCount(email, mentors) : 0
-  const replyStats = email
-    ? sentEmailReplyStats(email, { emailedCount })
-    : null
+  const replyStats = email ? sentEmailReplyStats(email) : null
   const pendingMentorsFromEmail = useMemo(
     () => (email ? pendingMentorsForEmail(email, mentors) : []),
     [email, mentors]
@@ -168,25 +164,6 @@ export default function EmailDetailPage() {
         const preview = await previewScheduledEmailReplyReminders(email.id)
         if (cancelled) return
         const rows = normalizePendingMentorRows(preview?.pending_mentors)
-        if (rows.length > 0) {
-          setPendingMentorsLoaded(rows)
-          return
-        }
-      } catch {
-        if (cancelled) return
-      }
-
-      try {
-        const seasonId = email.recipient_season
-        const report = await fetchMentorNonResponseReport(
-          seasonId != null ? { season: seasonId } : {}
-        )
-        if (cancelled) return
-        const rows = pendingMentorsFromNonResponseReport(
-          report,
-          email.id,
-          email.practices ?? []
-        )
         if (rows.length > 0) {
           setPendingMentorsLoaded(rows)
           return

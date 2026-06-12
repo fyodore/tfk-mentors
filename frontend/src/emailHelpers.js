@@ -25,7 +25,7 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const scheduledCount = scheduledRecipientCount(row, mentors)
   const emailedCount =
     isSent && stats?.mentors_emailed != null
-      ? Math.max(stats.mentors_emailed, scheduledCount)
+      ? stats.mentors_emailed
       : scheduledCount
   const countLabel = isSent ? 'emailed' : 'scheduled'
   const count = isSent ? emailedCount : scheduledCount
@@ -38,7 +38,10 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const pending =
     isSent && stats
       ? (stats.mentors_pending ??
-        Math.max(0, emailedCount - (replied ?? 0)))
+        (stats.pending_mentor_ids?.length ?? null) ??
+        (stats.mentors_emailed != null
+          ? Math.max(0, stats.mentors_emailed - (replied ?? 0))
+          : null))
       : null
 
   function responseSummarySuffix() {
@@ -160,53 +163,57 @@ export function normalizePendingMentorRows(rows) {
 
 /** @param {{ pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }>, reply_stats?: { pending_mentor_ids?: number[], pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }> } }} email @param {Array<{ id: number, first_name?: string, last_name?: string, email?: string, type?: string }>} mentors */
 export function pendingMentorsForEmail(email, mentors) {
-  const fromStats = email?.reply_stats?.pending_mentors
-  if (Array.isArray(fromStats) && fromStats.length > 0) {
-    return normalizePendingMentorRows(fromStats)
+  const stats = email?.reply_stats
+
+  if (Array.isArray(stats?.pending_mentors)) {
+    return normalizePendingMentorRows(stats.pending_mentors)
   }
 
-  const fromApi = email?.pending_mentors
-  if (Array.isArray(fromApi) && fromApi.length > 0) {
-    return normalizePendingMentorRows(fromApi)
+  if (Array.isArray(email?.pending_mentors)) {
+    return normalizePendingMentorRows(email.pending_mentors)
   }
 
-  const pendingIds = email?.reply_stats?.pending_mentor_ids
-  if (!Array.isArray(pendingIds) || pendingIds.length === 0 || !mentors?.length) {
-    return []
+  const pendingIds = stats?.pending_mentor_ids
+  if (Array.isArray(pendingIds)) {
+    if (pendingIds.length === 0 || !mentors?.length) {
+      return []
+    }
+
+    const byId = new Map(mentors.map((m) => [m.id, m]))
+    return pendingIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
+          (a.first_name ?? '').localeCompare(b.first_name ?? '') ||
+          a.id - b.id
+      )
+      .map((m) => ({
+        id: m.id,
+        name: formatMentorName(m),
+        email: m.email ?? '',
+        type: m.type ?? '',
+      }))
   }
 
-  const byId = new Map(mentors.map((m) => [m.id, m]))
-  return pendingIds
-    .map((id) => byId.get(id))
-    .filter(Boolean)
-    .sort(
-      (a, b) =>
-        (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
-        (a.first_name ?? '').localeCompare(b.first_name ?? '') ||
-        a.id - b.id
-    )
-    .map((m) => ({
-      id: m.id,
-      name: formatMentorName(m),
-      email: m.email ?? '',
-      type: m.type ?? '',
-    }))
+  return []
 }
 
-/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] }, recipient_mode?: string, recipient_season?: number|null, specific_mentors?: number[] }} row @param {{ emailedCount?: number }} [options] */
-export function sentEmailReplyStats(row, options = {}) {
+/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] } }} row */
+export function sentEmailReplyStats(row) {
   if (!row.task_completed_at) return null
-  const stats = row.reply_stats ?? {}
-  const emailedFromStats = stats.mentors_emailed ?? 0
-  const emailed = Math.max(emailedFromStats, options.emailedCount ?? 0)
+  const stats = row.reply_stats
+  if (!stats) return null
+  const emailed = stats.mentors_emailed ?? 0
   const replied = stats.mentors_replied ?? stats.mentors_responded ?? 0
   const pendingIds = stats.pending_mentor_ids
   const pendingFromIds = Array.isArray(pendingIds) ? pendingIds.length : null
   const pendingFromStats = stats.mentors_pending
   const pending =
-    pendingFromIds != null && pendingFromIds > 0
+    pendingFromIds != null
       ? pendingFromIds
-      : pendingFromStats != null && pendingFromStats > 0
+      : pendingFromStats != null
         ? pendingFromStats
         : Math.max(0, emailed - replied)
   return {

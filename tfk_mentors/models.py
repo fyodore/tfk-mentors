@@ -667,13 +667,16 @@ class ScheduledEmail(TimeStampedModel):
 
     def ensure_mentor_tokens_for_stats(self):
         """Create missing reply tokens without removing existing ones (safe for stats reads)."""
-        mentor_ids = set(self.get_target_mentors().values_list("pk", flat=True))
-        mentor_ids.update(self.mentor_tokens.values_list("mentor_id", flat=True))
+        mentor_ids = set(self.mentor_tokens.values_list("mentor_id", flat=True))
         mentor_ids.update(
             ScheduledEmailMentorPracticeReply.objects.filter(
                 mentor_token__scheduled_email_id=self.pk,
             ).values_list("mentor_id", flat=True)
         )
+        if not self.task_completed_at:
+            mentor_ids.update(
+                self.get_target_mentors().values_list("pk", flat=True)
+            )
         for mid in mentor_ids:
             ScheduledEmailMentorToken.objects.get_or_create(
                 scheduled_email=self,
@@ -692,99 +695,47 @@ class ScheduledEmail(TimeStampedModel):
                 mentor_token__scheduled_email_id=email_id,
             ).values_list("mentor_id", flat=True)
         )
-        if not mentor_ids:
+        if not mentor_ids and not self.task_completed_at:
             mentor_ids = set(
                 self.get_target_mentors().values_list("pk", flat=True)
             )
-        if not mentor_ids:
+        if not mentor_ids and not self.task_completed_at:
             mentor_ids = set(
                 self.specific_mentors.values_list("pk", flat=True)
             )
         return mentor_ids
 
-    def _linked_practice_ids_for_stats(self, emailed_mentor_ids):
-        """Practices tied to this send: linked on the email plus reply targets."""
-        email_id = self.pk
-        practice_ids = set(
-            Practice.objects.filter(scheduled_emails__pk=email_id).values_list(
-                "pk", flat=True
-            )
-        )
-        practice_ids.update(
-            ScheduledEmailMentorPracticeReply.objects.filter(
-                mentor_token__scheduled_email_id=email_id,
-            ).values_list("practice_id", flat=True)
-        )
-        if not practice_ids and emailed_mentor_ids:
-            practice_ids.update(
-                ScheduledEmailMentorPracticeReply.objects.filter(
-                    mentor_id__in=emailed_mentor_ids,
-                ).values_list("practice_id", flat=True)
-            )
-        if (
-            not practice_ids
-            and self.recipient_season_id
-            and emailed_mentor_ids
-        ):
-            practice_ids.update(
-                Practice.objects.filter(season_id=self.recipient_season_id)
-                .filter(
-                    models.Q(
-                        mentor_email_replies__mentor_id__in=emailed_mentor_ids
-                    )
-                    | models.Q(
-                        mentorpracticeassignment__mentor_id__in=emailed_mentor_ids
-                    )
-                )
-                .values_list("pk", flat=True)
-                .distinct()
-            )
-        return practice_ids
-
-    def _mentors_replied_ids_for_stats(self, emailed_mentor_ids, practice_ids):
+    def _mentors_replied_ids_for_stats(self, emailed_mentor_ids):
+        """Mentors who submitted a reply (or confirmed receipt) for this send."""
+        if not emailed_mentor_ids:
+            return set()
         email_id = self.pk
         replied_ids = set(
             ScheduledEmailMentorPracticeReply.objects.filter(
                 mentor_token__scheduled_email_id=email_id,
+                mentor_id__in=emailed_mentor_ids,
             ).values_list("mentor_id", flat=True)
         )
         replied_ids.update(
             ScheduledEmailMentorToken.objects.filter(
                 scheduled_email_id=email_id,
+                mentor_id__in=emailed_mentor_ids,
                 email_received_confirmed=True,
             ).values_list("mentor_id", flat=True)
         )
-
-        if practice_ids and emailed_mentor_ids:
-            replied_ids.update(
-                ScheduledEmailMentorPracticeReply.objects.filter(
-                    practice_id__in=practice_ids,
-                    mentor_id__in=emailed_mentor_ids,
-                ).values_list("mentor_id", flat=True)
-            )
-            replied_ids.update(
-                MentorPracticeAssignment.objects.filter(
-                    practice_id__in=practice_ids,
-                    mentor_id__in=emailed_mentor_ids,
-                ).values_list("mentor_id", flat=True)
-            )
-
         return replied_ids
 
-    def _pending_mentor_ids_for_stats(self, emailed_mentor_ids, practice_ids):
+    def _pending_mentor_ids_for_stats(self, emailed_mentor_ids):
         """Mentors still awaiting a reply for this send."""
-        replied_ids = self._mentors_replied_ids_for_stats(
-            emailed_mentor_ids, practice_ids
-        )
+        replied_ids = self._mentors_replied_ids_for_stats(emailed_mentor_ids)
         return emailed_mentor_ids - replied_ids
 
     def query_pending_mentors(self):
         """Mentors who were emailed but have not yet replied."""
         self.ensure_mentor_tokens_for_stats()
         emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
-        practice_ids = self._linked_practice_ids_for_stats(emailed_mentor_ids)
         pending_ids = self._pending_mentor_ids_for_stats(
-            emailed_mentor_ids, practice_ids
+            emailed_mentor_ids
         )
         return Mentor.objects.filter(pk__in=pending_ids).order_by(
             "last_name", "first_name", "id"
@@ -822,37 +773,20 @@ class ScheduledEmail(TimeStampedModel):
         }
         emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
         mentors_emailed = len(emailed_mentor_ids)
-        practice_ids = self._linked_practice_ids_for_stats(emailed_mentor_ids)
 
         mentors_replied_ids = self._mentors_replied_ids_for_stats(
-            emailed_mentor_ids, practice_ids
+            emailed_mentor_ids
         )
         mentors_replied = len(mentors_replied_ids)
-        pending_ids = self._pending_mentor_ids_for_stats(
-            emailed_mentor_ids, practice_ids
-        )
+        pending_ids = self._pending_mentor_ids_for_stats(emailed_mentor_ids)
 
         selected_ids = set(
             ScheduledEmailMentorPracticeReply.objects.filter(
                 mentor_token__scheduled_email_id=self.pk,
+                mentor_id__in=emailed_mentor_ids,
                 attendance__in=attending_values,
             ).values_list("mentor_id", flat=True)
         )
-        if practice_ids and emailed_mentor_ids:
-            selected_ids.update(
-                ScheduledEmailMentorPracticeReply.objects.filter(
-                    practice_id__in=practice_ids,
-                    mentor_id__in=emailed_mentor_ids,
-                    attendance__in=attending_values,
-                ).values_list("mentor_id", flat=True)
-            )
-        if not selected_ids and mentors_replied_ids and practice_ids:
-            selected_ids = set(
-                MentorPracticeAssignment.objects.filter(
-                    practice_id__in=practice_ids,
-                    mentor_id__in=mentors_replied_ids,
-                ).values_list("mentor_id", flat=True)
-            )
 
         pending_mentors = list(
             Mentor.objects.filter(pk__in=pending_ids).order_by(
