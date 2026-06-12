@@ -11,7 +11,7 @@ import {
   patchScheduledEmail,
   sendScheduledEmailNow,
 } from '../api'
-import { recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import { pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
@@ -658,6 +658,7 @@ export default function EmailsPage() {
   function renderSentEmailCard(row) {
     const emailedCount = scheduledRecipientCount(row, mentors)
     const replyStats = sentEmailReplyStats(row, { emailedCount })
+    const pendingMentors = pendingMentorsForEmail(row, mentors)
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
@@ -677,14 +678,26 @@ export default function EmailsPage() {
                 {replyStats.replied} mentor{replyStats.replied === 1 ? '' : 's'}{' '}
                 replied
               </span>
+              <span className="email-reply-stat-sep" aria-hidden="true">
+                ·
+              </span>
               <span className="email-reply-stat">
                 {replyStats.selectedPractices} selected practice
                 {replyStats.selectedPractices === 1 ? '' : 's'}
+              </span>
+              <span className="email-reply-stat-sep" aria-hidden="true">
+                ·
               </span>
               <span className="email-reply-stat">
                 {replyStats.pending} awaiting response
               </span>
             </div>
+          ) : null}
+          {replyStats && replyStats.pending > 0 && pendingMentors.length > 0 ? (
+            <p className="email-awaiting-mentors">
+              <span className="email-awaiting-mentors-label">Awaiting:</span>{' '}
+              {pendingMentors.map((m) => m.name).join(', ')}
+            </p>
           ) : null}
         </div>
         <div className="practice-row-actions email-row-actions">

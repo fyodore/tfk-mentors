@@ -199,9 +199,15 @@ export default function EmailDetailPage() {
                     {replyStats.replied} mentor{replyStats.replied === 1 ? '' : 's'}{' '}
                     replied
                   </span>
+                  <span className="email-reply-stat-sep" aria-hidden="true">
+                    ·
+                  </span>
                   <span className="email-reply-stat">
                     {replyStats.selectedPractices} selected practice
                     {replyStats.selectedPractices === 1 ? '' : 's'}
+                  </span>
+                  <span className="email-reply-stat-sep" aria-hidden="true">
+                    ·
                   </span>
                   <span className="email-reply-stat">
                     {replyStats.pending} awaiting response
