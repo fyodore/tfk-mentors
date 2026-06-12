@@ -43,20 +43,6 @@ ATTENDING_REPLY_VALUES = frozenset(
 PACE_VALUES = frozenset(c.value for c in PaceTypes)
 PACE_SORT = {choice.value: index for index, choice in enumerate(PaceTypes)}
 
-
-def normalize_csv_mentor_type(raw):
-    """Map CSV type values to canonical MentorTypes labels (case-insensitive)."""
-    value = (raw or "").strip()
-    if not value:
-        return ""
-    for choice in MentorTypes:
-        if value.casefold() == choice.value.casefold():
-            return choice.value
-    return value
-
-
-def csv_mentor_requires_cell_phone(mentor_type):
-    return mentor_type != MentorTypes.REMOTE
 from .serializers import (
     CoachSerializer,
     CoachPracticeAssignmentSerializer,
@@ -71,6 +57,78 @@ from .serializers import (
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
+
+
+def normalize_csv_header_key(key):
+    if key is None:
+        return ""
+    return key.strip().lower().replace(" ", "_")
+
+
+def normalize_csv_row(row):
+    normalized = {}
+    for key, value in row.items():
+        norm_key = normalize_csv_header_key(key)
+        if norm_key:
+            normalized[norm_key] = value
+    return normalized
+
+
+def clean_csv_cell(value):
+    if value is None:
+        return ""
+    text = str(value).replace("\ufeff", "").replace("\u200b", "").replace("\xa0", " ")
+    return text.strip().strip('"').strip("'").lstrip("'")
+
+
+def csv_row_value(row, *keys):
+    for key in keys:
+        norm_key = normalize_csv_header_key(key)
+        value = row.get(norm_key)
+        cleaned = clean_csv_cell(value)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def normalize_csv_mentor_type(raw):
+    """Map CSV type values to canonical MentorTypes labels."""
+    value = clean_csv_cell(raw)
+    if not value:
+        return ""
+    folded = value.casefold()
+    for choice in MentorTypes:
+        if folded == choice.value.casefold():
+            return choice.value
+    if folded in {"remote", "r"} or folded.startswith("remote"):
+        return MentorTypes.REMOTE
+    if folded in {"at practice", "practice", "ap", "in person", "in-person"}:
+        return MentorTypes.PRACTICE
+    if "practice" in folded and "remote" not in folded:
+        return MentorTypes.PRACTICE
+    return value
+
+
+def csv_mentor_is_remote(mentor_type):
+    if not mentor_type:
+        return False
+    if mentor_type == MentorTypes.REMOTE:
+        return True
+    return normalize_csv_mentor_type(str(mentor_type)) == MentorTypes.REMOTE
+
+
+def csv_mentor_requires_cell_phone(mentor_type):
+    return not csv_mentor_is_remote(mentor_type)
+
+
+def open_csv_dict_reader(text):
+    """Parse CSV exports from Excel/Sheets (comma, semicolon, or tab)."""
+    sample = text[:8192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    return csv.DictReader(io.StringIO(text), dialect=dialect)
 
 
 class SeasonViewSet(viewsets.ModelViewSet):
@@ -216,18 +274,19 @@ class MentorViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        reader = csv.DictReader(io.StringIO(text))
+        reader = open_csv_dict_reader(text)
         if not reader.fieldnames:
             return Response(
                 {"detail": "CSV header row is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        required = {"email"}
-        missing = [f for f in required if f not in reader.fieldnames]
-        if missing:
+        normalized_fieldnames = {
+            normalize_csv_header_key(name) for name in reader.fieldnames
+        }
+        if "email" not in normalized_fieldnames:
             return Response(
-                {"detail": f"Missing required CSV column(s): {', '.join(missing)}"},
+                {"detail": "Missing required CSV column(s): email"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -240,18 +299,14 @@ class MentorViewSet(viewsets.ModelViewSet):
         errors = []
         created_by_season = {}
 
-        for row_num, row in enumerate(reader, start=2):
-            email = (row.get("email") or "").strip().lower()
+        for row_num, raw_row in enumerate(reader, start=2):
+            row = normalize_csv_row(raw_row)
+            email = csv_row_value(row, "email").lower()
             if not email:
                 skipped += 1
                 continue
 
-            season_raw = (
-                row.get("season_year")
-                or row.get("season")
-                or row.get("year")
-                or ""
-            ).strip()
+            season_raw = csv_row_value(row, "season_year", "season", "year")
             if not season_raw:
                 errors.append(f"row {row_num}: season_year/season/year is required")
                 continue
@@ -266,7 +321,7 @@ class MentorViewSet(viewsets.ModelViewSet):
                 errors.append(f"row {row_num}: season {season_year} does not exist")
                 continue
 
-            raw_pace = (row.get("pace") or "").strip()
+            raw_pace = csv_row_value(row, "pace")
             pace = normalize_pace(raw_pace) if raw_pace else ""
             if raw_pace and pace not in PACE_VALUES:
                 errors.append(
@@ -275,20 +330,27 @@ class MentorViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
-            mentor_type = normalize_csv_mentor_type(row.get("type"))
+            raw_type = csv_row_value(row, "type", "mentor_type")
+            mentor_type = normalize_csv_mentor_type(raw_type)
             if mentor_type and mentor_type not in {
                 c.value for c in MentorTypes
             }:
-                errors.append(f"row {row_num}: invalid type '{row.get('type')}'")
+                errors.append(
+                    f"row {row_num}: invalid type '{raw_type or row.get('type')}'"
+                )
                 continue
 
             defaults = {
-                "first_name": (row.get("first_name") or "").strip(),
-                "last_name": (row.get("last_name") or "").strip(),
-                "cell_phone": (row.get("cell_phone") or row.get("cell") or "").strip(),
+                "first_name": csv_row_value(row, "first_name", "firstname"),
+                "last_name": csv_row_value(row, "last_name", "lastname"),
+                "cell_phone": csv_row_value(
+                    row, "cell_phone", "cell", "phone", "mobile"
+                ),
                 "type": mentor_type,
                 "pace": pace,
-                "split_practice": parse_bool(row.get("split_practice") or ""),
+                "split_practice": parse_bool(
+                    csv_row_value(row, "split_practice") or "false"
+                ),
             }
 
             mentor = Mentor.objects.filter(email=email).first()
@@ -299,9 +361,20 @@ class MentorViewSet(viewsets.ModelViewSet):
                     required_new.append("cell_phone")
                 missing_new = [f for f in required_new if not getattr(mentor, f)]
                 if missing_new:
+                    detail = ", ".join(missing_new)
+                    if "cell_phone" in missing_new and defaults["type"]:
+                        detail += (
+                            f" (type was read as '{defaults['type']}'; "
+                            "only At Practice mentors require cell_phone)"
+                        )
+                    elif "cell_phone" in missing_new:
+                        detail += (
+                            " (type column is missing or empty; "
+                            "set type to Remote to skip cell_phone)"
+                        )
                     errors.append(
                         f"row {row_num}: missing required fields for new mentor: "
-                        + ", ".join(missing_new)
+                        + detail
                     )
                     continue
                 if csv_mentor_requires_cell_phone(defaults["type"]) and not pace:
@@ -367,6 +440,7 @@ class MentorViewSet(viewsets.ModelViewSet):
                 "skipped": skipped,
                 "created_by_season": created_by_season,
                 "errors": errors,
+                "import_rules_version": 2,
             },
             status=code,
         )

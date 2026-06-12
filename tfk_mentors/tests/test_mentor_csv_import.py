@@ -156,6 +156,40 @@ class MentorCsvImportTests(TestCase):
         self.assertEqual(mentor.type, "Remote")
         self.assertEqual(mentor.cell_phone, "")
 
+    def test_import_allows_remote_with_capitalized_headers(self):
+        csv_body = (
+            "Email,Season_year,First_name,Last_name,Type,Pace\n"
+            "remote@example.com,2026,Pat,Lee,Remote,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
+    def test_import_allows_remote_with_mentor_type_column(self):
+        csv_body = (
+            "email,season_year,first_name,last_name,mentor_type,pace\n"
+            "remote@example.com,2026,Pat,Lee,REMOTE,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
+    def test_import_allows_semicolon_delimited_remote_without_cell_phone(self):
+        csv_body = (
+            "email;season_year;first_name;last_name;type;pace\n"
+            "remote@example.com;2026;Pat;Lee;Remote;\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data.get("import_rules_version"), 2)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
     def test_import_requires_cell_phone_for_at_practice(self):
         csv_body = (
             "email,season_year,first_name,last_name,cell_phone,type,pace\n"
