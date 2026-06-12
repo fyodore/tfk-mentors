@@ -113,6 +113,56 @@ class MentorEmailReplySubmitTests(TestCase):
         )
         self.assertEqual(practice["attendance"], PracticeAttendanceReply.ATTENDING)
 
+    def test_remote_mentor_reply_saves_profile_and_practice_pace(self):
+        self.mentor.type = MentorTypes.REMOTE
+        self.mentor.pace = ""
+        self.mentor.save(update_fields=["type", "pace"])
+        url = f"/api/mentor-email-reply/{self.token_row.token}/"
+        payload = {
+            "email_received_confirmed": True,
+            "mentor_pace": "10-11",
+            "replies": [
+                {
+                    "practice": self.practices[0].id,
+                    "attendance": PracticeAttendanceReply.ATTENDING,
+                    "pace": "",
+                },
+                {
+                    "practice": self.practices[1].id,
+                    "attendance": PracticeAttendanceReply.NOT_ATTENDING,
+                    "pace": "",
+                },
+                {
+                    "practice": self.practices[2].id,
+                    "attendance": PracticeAttendanceReply.ATTENDING,
+                    "pace": "",
+                },
+                {
+                    "practice": self.practices[3].id,
+                    "attendance": PracticeAttendanceReply.NOT_ATTENDING,
+                    "pace": "",
+                },
+            ],
+        }
+
+        response = self.client.put(url, payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.mentor.refresh_from_db()
+        self.assertEqual(self.mentor.pace, "10-11")
+        attending = ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor_token=self.token_row,
+            attendance=PracticeAttendanceReply.ATTENDING,
+        )
+        self.assertEqual(attending.count(), 2)
+        for reply in attending:
+            self.assertEqual(reply.pace, "10-11")
+        assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practices[0],
+        )
+        self.assertEqual(assignment.pace, "10-11")
+
     def test_practice_mentor_replies_uses_latest_per_mentor(self):
         other_email = ScheduledEmail.objects.create(
             scheduled_send_at=timezone.now() + timedelta(days=14),

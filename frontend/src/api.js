@@ -579,7 +579,8 @@ export async function fetchMentorEmailReply(token) {
  * @param {string} token
  * @param {{
  *   replies: { practice: number, attendance: string, pace?: string }[],
- *   email_received_confirmed?: boolean
+ *   email_received_confirmed?: boolean,
+ *   mentor_pace?: string
  * }} payload
  */
 export async function putMentorEmailReply(token, payload) {

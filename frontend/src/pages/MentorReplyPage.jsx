@@ -39,7 +39,7 @@ function initialAttendanceMap(practices) {
   return m
 }
 
-/** @param {PracticeReplyRow[]} practices */
+/** @param {PracticeReplyRow[]} practices @param {string} defaultPace */
 function initialPaceMap(practices, defaultPace) {
   /** @type {Record<number, string>} */
   const m = {}
@@ -47,6 +47,14 @@ function initialPaceMap(practices, defaultPace) {
     m[p.id] = p.pace?.trim() || defaultPace || ''
   }
   return m
+}
+
+/** @param {PracticeReplyRow[]} practices @param {string} mentorPace */
+function initialRemotePace(practices, mentorPace) {
+  const saved = practices.find(
+    (p) => isAttending(p.attendance) && (p.pace ?? '').trim()
+  )
+  return (saved?.pace ?? mentorPace ?? '').trim()
 }
 
 function resolveToken(pathToken, searchParams) {
@@ -75,6 +83,7 @@ export default function MentorReplyPage() {
   const [attendanceByPractice, setAttendanceByPractice] = useState({})
   /** @type {Record<number, string>} */
   const [paceByPractice, setPaceByPractice] = useState({})
+  const [remotePace, setRemotePace] = useState('')
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -111,6 +120,7 @@ export default function MentorReplyPage() {
         const defaultPace = m?.pace ?? ''
         setAttendanceByPractice(initialAttendanceMap(plist))
         setPaceByPractice(initialPaceMap(plist, defaultPace))
+        setRemotePace(initialRemotePace(plist, defaultPace))
         setSubmitted(plist.some((p) => p.attendance != null))
       } catch (e) {
         if (!cancelled) {
@@ -131,6 +141,13 @@ export default function MentorReplyPage() {
   const isAtPractice = mentor?.type === AT_PRACTICE
   const isRemote = mentor?.type === REMOTE
 
+  const remoteAttendingAny = useMemo(() => {
+    if (!isRemote) return false
+    return practices.some((p) =>
+      isAttending(attendanceByPractice[p.id] ?? 'not_attending')
+    )
+  }, [isRemote, practices, attendanceByPractice])
+
   const introMessage = useMemo(() => {
     if (!mentor) return ''
     if (isAtPractice) {
@@ -139,7 +156,7 @@ export default function MentorReplyPage() {
     if (isRemote) {
       return (
         'As a non practice mentor please confirm that you received the email. ' +
-        'If you would like to attend a practice please select which practice and pace below.'
+        'If you would like to attend a practice please select which practices below.'
       )
     }
     return ''
@@ -149,31 +166,15 @@ export default function MentorReplyPage() {
     setAttendanceByPractice((prev) => ({ ...prev, [practiceId]: attendance }))
     if (!isAttending(attendance)) {
       setPaceByPractice((prev) => ({ ...prev, [practiceId]: '' }))
-    } else if (isRemote && !paceByPractice[practiceId]) {
-      setPaceByPractice((prev) => ({
-        ...prev,
-        [practiceId]: mentor?.pace ?? paceChoices[0] ?? '',
-      }))
     }
-  }
-
-  function setPace(practiceId, pace) {
-    setPaceByPractice((prev) => ({ ...prev, [practiceId]: pace }))
   }
 
   function validateBeforeSubmit() {
     if (isRemote && !emailReceivedConfirmed) {
       return 'Please confirm that you received the email.'
     }
-    if (isRemote) {
-      for (const p of practices) {
-        if (
-          isAttending(attendanceByPractice[p.id]) &&
-          !(paceByPractice[p.id] ?? '').trim()
-        ) {
-          return 'Select a pace for each practice you plan to attend.'
-        }
-      }
+    if (isRemote && remoteAttendingAny && !remotePace.trim()) {
+      return 'Select your pace group for the practices you plan to attend.'
     }
     return null
   }
@@ -183,15 +184,34 @@ export default function MentorReplyPage() {
     setBusy(true)
     setError(null)
     try {
+      const selectedRemotePace = remotePace.trim()
       const replies = practices.map((p) => {
         const attendance = attendanceByPractice[p.id] ?? 'not_attending'
-        const pace = isAttending(attendance) ? paceByPractice[p.id] ?? '' : ''
+        let pace = ''
+        if (isAttending(attendance)) {
+          pace = isRemote
+            ? selectedRemotePace
+            : paceByPractice[p.id] ?? mentor?.pace ?? ''
+        }
         return { practice: p.id, attendance, pace }
       })
       await putMentorEmailReply(rawToken, {
         replies,
-        ...(isRemote ? { email_received_confirmed: true } : {}),
+        ...(isRemote
+          ? {
+              email_received_confirmed: true,
+              ...(remoteAttendingAny && selectedRemotePace
+                ? { mentor_pace: selectedRemotePace }
+                : {}),
+            }
+          : {}),
       })
+      if (isRemote && remoteAttendingAny && selectedRemotePace) {
+        setMentor((prev) =>
+          prev ? { ...prev, pace: selectedRemotePace } : prev
+        )
+        setAssignedPace(selectedRemotePace)
+      }
       setSubmitted(true)
       setConfirmOpen(false)
     } catch (err) {
@@ -254,177 +274,164 @@ export default function MentorReplyPage() {
           </p>
         ) : null}
 
-            <p className="mentor-reply-greeting">
-              Hello <strong>{mentor.first_name}</strong>
-            </p>
-            {seasonYear != null ? (
-              <p className="mentor-reply-thanks">
-                Thank you for mentoring for the{' '}
-                <strong>{seasonYear}</strong> season.
+        <p className="mentor-reply-greeting">
+          Hello <strong>{mentor.first_name}</strong>
+        </p>
+        {seasonYear != null ? (
+          <p className="mentor-reply-thanks">
+            Thank you for mentoring for the{' '}
+            <strong>{seasonYear}</strong> season.
+          </p>
+        ) : null}
+        {(assignedPace || mentor.pace) && !isRemote ? (
+          <p className="mentor-reply-pace-assigned">
+            Your assigned pace group is{' '}
+            <strong>{formatPaceLabel(assignedPace || mentor.pace)}</strong>.
+          </p>
+        ) : null}
+
+        {practices.length === 0 ? (
+          <p className="muted">No practices were attached to this message.</p>
+        ) : submitted ? null : (
+          <form className="mentor-reply-form" onSubmit={handleSubmit}>
+            {introMessage ? (
+              <p className="mentor-reply-intro">{introMessage}</p>
+            ) : null}
+
+            {isRemote ? (
+              <label className="checkbox-label mentor-reply-email-confirm">
+                <input
+                  type="checkbox"
+                  checked={emailReceivedConfirmed}
+                  disabled={busy}
+                  onChange={(ev) => setEmailReceivedConfirmed(ev.target.checked)}
+                />
+                I received the mentoring email
+              </label>
+            ) : null}
+
+            {isAtPractice && showsPartialMonth ? (
+              <p className="muted mentor-reply-partial-month">
+                {PARTIAL_MONTH_NOTE}
               </p>
             ) : null}
-            {(assignedPace || mentor.pace) ? (
-              <p className="mentor-reply-pace-assigned">
-                Your assigned pace group is{' '}
-                <strong>{formatPaceLabel(assignedPace || mentor.pace)}</strong>.
-              </p>
+
+            <ul className="practice-list mentor-reply-list">
+              {practices.map((p) => {
+                const attendance =
+                  attendanceByPractice[p.id] ?? 'not_attending'
+                const attending = isAttending(attendance)
+                const showSplit =
+                  isAtPractice && !p.full_practice && mentor.split_practice
+
+                return (
+                  <li key={p.id} className="practice-row mentor-reply-row">
+                    <div className="practice-row-main">
+                      <span className="practice-date">
+                        {formatPracticeWhen(p.date, p.nyrr_race)}
+                      </span>
+                      {!p.full_practice && isAtPractice ? (
+                        <span className="muted">Split practice session</span>
+                      ) : null}
+
+                      {showSplit ? (
+                        <fieldset className="mentor-reply-split-fieldset">
+                          <legend className="muted">
+                            Which half can you cover?
+                          </legend>
+                          <label className="radio-row">
+                            <input
+                              type="radio"
+                              name={`half-${p.id}`}
+                              value="first_half"
+                              checked={attendance === 'first_half'}
+                              disabled={busy}
+                              onChange={() => setAttendance(p.id, 'first_half')}
+                            />
+                            First half
+                          </label>
+                          <label className="radio-row">
+                            <input
+                              type="radio"
+                              name={`half-${p.id}`}
+                              value="second_half"
+                              checked={attendance === 'second_half'}
+                              disabled={busy}
+                              onChange={() => setAttendance(p.id, 'second_half')}
+                            />
+                            Second half
+                          </label>
+                          <label className="radio-row">
+                            <input
+                              type="radio"
+                              name={`half-${p.id}`}
+                              value="not_attending"
+                              checked={attendance === 'not_attending'}
+                              disabled={busy}
+                              onChange={() =>
+                                setAttendance(p.id, 'not_attending')
+                              }
+                            />
+                            Not attending
+                          </label>
+                        </fieldset>
+                      ) : (
+                        <label className="checkbox-label mentor-reply-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={attending}
+                            disabled={busy}
+                            onChange={(ev) =>
+                              setAttendance(
+                                p.id,
+                                ev.target.checked ? 'attending' : 'not_attending'
+                              )
+                            }
+                          />
+                          I can attend this practice
+                        </label>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {isRemote && remoteAttendingAny ? (
+              <label className="mentor-reply-pace-label mentor-reply-remote-pace">
+                <span className="field-label">Your pace group</span>
+                <select
+                  className="mentor-reply-pace-select field-input field-select"
+                  value={remotePace}
+                  disabled={busy}
+                  required
+                  onChange={(ev) => setRemotePace(ev.target.value)}
+                >
+                  <option value="">Select pace…</option>
+                  {paceChoices.map((pace) => (
+                    <option key={pace} value={pace}>
+                      {formatPaceLabel(pace)}
+                    </option>
+                  ))}
+                </select>
+                <span className="muted mentor-reply-remote-pace-note">
+                  This pace will be saved to your mentor profile and applied to
+                  each practice you selected.
+                </span>
+              </label>
             ) : null}
 
-            {practices.length === 0 ? (
-              <p className="muted">
-                No practices were attached to this message.
-              </p>
-            ) : submitted ? null : (
-              <form className="mentor-reply-form" onSubmit={handleSubmit}>
-                {introMessage ? (
-                  <p className="mentor-reply-intro">{introMessage}</p>
-                ) : null}
-
-                {isRemote ? (
-                  <label className="checkbox-label mentor-reply-email-confirm">
-                    <input
-                      type="checkbox"
-                      checked={emailReceivedConfirmed}
-                      disabled={busy}
-                      onChange={(ev) =>
-                        setEmailReceivedConfirmed(ev.target.checked)
-                      }
-                    />
-                    I received the mentoring email
-                  </label>
-                ) : null}
-
-                {isAtPractice && showsPartialMonth ? (
-                  <p className="muted mentor-reply-partial-month">
-                    {PARTIAL_MONTH_NOTE}
-                  </p>
-                ) : null}
-
-                <ul className="practice-list mentor-reply-list">
-                  {practices.map((p) => {
-                    const attendance =
-                      attendanceByPractice[p.id] ?? 'not_attending'
-                    const attending = isAttending(attendance)
-                    const showSplit =
-                      isAtPractice &&
-                      !p.full_practice &&
-                      mentor.split_practice
-
-                    return (
-                      <li key={p.id} className="practice-row mentor-reply-row">
-                        <div className="practice-row-main">
-                          <span className="practice-date">
-                            {formatPracticeWhen(p.date, p.nyrr_race)}
-                          </span>
-                          {!p.full_practice && isAtPractice ? (
-                            <span className="muted">Split practice session</span>
-                          ) : null}
-
-                          {showSplit ? (
-                            <fieldset className="mentor-reply-split-fieldset">
-                              <legend className="muted">
-                                Which half can you cover?
-                              </legend>
-                              <label className="radio-row">
-                                <input
-                                  type="radio"
-                                  name={`half-${p.id}`}
-                                  value="first_half"
-                                  checked={attendance === 'first_half'}
-                                  disabled={busy}
-                                  onChange={() =>
-                                    setAttendance(p.id, 'first_half')
-                                  }
-                                />
-                                First half
-                              </label>
-                              <label className="radio-row">
-                                <input
-                                  type="radio"
-                                  name={`half-${p.id}`}
-                                  value="second_half"
-                                  checked={attendance === 'second_half'}
-                                  disabled={busy}
-                                  onChange={() =>
-                                    setAttendance(p.id, 'second_half')
-                                  }
-                                />
-                                Second half
-                              </label>
-                              <label className="radio-row">
-                                <input
-                                  type="radio"
-                                  name={`half-${p.id}`}
-                                  value="not_attending"
-                                  checked={attendance === 'not_attending'}
-                                  disabled={busy}
-                                  onChange={() =>
-                                    setAttendance(p.id, 'not_attending')
-                                  }
-                                />
-                                Not attending
-                              </label>
-                            </fieldset>
-                          ) : (
-                            <label className="checkbox-label mentor-reply-checkbox">
-                              <input
-                                type="checkbox"
-                                checked={attending}
-                                disabled={busy}
-                                onChange={(ev) =>
-                                  setAttendance(
-                                    p.id,
-                                    ev.target.checked
-                                      ? 'attending'
-                                      : 'not_attending'
-                                  )
-                                }
-                              />
-                              I can attend this practice
-                            </label>
-                          )}
-
-                          {isRemote && attending ? (
-                            <label className="mentor-reply-pace-label">
-                              <span className="muted">Pace</span>
-                              <select
-                                className="mentor-reply-pace-select"
-                                value={paceByPractice[p.id] ?? ''}
-                                disabled={busy}
-                                onChange={(ev) =>
-                                  setPace(p.id, ev.target.value)
-                                }
-                              >
-                                <option value="">Select pace…</option>
-                                {(paceChoices.length
-                                  ? paceChoices
-                                  : [mentor.pace]
-                                )
-                                  .filter(Boolean)
-                                  .map((pace) => (
-                                    <option key={pace} value={pace}>
-                                      {formatPaceLabel(pace)}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                          ) : null}
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-                <div className="mentor-reply-actions">
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={busy || practices.length === 0}
-                  >
-                    {busy ? 'Submitting…' : 'Submit'}
-                  </button>
-                </div>
-              </form>
-            )}
+            <div className="mentor-reply-actions">
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || practices.length === 0}
+              >
+                {busy ? 'Submitting…' : 'Submit'}
+              </button>
+            </div>
+          </form>
+        )}
 
         <Modal
           open={confirmOpen}

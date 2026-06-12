@@ -546,7 +546,9 @@ def validate_reply_pace(mentor, attendance, pace):
         return
     if mentor.type == MentorTypes.REMOTE:
         if not pace:
-            raise ValueError("Select a pace for each practice you plan to attend.")
+            raise ValueError(
+                "Select your pace group for the practices you plan to attend."
+            )
         if pace not in PACE_VALUES:
             raise ValueError("Invalid pace choice.")
         return
@@ -1014,6 +1016,38 @@ class MentorScheduledEmailReplyView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        mentor_pace_raw = request.data.get("mentor_pace")
+        mentor_pace = (
+            normalize_pace(mentor_pace_raw or "")
+            if mentor_pace_raw is not None and str(mentor_pace_raw).strip()
+            else ""
+        )
+        if mentor.type == MentorTypes.REMOTE:
+            attending_any = any(
+                att in ATTENDING_REPLY_VALUES
+                for att in incoming_attendance.values()
+            )
+            if attending_any:
+                if not mentor_pace:
+                    return Response(
+                        {
+                            "detail": (
+                                "Select your pace group for the practices "
+                                "you plan to attend."
+                            ),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if mentor_pace not in PACE_VALUES:
+                    return Response(
+                        {"detail": "Invalid pace choice."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                for pid, att in incoming_attendance.items():
+                    if att in ATTENDING_REPLY_VALUES:
+                        incoming_pace[pid] = mentor_pace
+
         rows = []
         for pid, att in incoming_attendance.items():
             practice = practices_by_id[pid]
@@ -1041,6 +1075,9 @@ class MentorScheduledEmailReplyView(APIView):
             mt.save(update_fields=["email_received_confirmed", "updated_at"])
             mt.practice_replies.all().delete()
             ScheduledEmailMentorPracticeReply.objects.bulk_create(rows)
+            if mentor.type == MentorTypes.REMOTE and mentor_pace:
+                mentor.pace = mentor_pace
+                mentor.save(update_fields=["pace", "updated_at"])
             for pid in practice_ids:
                 Practice.objects.get(pk=pid).sync_mentor_assignments_from_replies()
         saved_replies = (
