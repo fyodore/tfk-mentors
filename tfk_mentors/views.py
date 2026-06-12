@@ -42,6 +42,21 @@ ATTENDING_REPLY_VALUES = frozenset(
 )
 PACE_VALUES = frozenset(c.value for c in PaceTypes)
 PACE_SORT = {choice.value: index for index, choice in enumerate(PaceTypes)}
+
+
+def normalize_csv_mentor_type(raw):
+    """Map CSV type values to canonical MentorTypes labels (case-insensitive)."""
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    for choice in MentorTypes:
+        if value.casefold() == choice.value.casefold():
+            return choice.value
+    return value
+
+
+def csv_mentor_requires_cell_phone(mentor_type):
+    return mentor_type != MentorTypes.REMOTE
 from .serializers import (
     CoachSerializer,
     CoachPracticeAssignmentSerializer,
@@ -260,11 +275,11 @@ class MentorViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
-            mentor_type = (row.get("type") or "").strip()
+            mentor_type = normalize_csv_mentor_type(row.get("type"))
             if mentor_type and mentor_type not in {
                 c.value for c in MentorTypes
             }:
-                errors.append(f"row {row_num}: invalid type '{mentor_type}'")
+                errors.append(f"row {row_num}: invalid type '{row.get('type')}'")
                 continue
 
             defaults = {
@@ -280,7 +295,7 @@ class MentorViewSet(viewsets.ModelViewSet):
             if mentor is None:
                 mentor = Mentor(email=email, **defaults)
                 required_new = ["first_name", "last_name", "type"]
-                if defaults["type"] != MentorTypes.REMOTE:
+                if csv_mentor_requires_cell_phone(defaults["type"]):
                     required_new.append("cell_phone")
                 missing_new = [f for f in required_new if not getattr(mentor, f)]
                 if missing_new:
@@ -289,7 +304,7 @@ class MentorViewSet(viewsets.ModelViewSet):
                         + ", ".join(missing_new)
                     )
                     continue
-                if defaults["type"] != MentorTypes.REMOTE and not pace:
+                if csv_mentor_requires_cell_phone(defaults["type"]) and not pace:
                     errors.append(
                         f"row {row_num}: pace is required for At Practice mentors"
                     )
@@ -307,13 +322,18 @@ class MentorViewSet(viewsets.ModelViewSet):
                                 mentor.pace = ""
                                 changed = True
                             continue
-                        if defaults["type"] != MentorTypes.REMOTE and not value:
+                        if csv_mentor_requires_cell_phone(defaults["type"]) and not value:
                             continue
+                    if field == "cell_phone" and defaults["type"] == MentorTypes.REMOTE:
+                        if getattr(mentor, field) != value:
+                            setattr(mentor, field, value)
+                            changed = True
+                        continue
                     if value and getattr(mentor, field) != value:
                         setattr(mentor, field, value)
                         changed = True
                 if (
-                    defaults["type"] != MentorTypes.REMOTE
+                    csv_mentor_requires_cell_phone(defaults["type"])
                     and not mentor.pace
                     and not defaults["pace"]
                 ):
@@ -322,7 +342,7 @@ class MentorViewSet(viewsets.ModelViewSet):
                     )
                     continue
                 if (
-                    defaults["type"] != MentorTypes.REMOTE
+                    csv_mentor_requires_cell_phone(defaults["type"])
                     and not (mentor.cell_phone or "").strip()
                     and not defaults["cell_phone"]
                 ):

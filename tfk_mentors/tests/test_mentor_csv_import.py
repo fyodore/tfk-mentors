@@ -114,6 +114,48 @@ class MentorCsvImportTests(TestCase):
         self.assertEqual(mentor.type, "Remote")
         self.assertEqual(mentor.cell_phone, "")
 
+    def test_import_allows_remote_without_cell_phone_column(self):
+        csv_body = (
+            "email,season_year,first_name,last_name,type,pace\n"
+            "remote@example.com,2026,Pat,Lee,Remote,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
+    def test_import_allows_remote_type_case_insensitive_without_cell_phone(self):
+        csv_body = (
+            "email,season_year,first_name,last_name,type,pace\n"
+            "remote@example.com,2026,Pat,Lee,remote,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
+    def test_import_updates_existing_remote_without_cell_phone(self):
+        mentor = Mentor.objects.create(
+            first_name="Pat",
+            last_name="Lee",
+            email="remote@example.com",
+            cell_phone="5551234567",
+            type="Remote",
+            pace="",
+        )
+        mentor.seasons.add(self.season)
+        csv_body = (
+            "email,season_year,first_name,last_name,type,pace\n"
+            "remote@example.com,2026,Pat,Lee,Remote,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor.refresh_from_db()
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
     def test_import_requires_cell_phone_for_at_practice(self):
         csv_body = (
             "email,season_year,first_name,last_name,cell_phone,type,pace\n"
