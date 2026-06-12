@@ -483,6 +483,21 @@ export async function fetchScheduledEmail(id) {
 }
 
 /** @param {number|string} id */
+export async function sendScheduledEmailNow(id) {
+  const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-now/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({}),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
 export async function sendScheduledEmailReplyReminders(id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
     method: 'POST',

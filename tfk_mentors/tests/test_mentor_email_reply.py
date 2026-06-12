@@ -503,6 +503,54 @@ class ReplyReminderTests(TestCase):
         self.assertIn("sent", response.data["detail"].lower())
 
 
+class SendScheduledEmailNowTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        session = self.client.session
+        session["site_authenticated"] = True
+        session.save()
+        self.season = Season.objects.create(year=2026)
+        self.mentor = Mentor.objects.create(
+            first_name="Pat",
+            last_name="Mentor",
+            email="pat@example.com",
+            cell_phone="555-0100",
+            type=MentorTypes.PRACTICE,
+            pace="11-12",
+            split_practice=False,
+        )
+        self.mentor.seasons.add(self.season)
+        now = timezone.now()
+        self.scheduled = ScheduledEmail.objects.create(
+            scheduled_send_at=now + timedelta(days=7),
+            body_text="Hello {{ first_name }} {{ link }}",
+            recipient_season=self.season,
+        )
+
+    @patch("tfk_mentors.email_sending.send_mail")
+    def test_api_send_now_emails_mentors(self, mock_send_mail):
+        response = self.client.post(
+            f"/api/scheduled-email/{self.scheduled.id}/send-now/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sent"], 1)
+        self.assertEqual(mock_send_mail.call_count, 1)
+        self.scheduled.refresh_from_db()
+        self.assertIsNotNone(self.scheduled.task_completed_at)
+
+    def test_api_send_now_rejects_already_sent(self):
+        self.scheduled.task_completed_at = timezone.now()
+        self.scheduled.save(update_fields=["task_completed_at"])
+
+        response = self.client.post(
+            f"/api/scheduled-email/{self.scheduled.id}/send-now/"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already been sent", response.data["detail"].lower())
+
+
 class BulkEmailReplyStatsTests(TestCase):
     def setUp(self):
         self.client = APIClient()

@@ -9,6 +9,7 @@ import {
   fetchScheduledEmails,
   fetchSeasons,
   patchScheduledEmail,
+  sendScheduledEmailNow,
 } from '../api'
 import { recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
@@ -70,6 +71,7 @@ export default function EmailsPage() {
   const [form, setForm] = useState(() => createEmptyEmailForm(''))
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sendingEmailId, setSendingEmailId] = useState(null)
 
   const sortedSeasons = useMemo(
     () =>
@@ -344,6 +346,34 @@ export default function EmailsPage() {
     }
   }
 
+  const handleSendNow = async (row) => {
+    const count = scheduledRecipientCount(row, mentors)
+    if (
+      !window.confirm(
+        `Send this email now to ${count} mentor${count === 1 ? '' : 's'}?\n` +
+          `Scheduled: ${formatDateTime(row.scheduled_send_at)}`
+      )
+    ) {
+      return
+    }
+    setLoadError(null)
+    setSendingEmailId(row.id)
+    try {
+      const result = await sendScheduledEmailNow(row.id)
+      await reloadAll()
+      const sent = result.sent ?? result.recipients ?? count
+      window.alert(
+        sent === 1
+          ? 'Email sent to 1 mentor.'
+          : `Email sent to ${sent} mentors.`
+      )
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSendingEmailId(null)
+    }
+  }
+
   const handleMarkSent = async (row) => {
     if (
       !window.confirm(
@@ -567,6 +597,7 @@ export default function EmailsPage() {
   }
 
   function renderUpcomingEmailCard(row) {
+    const sending = sendingEmailId === row.id
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
@@ -590,7 +621,15 @@ export default function EmailsPage() {
           <button
             type="button"
             className="btn btn-text"
-            disabled={loading}
+            disabled={loading || sending || sendingEmailId != null}
+            onClick={() => handleSendNow(row)}
+          >
+            {sending ? 'Sending…' : 'Send now'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-text"
+            disabled={loading || sending || sendingEmailId != null}
             onClick={() => handleMarkSent(row)}
           >
             Mark sent
@@ -598,7 +637,7 @@ export default function EmailsPage() {
           <button
             type="button"
             className="btn btn-text"
-            disabled={loading}
+            disabled={loading || sending || sendingEmailId != null}
             onClick={() => openEdit(row)}
           >
             Edit
@@ -606,7 +645,7 @@ export default function EmailsPage() {
           <button
             type="button"
             className="btn btn-text btn-text-danger"
-            disabled={loading}
+            disabled={loading || sending || sendingEmailId != null}
             onClick={() => openDelete(row)}
           >
             Delete
@@ -700,8 +739,9 @@ export default function EmailsPage() {
         </div>
 
         <p className="muted">
-          Upcoming messages are sent later (see schedule). Sent messages were
-          marked complete by your process or the “Mark sent” action.
+          Upcoming messages can be sent manually with <strong>Send now</strong>, sent
+          later on schedule, or marked complete with <strong>Mark sent</strong> if
+          you sent them outside this app.
         </p>
 
         {loading && <p className="muted">Loading…</p>}
