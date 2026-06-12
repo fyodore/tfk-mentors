@@ -103,6 +103,32 @@ class MentorCsvImportTests(TestCase):
         self.assertEqual(mentor.type, "Remote")
         self.assertEqual(mentor.pace, "")
 
+    def test_import_allows_remote_without_cell_phone(self):
+        csv_body = (
+            "email,season_year,first_name,last_name,cell_phone,type,pace\n"
+            "remote@example.com,2026,Pat,Lee,,Remote,\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 200)
+        mentor = Mentor.objects.get(email="remote@example.com")
+        self.assertEqual(mentor.type, "Remote")
+        self.assertEqual(mentor.cell_phone, "")
+
+    def test_import_requires_cell_phone_for_at_practice(self):
+        csv_body = (
+            "email,season_year,first_name,last_name,cell_phone,type,pace\n"
+            "runner@example.com,2026,Jane,Doe,,At Practice,8-9\n"
+        )
+        response = self._import_csv(csv_body)
+        self.assertEqual(response.status_code, 207)
+        self.assertFalse(Mentor.objects.filter(email="runner@example.com").exists())
+        self.assertTrue(
+            any(
+                "cell_phone" in err or "cell phone" in err
+                for err in response.data["errors"]
+            )
+        )
+
     def test_import_requires_pace_for_at_practice(self):
         csv_body = (
             "email,season_year,first_name,last_name,cell_phone,type,pace\n"
@@ -131,3 +157,37 @@ class MentorCsvImportTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["pace"], "")
+
+    def test_api_create_remote_without_cell_phone(self):
+        response = self.client.post(
+            "/api/mentor/",
+            {
+                "first_name": "Pat",
+                "last_name": "Remote",
+                "email": "remote-no-phone@example.com",
+                "cell_phone": "",
+                "type": "Remote",
+                "pace": "",
+                "seasons": [self.season.id],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["cell_phone"], "")
+
+    def test_api_create_at_practice_requires_cell_phone(self):
+        response = self.client.post(
+            "/api/mentor/",
+            {
+                "first_name": "Jane",
+                "last_name": "Runner",
+                "email": "runner-api@example.com",
+                "cell_phone": "",
+                "type": "At Practice",
+                "pace": "8-9",
+                "seasons": [self.season.id],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cell_phone", response.data)

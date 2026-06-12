@@ -199,8 +199,10 @@ export default function MentorsPage() {
     if (!form.first_name.trim()) return { error: 'First name is required.' }
     if (!form.last_name.trim()) return { error: 'Last name is required.' }
     if (!form.email.trim()) return { error: 'Email is required.' }
-    if (!form.cell_phone.trim()) return { error: 'Cell phone is required.' }
     const isRemote = form.type === REMOTE_TYPE
+    if (!isRemote && !form.cell_phone.trim()) {
+      return { error: 'Cell phone is required for At Practice mentors.' }
+    }
     if (!isRemote && !form.pace) {
       return { error: 'Pace is required for At Practice mentors.' }
     }
@@ -365,7 +367,9 @@ export default function MentorsPage() {
         required
       />
 
-      <label className="field-label" htmlFor={`${formId}-cell`}>Cell phone</label>
+      <label className="field-label" htmlFor={`${formId}-cell`}>
+        Cell phone{form.type === REMOTE_TYPE ? ' (optional)' : ''}
+      </label>
       <input
         id={`${formId}-cell`}
         type="text"
@@ -373,7 +377,7 @@ export default function MentorsPage() {
         value={form.cell_phone}
         onChange={(e) => setForm((f) => ({ ...f, cell_phone: e.target.value }))}
         maxLength={20}
-        required
+        required={form.type !== REMOTE_TYPE}
       />
 
       <label className="field-label" htmlFor={`${formId}-type`}>Type</label>
@@ -586,7 +590,8 @@ export default function MentorsPage() {
           <p className="muted">
             CSV format example columns:
             <code> email</code>, <code>season_year</code> (or <code>season</code>/<code>year</code>),
-            <code> first_name</code>, <code>last_name</code>, <code>cell_phone</code> (or <code>cell</code>),
+            <code> first_name</code>, <code>last_name</code>, <code>cell_phone</code> (or <code>cell</code>;
+            required for At Practice; optional for Remote),
             <code> type</code>, <code>pace</code> (required for At Practice; optional
             for Remote), <code>split_practice</code>.
           </p>

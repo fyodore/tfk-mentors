@@ -279,7 +279,9 @@ class MentorViewSet(viewsets.ModelViewSet):
             mentor = Mentor.objects.filter(email=email).first()
             if mentor is None:
                 mentor = Mentor(email=email, **defaults)
-                required_new = ["first_name", "last_name", "cell_phone", "type"]
+                required_new = ["first_name", "last_name", "type"]
+                if defaults["type"] != MentorTypes.REMOTE:
+                    required_new.append("cell_phone")
                 missing_new = [f for f in required_new if not getattr(mentor, f)]
                 if missing_new:
                     errors.append(
@@ -317,6 +319,15 @@ class MentorViewSet(viewsets.ModelViewSet):
                 ):
                     errors.append(
                         f"row {row_num}: pace is required for At Practice mentors"
+                    )
+                    continue
+                if (
+                    defaults["type"] != MentorTypes.REMOTE
+                    and not (mentor.cell_phone or "").strip()
+                    and not defaults["cell_phone"]
+                ):
+                    errors.append(
+                        f"row {row_num}: cell phone is required for At Practice mentors"
                     )
                     continue
                 if "split_practice" in row and mentor.split_practice != defaults["split_practice"]:

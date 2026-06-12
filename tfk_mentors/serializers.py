@@ -86,10 +86,20 @@ class MentorSerializer(serializers.ModelSerializer):
         )
         if mentor_type == MentorTypes.REMOTE:
             attrs["pace"] = pace or ""
-        elif not (pace or "").strip():
-            raise serializers.ValidationError(
-                {"pace": "Pace is required for At Practice mentors."}
+            attrs["cell_phone"] = (attrs.get("cell_phone") or "").strip()
+        else:
+            if not (pace or "").strip():
+                raise serializers.ValidationError(
+                    {"pace": "Pace is required for At Practice mentors."}
+                )
+            cell_phone = attrs.get(
+                "cell_phone",
+                getattr(self.instance, "cell_phone", "") if self.instance else "",
             )
+            if not (cell_phone or "").strip():
+                raise serializers.ValidationError(
+                    {"cell_phone": "Cell phone is required for At Practice mentors."}
+                )
         return attrs
 
 

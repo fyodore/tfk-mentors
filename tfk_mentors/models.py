@@ -146,7 +146,7 @@ class Mentor(TimeStampedModel):
     first_name = models.CharField(max_length=75)
     last_name = models.CharField(max_length=100)
     email = models.EmailField(max_length=100, unique=True)
-    cell_phone = models.CharField(max_length=20)
+    cell_phone = models.CharField(max_length=20, blank=True, default="")
     type = models.CharField(choices=MentorTypes, max_length=11)
     seasons = models.ManyToManyField(Season)
     pace = models.CharField(
@@ -207,6 +207,10 @@ class Mentor(TimeStampedModel):
         if self.type != MentorTypes.REMOTE and not (self.pace or "").strip():
             raise ValidationError(
                 {"pace": "Pace is required for At Practice mentors."}
+            )
+        if self.type != MentorTypes.REMOTE and not (self.cell_phone or "").strip():
+            raise ValidationError(
+                {"cell_phone": "Cell phone is required for At Practice mentors."}
             )
 
     def save(self, *args, **kwargs):
