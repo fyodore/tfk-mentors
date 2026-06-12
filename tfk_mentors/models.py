@@ -799,6 +799,7 @@ class ScheduledEmail(TimeStampedModel):
             emailed_mentor_ids, practice_ids
         )
         mentors_replied = len(mentors_replied_ids)
+        pending_ids = emailed_mentor_ids - mentors_replied_ids
 
         selected_ids = set(
             ScheduledEmailMentorPracticeReply.objects.filter(
@@ -827,7 +828,8 @@ class ScheduledEmail(TimeStampedModel):
             "mentors_replied": mentors_replied,
             "mentors_selected_practices": len(selected_ids),
             "mentors_responded": mentors_replied,
-            "mentors_pending": max(0, mentors_emailed - mentors_replied),
+            "mentors_pending": max(0, len(pending_ids)),
+            "pending_mentor_ids": sorted(pending_ids),
         }
 
     def reply_absolute_url_for_mentor(self, mentor):

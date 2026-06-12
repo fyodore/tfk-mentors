@@ -232,11 +232,13 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
         if not obj.task_completed_at:
             return []
         email = ScheduledEmail.objects.get(pk=obj.pk)
+        email.ensure_mentor_tokens_for_stats()
         return [
             {
                 "id": mentor.id,
                 "first_name": mentor.first_name,
                 "last_name": mentor.last_name,
+                "name": f"{mentor.first_name} {mentor.last_name}".strip(),
                 "email": mentor.email,
                 "type": mentor.type,
             }

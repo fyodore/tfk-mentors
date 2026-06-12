@@ -8,7 +8,7 @@ import {
   fetchSeasons,
   sendScheduledEmailReplyReminders,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -122,6 +122,10 @@ export default function EmailDetailPage() {
   const replyStats = email
     ? sentEmailReplyStats(email, { emailedCount })
     : null
+  const pendingMentors = useMemo(
+    () => (email ? pendingMentorsForEmail(email, mentors) : []),
+    [email, mentors]
+  )
 
   const handleSendReplyReminders = async () => {
     if (!email || !replyStats?.pending) return
@@ -206,18 +210,21 @@ export default function EmailDetailPage() {
               ) : null}
               {isSent && replyStats && replyStats.pending > 0 ? (
                 <>
-                  {Array.isArray(email.pending_mentors) &&
-                  email.pending_mentors.length > 0 ? (
+                  {pendingMentors.length > 0 ? (
                     <div className="email-pending-mentors">
                       <h4 className="email-pending-mentors-heading">
-                        Mentors awaiting response ({email.pending_mentors.length})
+                        Mentors awaiting response ({pendingMentors.length})
                       </h4>
-                      <ul className="email-detail-list">
-                        {email.pending_mentors.map((m) => (
+                      <ul className="email-detail-list email-pending-mentors-list">
+                        {pendingMentors.map((m) => (
                           <li key={m.id}>
-                            {m.first_name} {m.last_name}
-                            {m.email ? ` · ${m.email}` : ''}
-                            {m.type ? ` · ${m.type}` : ''}
+                            <strong>{m.name}</strong>
+                            {m.email ? (
+                              <span className="muted"> · {m.email}</span>
+                            ) : null}
+                            {m.type ? (
+                              <span className="muted"> · {m.type}</span>
+                            ) : null}
                           </li>
                         ))}
                       </ul>

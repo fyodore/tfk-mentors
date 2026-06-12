@@ -80,7 +80,54 @@ export function practiceLabelsForIds(ids, labelForId) {
   }))
 }
 
-/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number }, recipient_mode?: string, recipient_season?: number|null, specific_mentors?: number[] }} row @param {{ emailedCount?: number }} [options] */
+/** @param {{ first_name?: string, last_name?: string, email?: string, id?: number, name?: string }} mentor */
+export function formatMentorName(mentor) {
+  if (mentor?.name?.trim()) return mentor.name.trim()
+  const name = [mentor?.first_name, mentor?.last_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+  if (name) return name
+  if (mentor?.email?.trim()) return mentor.email.trim()
+  return mentor?.id != null ? `Mentor #${mentor.id}` : 'Unknown mentor'
+}
+
+/** @param {{ pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }>, reply_stats?: { pending_mentor_ids?: number[] } }} email @param {Array<{ id: number, first_name?: string, last_name?: string, email?: string, type?: string }>} mentors */
+export function pendingMentorsForEmail(email, mentors) {
+  const fromApi = email?.pending_mentors
+  if (Array.isArray(fromApi) && fromApi.length > 0) {
+    return fromApi.map((m) => ({
+      id: m.id,
+      name: formatMentorName(m),
+      email: m.email ?? '',
+      type: m.type ?? '',
+    }))
+  }
+
+  const pendingIds = email?.reply_stats?.pending_mentor_ids
+  if (!Array.isArray(pendingIds) || pendingIds.length === 0 || !mentors?.length) {
+    return []
+  }
+
+  const byId = new Map(mentors.map((m) => [m.id, m]))
+  return pendingIds
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
+        (a.first_name ?? '').localeCompare(b.first_name ?? '') ||
+        a.id - b.id
+    )
+    .map((m) => ({
+      id: m.id,
+      name: formatMentorName(m),
+      email: m.email ?? '',
+      type: m.type ?? '',
+    }))
+}
+
+/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] }, recipient_mode?: string, recipient_season?: number|null, specific_mentors?: number[] }} row @param {{ emailedCount?: number }} [options] */
 export function sentEmailReplyStats(row, options = {}) {
   if (!row.task_completed_at) return null
   const stats = row.reply_stats ?? {}

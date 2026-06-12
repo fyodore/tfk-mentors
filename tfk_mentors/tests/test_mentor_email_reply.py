@@ -163,6 +163,7 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_selected_practices": 0,
                 "mentors_responded": 0,
                 "mentors_pending": 1,
+                "pending_mentor_ids": [self.mentor.id],
             },
         )
         for practice in self.practices:
@@ -181,6 +182,7 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_selected_practices": 1,
                 "mentors_responded": 1,
                 "mentors_pending": 0,
+                "pending_mentor_ids": [],
             },
         )
 
@@ -214,6 +216,7 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_selected_practices": 0,
                 "mentors_responded": 1,
                 "mentors_pending": 0,
+                "pending_mentor_ids": [],
             },
         )
 
@@ -320,6 +323,7 @@ class MentorEmailReplySubmitTests(TestCase):
                 "mentors_selected_practices": 1,
                 "mentors_responded": 1,
                 "mentors_pending": 0,
+                "pending_mentor_ids": [],
             },
         )
 
@@ -391,9 +395,13 @@ class ReplyReminderTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["pending_mentors"]), 1)
+        pending_row = response.data["pending_mentors"][0]
+        self.assertEqual(pending_row["email"], self.pending_mentor.email)
+        self.assertEqual(pending_row["first_name"], self.pending_mentor.first_name)
+        self.assertEqual(pending_row["last_name"], self.pending_mentor.last_name)
         self.assertEqual(
-            response.data["pending_mentors"][0]["email"],
-            self.pending_mentor.email,
+            pending_row["name"],
+            f"{self.pending_mentor.first_name} {self.pending_mentor.last_name}",
         )
 
     def test_render_reminder_body_includes_availability_message_and_link(self):

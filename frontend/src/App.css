@@ -623,6 +623,10 @@
   font-weight: 600;
 }
 
+.email-pending-mentors-list li strong {
+  font-weight: 600;
+}
+
 .email-detail-actions {
   margin-top: 0.85rem;
 }
