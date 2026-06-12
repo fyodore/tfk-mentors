@@ -437,6 +437,18 @@ class ReplyReminderTests(TestCase):
         self.assertEqual(len(stats["pending_mentors"]), 1)
         self.assertEqual(stats["pending_mentors"][0]["email"], self.pending_mentor.email)
 
+    def test_scheduled_email_pending_mentors_endpoint(self):
+        response = self.client.get(
+            f"/api/scheduled-email/{self.scheduled.id}/pending-mentors/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["pending_mentors"]), 1)
+        self.assertEqual(
+            response.data["pending_mentors"][0]["email"],
+            self.pending_mentor.email,
+        )
+
     def test_render_reminder_body_includes_availability_message_and_link(self):
         body = self.scheduled.render_reminder_body_for_mentor(self.pending_mentor)
         self.assertIn("At Practice mentors must reply with their availability.", body)
@@ -469,6 +481,21 @@ class ReplyReminderTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["sent"], 1)
         self.assertEqual(mock_send_mail.call_count, 1)
+
+    def test_api_send_reply_reminders_dry_run_includes_pending_mentors(self):
+        response = self.client.post(
+            f"/api/scheduled-email/{self.scheduled.id}/send-reply-reminders/",
+            {"dry_run": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["recipients"], 1)
+        self.assertEqual(len(response.data["pending_mentors"]), 1)
+        self.assertEqual(
+            response.data["pending_mentors"][0]["email"],
+            self.pending_mentor.email,
+        )
 
     def test_api_send_reply_reminders_requires_sent_email(self):
         unsent = ScheduledEmail.objects.create(

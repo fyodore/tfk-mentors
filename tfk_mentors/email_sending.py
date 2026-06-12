@@ -121,6 +121,9 @@ def send_reply_reminders(scheduled_email, *, dry_run=False):
             "skipped": skipped,
             "recipients": len(pending_with_email),
             "subject": subject,
+            "pending_mentors": ScheduledEmail.serialize_pending_mentor_rows(
+                pending_with_email
+            ),
         }
 
     _verify_email_delivery()

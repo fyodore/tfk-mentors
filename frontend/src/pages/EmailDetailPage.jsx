@@ -5,10 +5,12 @@ import {
   fetchMentors,
   fetchPractices,
   fetchScheduledEmail,
+  fetchScheduledEmailPendingMentors,
   fetchSeasons,
+  previewScheduledEmailReplyReminders,
   sendScheduledEmailReplyReminders,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, normalizePendingMentorRows, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
 
@@ -33,6 +35,9 @@ export default function EmailDetailPage() {
   const [reminderBusy, setReminderBusy] = useState(false)
   const [reminderMessage, setReminderMessage] = useState(null)
   const [reminderError, setReminderError] = useState(null)
+  const [pendingMentorsLoaded, setPendingMentorsLoaded] = useState([])
+  const [pendingMentorsLoading, setPendingMentorsLoading] = useState(false)
+  const [pendingMentorsLoadFailed, setPendingMentorsLoadFailed] = useState(false)
 
   const reloadEmail = async () => {
     const emailRow = await fetchScheduledEmail(emailId)
@@ -122,10 +127,67 @@ export default function EmailDetailPage() {
   const replyStats = email
     ? sentEmailReplyStats(email, { emailedCount })
     : null
-  const pendingMentors = useMemo(
+  const pendingMentorsFromEmail = useMemo(
     () => (email ? pendingMentorsForEmail(email, mentors) : []),
     [email, mentors]
   )
+  const pendingMentors =
+    pendingMentorsFromEmail.length > 0
+      ? pendingMentorsFromEmail
+      : pendingMentorsLoaded
+
+  useEffect(() => {
+    setPendingMentorsLoaded([])
+    setPendingMentorsLoadFailed(false)
+    setPendingMentorsLoading(false)
+  }, [emailId])
+
+  useEffect(() => {
+    if (!email?.task_completed_at || !replyStats?.pending) return
+    if (pendingMentorsFromEmail.length > 0) return
+
+    let cancelled = false
+    setPendingMentorsLoading(true)
+    setPendingMentorsLoadFailed(false)
+
+    async function loadPendingMentors() {
+      try {
+        const data = await fetchScheduledEmailPendingMentors(email.id)
+        if (cancelled) return
+        const rows = normalizePendingMentorRows(data?.pending_mentors)
+        if (rows.length > 0) {
+          setPendingMentorsLoaded(rows)
+          return
+        }
+      } catch {
+        if (cancelled) return
+      }
+
+      try {
+        const preview = await previewScheduledEmailReplyReminders(email.id)
+        if (cancelled) return
+        const rows = normalizePendingMentorRows(preview?.pending_mentors)
+        if (rows.length > 0) {
+          setPendingMentorsLoaded(rows)
+          return
+        }
+      } catch {
+        if (cancelled) return
+      }
+
+      if (!cancelled) {
+        setPendingMentorsLoadFailed(true)
+      }
+    }
+
+    loadPendingMentors().finally(() => {
+      if (!cancelled) setPendingMentorsLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [email, replyStats?.pending, pendingMentorsFromEmail.length])
 
   const handleSendReplyReminders = async () => {
     if (!email || !replyStats?.pending) return
@@ -221,7 +283,11 @@ export default function EmailDetailPage() {
                       Mentors awaiting response (
                       {pendingMentors.length || replyStats.pending})
                     </h4>
-                    {pendingMentors.length > 0 ? (
+                    {pendingMentorsLoading ? (
+                      <p className="muted email-pending-mentors-empty">
+                        Loading mentors awaiting response…
+                      </p>
+                    ) : pendingMentors.length > 0 ? (
                       <ul className="email-detail-list email-pending-mentors-list">
                         {pendingMentors.map((m) => (
                           <li key={m.id}>
@@ -235,12 +301,12 @@ export default function EmailDetailPage() {
                           </li>
                         ))}
                       </ul>
-                    ) : (
+                    ) : pendingMentorsLoadFailed ? (
                       <p className="muted email-pending-mentors-empty">
-                        Could not load mentor names. Refresh the page or check
-                        that the latest backend is deployed.
+                        Could not load mentor names. Redeploy the backend, then
+                        refresh this page.
                       </p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="email-detail-actions">
                     <button

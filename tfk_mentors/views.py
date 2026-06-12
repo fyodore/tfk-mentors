@@ -1152,6 +1152,34 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
 
+    @action(detail=True, methods=["get"], url_path="pending-mentors")
+    def pending_mentors(self, request, pk=None):
+        """Mentors who have not yet replied to this sent email."""
+        scheduled = self.get_object()
+        if not scheduled.task_completed_at:
+            return Response(
+                {
+                    "detail": (
+                        "Pending mentors are only available after the email has been sent."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        email = ScheduledEmail.objects.get(pk=scheduled.pk)
+        stats = email.reply_stats()
+        pending = stats.get("pending_mentors")
+        if not isinstance(pending, list):
+            pending = ScheduledEmail.serialize_pending_mentor_rows(
+                email.query_pending_mentors()
+            )
+        return Response(
+            {
+                "count": len(pending),
+                "pending_mentor_ids": stats.get("pending_mentor_ids") or [],
+                "pending_mentors": pending,
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="send-reply-reminders")
     def send_reply_reminders(self, request, pk=None):
         scheduled = self.get_object()
