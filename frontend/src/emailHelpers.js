@@ -23,10 +23,12 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const stats = row.reply_stats
   const isSent = Boolean(row.task_completed_at)
   const scheduledCount = scheduledRecipientCount(row, mentors)
-  const emailedCount =
-    isSent && stats?.mentors_emailed != null
-      ? stats.mentors_emailed
-      : scheduledCount
+  const emailedFromStats = stats?.mentors_emailed
+  const emailedFromField = row.recipients_emailed_count
+  const emailedCount = isSent
+    ? (emailedFromStats ??
+      (emailedFromField != null ? emailedFromField : null))
+    : scheduledCount
   const countLabel = isSent ? 'emailed' : 'scheduled'
   const count = isSent ? emailedCount : scheduledCount
   const replied =
@@ -54,8 +56,10 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   }
 
   if (mode === 'specific_mentors') {
-    if (count === 0) {
-      return 'Specific mentors — none selected'
+    if (count === 0 || count == null) {
+      return isSent && count == null
+        ? 'Specific mentors — sent (recipient count unavailable)'
+        : 'Specific mentors — none selected'
     }
     return (
       `Specific mentors (${count} mentor${count === 1 ? '' : 's'} ${countLabel}` +
@@ -66,6 +70,10 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   const sid = row.recipient_season
   const year = sid != null ? seasonYearById.get(sid) ?? sid : null
   let text = `All mentors in season ${year ?? '—'}`
+  if (isSent && count == null) {
+    text += ' (sent — recipient count unavailable'
+    return text + `${responseSummarySuffix()})`
+  }
   if (sid != null || count > 0) {
     text += ` (${count} mentor${count === 1 ? '' : 's'} ${countLabel}${responseSummarySuffix()})`
   }
@@ -200,16 +208,17 @@ export function pendingMentorsForEmail(email, mentors) {
   return []
 }
 
-/** @param {{ task_completed_at?: string|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] } }} row */
+/** @param {{ task_completed_at?: string|null, recipients_emailed_count?: number|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] } }} row */
 export function sentEmailReplyStats(row) {
   if (!row.task_completed_at) return null
   const stats = row.reply_stats
-  if (!stats) return null
-  const emailed = stats.mentors_emailed ?? 0
-  const replied = stats.mentors_replied ?? stats.mentors_responded ?? 0
-  const pendingIds = stats.pending_mentor_ids
+  if (!stats && row.recipients_emailed_count == null) return null
+  const emailed =
+    stats?.mentors_emailed ?? row.recipients_emailed_count ?? 0
+  const replied = stats?.mentors_replied ?? stats?.mentors_responded ?? 0
+  const pendingIds = stats?.pending_mentor_ids
   const pendingFromIds = Array.isArray(pendingIds) ? pendingIds.length : null
-  const pendingFromStats = stats.mentors_pending
+  const pendingFromStats = stats?.mentors_pending
   const pending =
     pendingFromIds != null
       ? pendingFromIds

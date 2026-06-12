@@ -61,7 +61,14 @@ def send_scheduled_email(scheduled_email, *, dry_run=False):
                 fail_silently=False,
             )
         scheduled_email.task_completed_at = timezone.now()
-        scheduled_email.save(update_fields=["task_completed_at", "updated_at"])
+        scheduled_email.mark_sent_recipients([mentor.pk for mentor in mentors])
+        scheduled_email.save(
+            update_fields=[
+                "task_completed_at",
+                "recipients_emailed_count",
+                "updated_at",
+            ]
+        )
 
     return {"sent": len(mentors), "recipients": len(mentors), "subject": subject}
 

@@ -1,5 +1,6 @@
 import re
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -539,6 +540,11 @@ class ScheduledEmail(TimeStampedModel):
         blank=True,
         help_text="When the send task finished (null if not run yet).",
     )
+    recipients_emailed_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many mentors received this email when it was sent.",
+    )
     body_text = models.TextField(
         help_text=(
             "Message template. Use {{ first_name }}, {{ last_name }}, {{ year }}, {{ pace }}, "
@@ -657,6 +663,8 @@ class ScheduledEmail(TimeStampedModel):
 
     def sync_mentor_tokens(self):
         """Create/remove per-mentor reply tokens to match current recipient list."""
+        if self.task_completed_at:
+            return
         mentor_ids = list(self.get_target_mentors().values_list("pk", flat=True))
         for mid in mentor_ids:
             ScheduledEmailMentorToken.objects.get_or_create(
@@ -665,26 +673,67 @@ class ScheduledEmail(TimeStampedModel):
             )
         self.mentor_tokens.exclude(mentor_id__in=mentor_ids).delete()
 
+    def mark_sent_recipients(self, mentor_ids=None):
+        """Record which mentors received this email when it was sent."""
+        if mentor_ids is None:
+            mentor_ids = list(
+                self.get_target_mentors().values_list("pk", flat=True)
+            )
+        self.mentor_tokens.filter(mentor_id__in=mentor_ids).update(
+            included_in_send=True
+        )
+        count = self.mentor_tokens.filter(included_in_send=True).count()
+        self.recipients_emailed_count = count
+        return count
+
     def ensure_mentor_tokens_for_stats(self):
         """Create missing reply tokens without removing existing ones (safe for stats reads)."""
+        if self.task_completed_at:
+            return
         mentor_ids = set(self.mentor_tokens.values_list("mentor_id", flat=True))
         mentor_ids.update(
             ScheduledEmailMentorPracticeReply.objects.filter(
                 mentor_token__scheduled_email_id=self.pk,
             ).values_list("mentor_id", flat=True)
         )
-        if not self.task_completed_at:
-            mentor_ids.update(
-                self.get_target_mentors().values_list("pk", flat=True)
-            )
+        mentor_ids.update(
+            self.get_target_mentors().values_list("pk", flat=True)
+        )
         for mid in mentor_ids:
             ScheduledEmailMentorToken.objects.get_or_create(
                 scheduled_email=self,
                 mentor_id=mid,
             )
 
+    def _send_time_mentor_token_queryset(self):
+        """Tokens issued on or before this email was sent."""
+        if not self.task_completed_at:
+            return self.mentor_tokens.all()
+        cutoff = self.task_completed_at + timedelta(minutes=1)
+        return self.mentor_tokens.filter(created_at__lte=cutoff)
+
     def _emailed_mentor_ids_for_stats(self):
         email_id = self.pk
+        if self.task_completed_at:
+            mentor_ids = set(
+                ScheduledEmailMentorToken.objects.filter(
+                    scheduled_email_id=email_id,
+                    included_in_send=True,
+                ).values_list("mentor_id", flat=True)
+            )
+            mentor_ids.update(
+                ScheduledEmailMentorPracticeReply.objects.filter(
+                    mentor_token__scheduled_email_id=email_id,
+                ).values_list("mentor_id", flat=True)
+            )
+            if not mentor_ids:
+                mentor_ids = set(
+                    self._send_time_mentor_token_queryset().values_list(
+                        "mentor_id", flat=True
+                    )
+                )
+            return mentor_ids
+
         mentor_ids = set(
             ScheduledEmailMentorToken.objects.filter(
                 scheduled_email_id=email_id
@@ -695,11 +744,11 @@ class ScheduledEmail(TimeStampedModel):
                 mentor_token__scheduled_email_id=email_id,
             ).values_list("mentor_id", flat=True)
         )
-        if not mentor_ids and not self.task_completed_at:
+        if not mentor_ids:
             mentor_ids = set(
                 self.get_target_mentors().values_list("pk", flat=True)
             )
-        if not mentor_ids and not self.task_completed_at:
+        if not mentor_ids:
             mentor_ids = set(
                 self.specific_mentors.values_list("pk", flat=True)
             )
@@ -912,6 +961,10 @@ class ScheduledEmailMentorToken(TimeStampedModel):
     )
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     email_received_confirmed = models.BooleanField(default=False)
+    included_in_send = models.BooleanField(
+        default=False,
+        help_text="True when this mentor was emailed as part of the send.",
+    )
 
     class Meta:
         constraints = [

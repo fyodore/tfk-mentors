@@ -19,6 +19,23 @@ from tfk_mentors.models import (
 )
 
 
+def mark_email_sent(email, *, completed_at=None):
+    """Test helper: freeze recipients for a sent email."""
+    if completed_at is not None:
+        email.task_completed_at = completed_at
+    elif email.task_completed_at is None:
+        email.task_completed_at = timezone.now()
+    email.mark_sent_recipients()
+    email.save(
+        update_fields=[
+            "task_completed_at",
+            "recipients_emailed_count",
+            "updated_at",
+        ]
+    )
+    return email
+
+
 class MentorEmailReplySubmitTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -258,7 +275,7 @@ class MentorEmailReplySubmitTests(TestCase):
 
     def test_reply_stats_ignores_mentor_assignments_without_reply_rows(self):
         self.scheduled.task_completed_at = timezone.now()
-        self.scheduled.save(update_fields=["task_completed_at"])
+        mark_email_sent(self.scheduled)
         MentorPracticeAssignment.objects.create(
             mentor=self.mentor,
             practice=self.practices[0],
@@ -273,7 +290,7 @@ class MentorEmailReplySubmitTests(TestCase):
     def test_reply_stats_ignores_assignments_without_email_m2m_link(self):
         self.scheduled.task_completed_at = timezone.now()
         self.scheduled.practices.clear()
-        self.scheduled.save(update_fields=["task_completed_at"])
+        mark_email_sent(self.scheduled)
         MentorPracticeAssignment.objects.create(
             mentor=self.mentor,
             practice=self.practices[0],
@@ -287,8 +304,7 @@ class MentorEmailReplySubmitTests(TestCase):
     def test_reply_stats_scoped_to_each_sent_email(self):
         """Replies under a newer email's token do not count toward an earlier send."""
         older_sent = self.scheduled
-        older_sent.task_completed_at = timezone.now() - timedelta(days=7)
-        older_sent.save(update_fields=["task_completed_at"])
+        mark_email_sent(older_sent, completed_at=timezone.now() - timedelta(days=7))
 
         newer_send = ScheduledEmail.objects.create(
             scheduled_send_at=timezone.now() + timedelta(days=7),
@@ -315,8 +331,7 @@ class MentorEmailReplySubmitTests(TestCase):
         self.assertEqual(older_stats["mentors_selected_practices"], 0)
         self.assertEqual(older_stats["mentors_pending"], 1)
 
-        newer_send.task_completed_at = timezone.now()
-        newer_send.save(update_fields=["task_completed_at"])
+        mark_email_sent(newer_send)
         newer_stats = newer_send.reply_stats()
         self.assertEqual(newer_stats["mentors_replied"], 1)
         self.assertEqual(newer_stats["mentors_selected_practices"], 1)
@@ -336,8 +351,7 @@ class MentorEmailReplySubmitTests(TestCase):
         mentor_b.seasons.add(self.season)
 
         first_send = self.scheduled
-        first_send.task_completed_at = timezone.now() - timedelta(days=14)
-        first_send.save(update_fields=["task_completed_at"])
+        mark_email_sent(first_send, completed_at=timezone.now() - timedelta(days=14))
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(
                 mentor_token=self.token_row,
@@ -349,12 +363,12 @@ class MentorEmailReplySubmitTests(TestCase):
 
         second_send = ScheduledEmail.objects.create(
             scheduled_send_at=timezone.now() - timedelta(days=7),
-            task_completed_at=timezone.now() - timedelta(days=7),
             body_text="Follow up",
             recipient_season=self.season,
         )
         second_send.practices.set(self.practices)
         second_send.sync_mentor_tokens()
+        mark_email_sent(second_send, completed_at=timezone.now() - timedelta(days=7))
 
         first_stats = first_send.reply_stats()
         second_stats = second_send.reply_stats()
@@ -395,6 +409,47 @@ class MentorEmailReplySubmitTests(TestCase):
             {self.mentor.email, mentor_b.email},
         )
 
+    @patch("tfk_mentors.email_sending.send_mail")
+    def test_emailed_count_frozen_at_send_for_all_in_season(self, mock_send_mail):
+        """Mentors added to the season after send are not counted as emailed."""
+        mock_send_mail.return_value = 1
+        send_at = timezone.now() - timedelta(days=3)
+        self.scheduled.task_completed_at = None
+        self.scheduled.recipients_emailed_count = None
+        self.scheduled.save(
+            update_fields=["task_completed_at", "recipients_emailed_count"]
+        )
+
+        from tfk_mentors.email_sending import send_scheduled_email
+
+        send_scheduled_email(self.scheduled)
+        self.scheduled.refresh_from_db()
+        self.assertEqual(self.scheduled.recipients_emailed_count, 1)
+
+        mentor_b = Mentor.objects.create(
+            first_name="Later",
+            last_name="Joiner",
+            email="later@example.com",
+            cell_phone="555-0199",
+            type=MentorTypes.PRACTICE,
+            pace="10-11",
+            split_practice=False,
+        )
+        mentor_b.seasons.add(self.season)
+        self.scheduled.sync_mentor_tokens()
+        self.scheduled.save(update_fields=["body_text"])
+
+        stats = self.scheduled.reply_stats()
+        self.assertEqual(stats["mentors_emailed"], 1)
+        self.assertEqual(stats["mentors_pending"], 1)
+        self.assertEqual(len(stats["pending_mentors"]), 1)
+        self.assertEqual(stats["pending_mentors"][0]["email"], self.mentor.email)
+
+        response = self.client.get("/api/scheduled-email/")
+        row = next(item for item in response.data if item["id"] == self.scheduled.id)
+        self.assertEqual(row["recipients_emailed_count"], 1)
+        self.assertEqual(row["reply_stats"]["mentors_emailed"], 1)
+
     def test_reply_stats_ignores_stale_prefetched_tokens(self):
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(
@@ -419,7 +474,7 @@ class MentorEmailReplySubmitTests(TestCase):
 
     def test_scheduled_email_api_includes_reply_stats(self):
         self.scheduled.task_completed_at = timezone.now()
-        self.scheduled.save(update_fields=["task_completed_at"])
+        mark_email_sent(self.scheduled)
         for practice in self.practices:
             ScheduledEmailMentorPracticeReply.objects.create(
                 mentor_token=self.token_row,
@@ -480,12 +535,12 @@ class ReplyReminderTests(TestCase):
         ]
         self.scheduled = ScheduledEmail.objects.create(
             scheduled_send_at=now - timedelta(days=1),
-            task_completed_at=now,
             body_text="Hello {{ first_name }}",
             recipient_season=self.season,
         )
         self.scheduled.practices.set(self.practices)
         self.scheduled.sync_mentor_tokens()
+        mark_email_sent(self.scheduled, completed_at=now)
         self.replied_token = ScheduledEmailMentorToken.objects.get(
             scheduled_email=self.scheduled,
             mentor=self.replied_mentor,
@@ -675,12 +730,12 @@ class BulkEmailReplyStatsTests(TestCase):
             mentor.seasons.add(self.season)
         self.scheduled = ScheduledEmail.objects.create(
             scheduled_send_at=now - timedelta(days=1),
-            task_completed_at=now,
             body_text="Hello {{ first_name }} {{ link }}",
             recipient_season=self.season,
         )
         self.scheduled.practices.set(self.practices)
         self.scheduled.sync_mentor_tokens()
+        mark_email_sent(self.scheduled, completed_at=now)
 
     def test_reply_stats_for_bulk_season_send(self):
         replying = self.mentors[:14]

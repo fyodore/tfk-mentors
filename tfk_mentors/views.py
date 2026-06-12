@@ -1234,7 +1234,8 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         instance = serializer.save()
-        instance.sync_mentor_tokens()
+        if not instance.task_completed_at:
+            instance.sync_mentor_tokens()
 
     @action(detail=True, methods=["post"], url_path="send-now")
     def send_now(self, request, pk=None):

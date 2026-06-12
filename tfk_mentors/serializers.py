@@ -213,6 +213,7 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             "id",
             "scheduled_send_at",
             "task_completed_at",
+            "recipients_emailed_count",
             "body_text",
             "practices",
             "recipient_mode",
@@ -227,6 +228,7 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             "id",
             "created_at",
             "updated_at",
+            "recipients_emailed_count",
             "reply_stats",
             "pending_mentors",
         ]
