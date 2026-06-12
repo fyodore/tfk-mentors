@@ -216,11 +216,12 @@ export default function EmailDetailPage() {
               ) : null}
               {isSent && replyStats && replyStats.pending > 0 ? (
                 <>
-                  {pendingMentors.length > 0 ? (
-                    <div className="email-pending-mentors">
-                      <h4 className="email-pending-mentors-heading">
-                        Mentors awaiting response ({pendingMentors.length})
-                      </h4>
+                  <div className="email-pending-mentors">
+                    <h4 className="email-pending-mentors-heading">
+                      Mentors awaiting response (
+                      {pendingMentors.length || replyStats.pending})
+                    </h4>
+                    {pendingMentors.length > 0 ? (
                       <ul className="email-detail-list email-pending-mentors-list">
                         {pendingMentors.map((m) => (
                           <li key={m.id}>
@@ -234,8 +235,13 @@ export default function EmailDetailPage() {
                           </li>
                         ))}
                       </ul>
-                    </div>
-                  ) : null}
+                    ) : (
+                      <p className="muted email-pending-mentors-empty">
+                        Could not load mentor names. Refresh the page or check
+                        that the latest backend is deployed.
+                      </p>
+                    )}
+                  </div>
                   <div className="email-detail-actions">
                     <button
                       type="button"

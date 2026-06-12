@@ -134,11 +134,15 @@ export function sentEmailReplyStats(row, options = {}) {
   const emailedFromStats = stats.mentors_emailed ?? 0
   const emailed = Math.max(emailedFromStats, options.emailedCount ?? 0)
   const replied = stats.mentors_replied ?? stats.mentors_responded ?? 0
+  const pendingIds = stats.pending_mentor_ids
+  const pendingFromIds = Array.isArray(pendingIds) ? pendingIds.length : null
   const pendingFromStats = stats.mentors_pending
   const pending =
-    pendingFromStats != null && pendingFromStats > 0
-      ? pendingFromStats
-      : Math.max(0, emailed - replied)
+    pendingFromIds != null && pendingFromIds > 0
+      ? pendingFromIds
+      : pendingFromStats != null && pendingFromStats > 0
+        ? pendingFromStats
+        : Math.max(0, emailed - replied)
   return {
     emailed,
     replied,

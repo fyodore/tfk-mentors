@@ -233,6 +233,15 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             return []
         email = ScheduledEmail.objects.get(pk=obj.pk)
         email.ensure_mentor_tokens_for_stats()
+        mentors = list(email.pending_mentors())
+        if not mentors:
+            pending_ids = email.reply_stats().get("pending_mentor_ids") or []
+            if pending_ids:
+                mentors = list(
+                    Mentor.objects.filter(pk__in=pending_ids).order_by(
+                        "last_name", "first_name", "id"
+                    )
+                )
         return [
             {
                 "id": mentor.id,
@@ -242,7 +251,7 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
                 "email": mentor.email,
                 "type": mentor.type,
             }
-            for mentor in email.pending_mentors()
+            for mentor in mentors
         ]
 
     def validate(self, attrs):
