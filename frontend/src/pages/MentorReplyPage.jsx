@@ -272,23 +272,22 @@ export default function MentorReplyPage() {
           <p className="mentor-reply-success" role="status">
             {isRemote ? SUBMIT_SUCCESS_REMOTE : SUBMIT_SUCCESS_AT_PRACTICE}
           </p>
-        ) : null}
-
-        <p className="mentor-reply-greeting">
-          Hello <strong>{mentor.first_name}</strong>
-        </p>
-        {seasonYear != null ? (
-          <p className="mentor-reply-thanks">
-            Thank you for mentoring for the{' '}
-            <strong>{seasonYear}</strong> season.
-          </p>
-        ) : null}
-        {(assignedPace || mentor.pace) && !isRemote ? (
-          <p className="mentor-reply-pace-assigned">
-            Your assigned pace group is{' '}
-            <strong>{formatPaceLabel(assignedPace || mentor.pace)}</strong>.
-          </p>
-        ) : null}
+        ) : (
+          <>
+            {seasonYear != null ? (
+              <p className="mentor-reply-thanks">
+                Thank you for mentoring for the{' '}
+                <strong>{seasonYear}</strong> season.
+              </p>
+            ) : null}
+            {(assignedPace || mentor.pace) && !isRemote ? (
+              <p className="mentor-reply-pace-assigned">
+                Your assigned pace group is{' '}
+                <strong>{formatPaceLabel(assignedPace || mentor.pace)}</strong>.
+              </p>
+            ) : null}
+          </>
+        )}
 
         {practices.length === 0 ? (
           <p className="muted">No practices were attached to this message.</p>
