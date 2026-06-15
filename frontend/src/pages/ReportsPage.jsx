@@ -3,6 +3,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchMentorNonResponseReport, fetchPracticeRosterReport, fetchSeasons } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
+import {
+  currentSeasonFromList,
+  sortSeasonsByYearDesc,
+} from '../seasonHelpers.js'
 
 const ROSTER_HEADERS = [
   'Practice Date',
@@ -351,6 +355,7 @@ export default function ReportsPage() {
   const [error, setError] = useState(null)
 
   const [seasonFilter, setSeasonFilter] = useState('')
+  const [seasonFilterReady, setSeasonFilterReady] = useState(false)
   const [practiceFilter, setPracticeFilter] = useState('')
   /** @type {[SortKey, function(SortKey): void]} */
   const [sortKey, setSortKey] = useState('pace')
@@ -358,10 +363,7 @@ export default function ReportsPage() {
   const [exporting, setExporting] = useState(false)
 
   const sortedSeasons = useMemo(
-    () =>
-      [...seasons].sort(
-        (a, b) => Number(b.year) - Number(a.year) || b.id - a.id
-      ),
+    () => sortSeasonsByYearDesc(seasons),
     [seasons]
   )
 
@@ -369,10 +371,20 @@ export default function ReportsPage() {
     let cancelled = false
     fetchSeasons()
       .then((list) => {
-        if (!cancelled) setSeasons(list)
+        if (cancelled) return
+        const orderedSeasons = sortSeasonsByYearDesc(list)
+        setSeasons(orderedSeasons)
+        const current = currentSeasonFromList(orderedSeasons)
+        if (current) {
+          setSeasonFilter(String(current.id))
+        }
+        setSeasonFilterReady(true)
       })
       .catch(() => {
-        if (!cancelled) setSeasons([])
+        if (!cancelled) {
+          setSeasons([])
+          setSeasonFilterReady(true)
+        }
       })
     return () => {
       cancelled = true
@@ -380,6 +392,7 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
+    if (!seasonFilterReady) return
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -409,7 +422,7 @@ export default function ReportsPage() {
     return () => {
       cancelled = true
     }
-  }, [seasonFilter])
+  }, [seasonFilter, seasonFilterReady])
 
   const sortedPendingReport = useMemo(
     () => sortPracticesByDateAsc(pendingReport),
@@ -520,6 +533,7 @@ export default function ReportsPage() {
               {sortedSeasons.map((s) => (
                 <option key={s.id} value={String(s.id)}>
                   {s.year}
+                  {s.is_current ? ' (current)' : ''}
                 </option>
               ))}
             </select>

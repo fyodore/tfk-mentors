@@ -10,16 +10,14 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
+import {
+  currentSeasonFromList,
+  sortSeasonsByYearDesc,
+} from '../seasonHelpers.js'
 
 const MENTOR_TYPES = ['At Practice', 'Remote']
 const REMOTE_TYPE = 'Remote'
 const PACE_TYPES = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
-
-function sortSeasonsByYearDesc(list) {
-  return [...list].sort(
-    (a, b) => Number(b.year) - Number(a.year) || b.id - a.id
-  )
-}
 
 function sortMentors(list) {
   return [...list].sort((a, b) => {
@@ -126,7 +124,12 @@ export default function MentorsPage() {
         const [mList, sList] = await Promise.all([fetchMentors(), fetchSeasons()])
         if (!cancelled) {
           setMentors(sortMentors(mList))
-          setSeasons(sortSeasonsByYearDesc(sList))
+          const orderedSeasons = sortSeasonsByYearDesc(sList)
+          setSeasons(orderedSeasons)
+          const current = currentSeasonFromList(orderedSeasons)
+          if (current) {
+            setSeasonFilter(String(current.id))
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -475,7 +478,10 @@ export default function MentorsPage() {
           >
             <option value="">All seasons</option>
             {sortedSeasons.map((s) => (
-              <option key={s.id} value={String(s.id)}>{s.year}</option>
+              <option key={s.id} value={String(s.id)}>
+                {s.year}
+                {s.is_current ? ' (current)' : ''}
+              </option>
             ))}
           </select>
 

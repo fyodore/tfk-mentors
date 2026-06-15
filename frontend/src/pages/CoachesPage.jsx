@@ -10,12 +10,10 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
-
-function sortSeasonsByYearDesc(list) {
-  return [...list].sort(
-    (a, b) => Number(b.year) - Number(a.year) || b.id - a.id
-  )
-}
+import {
+  currentSeasonFromList,
+  sortSeasonsByYearDesc,
+} from '../seasonHelpers.js'
 
 function sortCoaches(list) {
   return [...list].sort((a, b) => {
@@ -122,7 +120,12 @@ export default function CoachesPage() {
         ])
         if (!cancelled) {
           setCoaches(sortCoaches(cList))
-          setSeasons(sortSeasonsByYearDesc(sList))
+          const orderedSeasons = sortSeasonsByYearDesc(sList)
+          setSeasons(orderedSeasons)
+          const current = currentSeasonFromList(orderedSeasons)
+          if (current) {
+            setSeasonFilter(String(current.id))
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -427,6 +430,7 @@ export default function CoachesPage() {
             {sortedSeasons.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.year}
+                {s.is_current ? ' (current)' : ''}
               </option>
             ))}
           </select>
