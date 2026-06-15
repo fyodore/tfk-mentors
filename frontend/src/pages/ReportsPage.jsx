@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
 
 import { fetchMentorNonResponseReport, fetchPracticeRosterReport, fetchSeasons } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
@@ -106,7 +105,8 @@ function buildRosterRows(practices) {
 }
 
 /** @param {ReturnType<typeof sortPracticePeople>} practices */
-function downloadExcel(filename, practices) {
+async function downloadExcel(filename, practices) {
+  const XLSX = await import('xlsx')
   const rows = buildRosterRows(practices)
   const worksheet = XLSX.utils.aoa_to_sheet(rows)
 
@@ -355,6 +355,7 @@ export default function ReportsPage() {
   /** @type {[SortKey, function(SortKey): void]} */
   const [sortKey, setSortKey] = useState('pace')
   const [sortDirection, setSortDirection] = useState('asc')
+  const [exporting, setExporting] = useState(false)
 
   const sortedSeasons = useMemo(
     () =>
@@ -470,9 +471,17 @@ export default function ReportsPage() {
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
-  function handleDownloadExcel() {
+  async function handleDownloadExcel() {
     const stamp = new Date().toISOString().slice(0, 10)
-    downloadExcel(`practice-roster-report-${stamp}.xlsx`, displayPractices)
+    setExporting(true)
+    setError(null)
+    try {
+      await downloadExcel(`practice-roster-report-${stamp}.xlsx`, displayPractices)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -485,10 +494,10 @@ export default function ReportsPage() {
           <button
             type="button"
             className="btn btn-secondary"
-            disabled={loading || displayPractices.length === 0}
+            disabled={loading || exporting || displayPractices.length === 0}
             onClick={handleDownloadExcel}
           >
-            Download Excel
+            {exporting ? 'Preparing…' : 'Download Excel'}
           </button>
         </div>
 
