@@ -23,6 +23,7 @@ from .models import (
     MentorPracticeAssignment,
     MentorTypes,
     PaceTypes,
+    PACE_SORT,
     Practice,
     PracticeAttendanceReply,
     Requests,
@@ -41,7 +42,6 @@ ATTENDING_REPLY_VALUES = frozenset(
     }
 )
 PACE_VALUES = frozenset(c.value for c in PaceTypes)
-PACE_SORT = {choice.value: index for index, choice in enumerate(PaceTypes)}
 
 from .serializers import (
     CoachSerializer,

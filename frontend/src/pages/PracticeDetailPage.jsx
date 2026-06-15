@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
+import { sortByPaceThenName } from '../paceHelpers.js'
 
 function byName(a, b) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -172,13 +173,25 @@ export default function PracticeDetailPage() {
 
   const availableMentors = useMemo(() => {
     if (!practiceSeasonId) return []
-    return mentors.filter(
-      (m) =>
-        Array.isArray(m.seasons) &&
-        m.seasons.includes(practiceSeasonId) &&
-        !assignedMentorIds.has(m.id)
+    return sortByPaceThenName(
+      mentors.filter(
+        (m) =>
+          Array.isArray(m.seasons) &&
+          m.seasons.includes(practiceSeasonId) &&
+          !assignedMentorIds.has(m.id)
+      )
     )
   }, [mentors, practiceSeasonId, assignedMentorIds])
+
+  const sortedMentorReplies = useMemo(
+    () => sortByPaceThenName(mentorReplies),
+    [mentorReplies]
+  )
+
+  const sortedAvailableMentorReplies = useMemo(
+    () => sortByPaceThenName(availableMentorReplies),
+    [availableMentorReplies]
+  )
 
   async function handleAddCoach(e) {
     e.preventDefault()
@@ -349,7 +362,7 @@ export default function PracticeDetailPage() {
 
             <h2>Mentors + Pace Group</h2>
             <ul className="practice-list">
-              {mentorReplies.map((r) => {
+              {sortedMentorReplies.map((r) => {
                 const m = mentorById.get(r.mentor_id)
                 return (
                   <li key={r.id} className="practice-row">
@@ -389,7 +402,7 @@ export default function PracticeDetailPage() {
 
             <h2>Available mentors</h2>
             <ul className="practice-list">
-              {availableMentorReplies.map((r) => {
+              {sortedAvailableMentorReplies.map((r) => {
                 const m = mentorById.get(r.mentor_id)
                 return (
                   <li key={r.id} className="practice-row">

@@ -24,6 +24,8 @@ class PaceTypes(models.TextChoices):
     THIRTEEN = "13+"
 
 
+PACE_SORT = {choice.value: index for index, choice in enumerate(PaceTypes)}
+
 PACE_DASH_CHARS_RE = re.compile(r"[\u2010-\u2015\u2212-]+")
 
 
@@ -306,7 +308,13 @@ class Practice(TimeStampedModel):
                 latest_by_mentor[reply.mentor_id] = reply
         return sorted(
             latest_by_mentor.values(),
-            key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
+            key=lambda reply: (
+                PACE_SORT.get(
+                    normalize_pace(reply.pace or reply.mentor.pace or ""), 99
+                ),
+                reply.mentor.last_name,
+                reply.mentor.first_name,
+            ),
         )
 
     def latest_attending_mentor_replies(self):
