@@ -183,15 +183,11 @@ export default function PracticeDetailPage() {
     )
   }, [mentors, practiceSeasonId, assignedMentorIds])
 
-  const sortedMentorReplies = useMemo(
-    () => sortByPaceThenName(mentorReplies),
-    [mentorReplies]
-  )
-
-  const sortedAvailableMentorReplies = useMemo(
-    () => sortByPaceThenName(availableMentorReplies),
-    [availableMentorReplies]
-  )
+  const displayMentorReplies = useMemo(() => {
+    const assigned = sortByPaceThenName(mentorReplies)
+    const available = sortByPaceThenName(availableMentorReplies)
+    return [...assigned, ...available]
+  }, [mentorReplies, availableMentorReplies])
 
   async function handleAddCoach(e) {
     e.preventDefault()
@@ -262,6 +258,22 @@ export default function PracticeDetailPage() {
     }
   }
 
+  async function handleAddMentorToPractice(mentorId, pace) {
+    setSaving(true)
+    setError(null)
+    try {
+      await createPracticeMentorReply(practiceId, {
+        mentor: mentorId,
+        pace: pace || '8-9',
+      })
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleMakeMentorAvailable(mentorId) {
     setSaving(true)
     setError(null)
@@ -297,6 +309,9 @@ export default function PracticeDetailPage() {
               {' · '}
               Season {seasonById.get(practice.season)?.year ?? practice.season}
             </p>
+            {practice.description?.trim() ? (
+              <p className="practice-description">{practice.description.trim()}</p>
+            ) : null}
 
             <h2>Coaches + Pace</h2>
             <ul className="practice-list">
@@ -362,10 +377,24 @@ export default function PracticeDetailPage() {
 
             <h2>Mentors + Pace Group</h2>
             <ul className="practice-list">
-              {sortedMentorReplies.map((r) => {
+              {displayMentorReplies.map((r, index) => {
                 const m = mentorById.get(r.mentor_id)
+                const isAvailable = r.attendance === 'available'
+                const isFirstAvailable =
+                  isAvailable &&
+                  (index === 0 ||
+                    displayMentorReplies[index - 1]?.attendance !== 'available')
                 return (
-                  <li key={r.id} className="practice-row">
+                  <li
+                    key={r.id}
+                    className={[
+                      'practice-row',
+                      isAvailable ? 'practice-row-available' : '',
+                      isFirstAvailable ? 'practice-row-available-first' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
                     <div className="practice-row-main">
                       <span className="practice-date">
                         {r.first_name && r.last_name
@@ -374,17 +403,33 @@ export default function PracticeDetailPage() {
                             ? `${m.first_name} ${m.last_name}`
                             : `Mentor #${r.mentor_id}`}
                       </span>
-                      <span className="muted">Pace group {r.pace}</span>
+                      <span className="muted">
+                        Pace group {r.pace}
+                        {isAvailable ? ' · Available' : ''}
+                      </span>
                     </div>
                     <div className="practice-row-actions">
-                      <button
-                        type="button"
-                        className="btn btn-text"
-                        disabled={saving}
-                        onClick={() => handleMakeMentorAvailable(r.mentor_id)}
-                      >
-                        Make available
-                      </button>
+                      {isAvailable ? (
+                        <button
+                          type="button"
+                          className="btn btn-text"
+                          disabled={saving}
+                          onClick={() =>
+                            handleAddMentorToPractice(r.mentor_id, r.pace)
+                          }
+                        >
+                          Add to Practice
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-text"
+                          disabled={saving}
+                          onClick={() => handleMakeMentorAvailable(r.mentor_id)}
+                        >
+                          Make available
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-text btn-text-danger"
@@ -397,38 +442,8 @@ export default function PracticeDetailPage() {
                   </li>
                 )
               })}
-              {mentorReplies.length === 0 && <li className="muted">No mentors assigned.</li>}
-            </ul>
-
-            <h2>Available mentors</h2>
-            <ul className="practice-list">
-              {sortedAvailableMentorReplies.map((r) => {
-                const m = mentorById.get(r.mentor_id)
-                return (
-                  <li key={r.id} className="practice-row">
-                    <div className="practice-row-main">
-                      <span className="practice-date">
-                        {r.first_name && r.last_name
-                          ? `${r.first_name} ${r.last_name}`
-                          : m
-                            ? `${m.first_name} ${m.last_name}`
-                            : `Mentor #${r.mentor_id}`}
-                      </span>
-                      <span className="muted">Pace group {r.pace}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-text btn-text-danger"
-                      disabled={saving}
-                      onClick={() => handleRemoveMentor(r.mentor_id)}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                )
-              })}
-              {availableMentorReplies.length === 0 && (
-                <li className="muted">No mentors marked available.</li>
+              {displayMentorReplies.length === 0 && (
+                <li className="muted">No mentors assigned.</li>
               )}
             </ul>
 

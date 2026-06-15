@@ -32,9 +32,45 @@ function emptyPracticeForm(defaultSeasonId) {
     practiceDate: '',
     practiceTime: '09:00',
     nyrr_race: '',
+    description: '',
     full_practice: true,
     season: defaultSeasonId === '' ? '' : String(defaultSeasonId),
   }
+}
+
+function resizeDescriptionTextarea(event) {
+  const el = event.target
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+function PracticeDescriptionField({ formId, value, onChange }) {
+  useEffect(() => {
+    const el = document.getElementById(`${formId}-description`)
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [formId, value])
+
+  return (
+    <>
+      <label className="field-label" htmlFor={`${formId}-description`}>
+        Description <span className="muted">(optional)</span>
+      </label>
+      <textarea
+        id={`${formId}-description`}
+        className="field-input field-textarea practice-description-textarea"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+          resizeDescriptionTextarea(e)
+        }}
+        onFocus={resizeDescriptionTextarea}
+        rows={12}
+        spellCheck
+      />
+    </>
+  )
 }
 
 export default function PracticesPage() {
@@ -147,6 +183,7 @@ export default function PracticesPage() {
       practiceDate,
       practiceTime,
       nyrr_race: practice.nyrr_race ?? '',
+      description: practice.description ?? '',
       full_practice: Boolean(practice.full_practice),
       season: String(practice.season ?? ''),
     })
@@ -168,6 +205,7 @@ export default function PracticesPage() {
       payload: {
         date: iso,
         nyrr_race: form.nyrr_race.trim(),
+        description: form.description.trim(),
         full_practice: form.full_practice,
         season: seasonId,
       },
@@ -250,6 +288,11 @@ export default function PracticesPage() {
             Season {seasonYearById.get(p.season) ?? p.season}
             {p.full_practice ? ' · Full practice' : ' · Partial'}
           </span>
+          {p.description?.trim() ? (
+            <span className="muted practice-description-preview">
+              {p.description.trim()}
+            </span>
+          ) : null}
         </div>
         <div className="practice-row-actions">
           <Link className="btn btn-text" to={`/practices/${p.id}`}>
@@ -487,6 +530,14 @@ export default function PracticesPage() {
             maxLength={150}
           />
 
+          <PracticeDescriptionField
+            formId="pc"
+            value={form.description}
+            onChange={(description) =>
+              setForm((f) => ({ ...f, description }))
+            }
+          />
+
           <label className="field-label checkbox-label">
             <input
               type="checkbox"
@@ -607,6 +658,14 @@ export default function PracticesPage() {
               setForm((f) => ({ ...f, nyrr_race: e.target.value }))
             }
             maxLength={150}
+          />
+
+          <PracticeDescriptionField
+            formId="pe"
+            value={form.description}
+            onChange={(description) =>
+              setForm((f) => ({ ...f, description }))
+            }
           />
 
           <label className="field-label checkbox-label">

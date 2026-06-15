@@ -12,6 +12,7 @@ from .models import (
     ScheduledEmail,
     ScheduledEmailRecipientMode,
     Season,
+    TfkStaff,
     normalize_pace,
 )
 
@@ -53,6 +54,23 @@ class CoachSerializer(serializers.ModelSerializer):
             "email",
             "cell",
             "seasons",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class TfkStaffSerializer(serializers.ModelSerializer):
+    cell_phone = serializers.CharField(max_length=20, allow_blank=True, required=False)
+
+    class Meta:
+        model = TfkStaff
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "email",
+            "cell_phone",
             "created_at",
             "updated_at",
         ]
@@ -150,6 +168,7 @@ class PracticeSerializer(serializers.ModelSerializer):
             "id",
             "date",
             "nyrr_race",
+            "description",
             "mentors",
             "full_practice",
             "season",

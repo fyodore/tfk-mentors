@@ -351,6 +351,14 @@
   line-height: 1.45;
 }
 
+.practice-description-textarea.field-textarea.field-input {
+  width: 100%;
+  min-height: 14rem;
+  max-height: 70vh;
+  resize: vertical;
+  field-sizing: content;
+}
+
 .modal-error {
   margin: 0.75rem 0 0;
   font-size: 0.9rem;
@@ -488,10 +496,34 @@
   font-size: 0.95rem;
 }
 
+.practice-description-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+
+.practice-description {
+  margin: 0 0 1.25rem;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
 .practice-row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+}
+
+.practice-row-available-first {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.practice-row-available .muted {
+  font-style: italic;
 }
 
 .modal-form-stack {

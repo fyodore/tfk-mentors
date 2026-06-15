@@ -93,6 +93,27 @@ class PracticeMentorAvailableTests(TestCase):
             self.mentor.id,
         )
 
+    def test_add_available_mentor_back_to_practice(self):
+        self.reply.attendance = PracticeAttendanceReply.AVAILABLE
+        self.reply.save(update_fields=["attendance", "updated_at"])
+        self.practice.sync_mentor_assignments_from_replies()
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": "11-12"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["attendance"], "attending")
+
+        self.practice.refresh_from_db()
+        self.assertTrue(
+            MentorPracticeAssignment.objects.filter(
+                practice=self.practice,
+                mentor=self.mentor,
+            ).exists()
+        )
+
     def test_roster_report_includes_available_mentors(self):
         self.reply.attendance = PracticeAttendanceReply.AVAILABLE
         self.reply.save(update_fields=["attendance", "updated_at"])

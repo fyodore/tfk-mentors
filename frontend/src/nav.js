@@ -4,6 +4,7 @@ export const SITE_NAV = [
   { path: '/seasons', label: 'Seasons' },
   { path: '/practices', label: 'Practices' },
   { path: '/coaches', label: 'Coaches' },
+  { path: '/tfk-staff', label: 'TFK Staff' },
   { path: '/mentors', label: 'Mentors' },
   { path: '/emails', label: 'Emails' },
   { path: '/reports', label: 'Reports' },
@@ -24,6 +25,11 @@ export const SITE_PAGE_CARDS = [
     path: '/coaches',
     title: 'Coaches',
     description: 'Manage coaches and their season assignment.',
+  },
+  {
+    path: '/tfk-staff',
+    title: 'TFK Staff',
+    description: 'Manage TFK staff contacts with name, email, and cell phone.',
   },
   {
     path: '/mentors',

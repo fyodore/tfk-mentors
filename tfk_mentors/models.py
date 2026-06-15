@@ -164,6 +164,47 @@ class Coach(TimeStampedModel):
         return self.practices.all()
 
 
+class TfkStaff(TimeStampedModel):
+    """TFK staff contact (admin roster)."""
+
+    first_name = models.CharField(max_length=75)
+    last_name = models.CharField(max_length=100)
+    email = models.EmailField(max_length=100)
+    cell_phone = models.CharField(max_length=20, blank=True, default="")
+
+    class Meta:
+        ordering = ["last_name", "first_name", "id"]
+        verbose_name = "TFK staff"
+        verbose_name_plural = "TFK staff"
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+    def get_first_name(self):
+        return self.first_name
+
+    def set_first_name(self, value):
+        self.first_name = value
+
+    def get_last_name(self):
+        return self.last_name
+
+    def set_last_name(self, value):
+        self.last_name = value
+
+    def get_email(self):
+        return self.email
+
+    def set_email(self, value):
+        self.email = value
+
+    def get_cell_phone(self):
+        return self.cell_phone
+
+    def set_cell_phone(self, value):
+        self.cell_phone = value
+
+
 class Mentor(TimeStampedModel):
     """Model for an item with timestamps."""
 
@@ -258,6 +299,7 @@ class Practice(TimeStampedModel):
     """Model for an item with timestamps."""
     date = models.DateTimeField()
     nyrr_race = models.CharField(max_length=150, blank=True, default="")
+    description = models.TextField(blank=True, default="")
     mentors = models.ManyToManyField(Mentor)
     full_practice = models.BooleanField(default=True)
     season = models.ForeignKey(Season, on_delete=models.CASCADE)
@@ -276,6 +318,12 @@ class Practice(TimeStampedModel):
 
     def set_nyrr_race(self, value):
         self.nyrr_race = value
+
+    def get_description(self):
+        return self.description
+
+    def set_description(self, value):
+        self.description = value
 
     def get_full_practice(self):
         return self.full_practice

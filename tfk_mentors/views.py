@@ -31,6 +31,7 @@ from .models import (
     ScheduledEmailMentorPracticeReply,
     ScheduledEmailMentorToken,
     Season,
+    TfkStaff,
     normalize_pace,
 )
 
@@ -53,6 +54,7 @@ from .serializers import (
     RequestsSerializer,
     ScheduledEmailSerializer,
     SeasonSerializer,
+    TfkStaffSerializer,
     practice_mentor_reply_payload,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
@@ -152,6 +154,13 @@ class SeasonViewSet(viewsets.ModelViewSet):
         if request.data.get("is_current") is True:
             self._clear_other_current_seasons(keep_id=kwargs.get("pk"))
         return super().partial_update(request, *args, **kwargs)
+
+
+class TfkStaffViewSet(viewsets.ModelViewSet):
+    """Full CRUD for TFK staff at /api/tfk-staff/."""
+
+    queryset = TfkStaff.objects.all().order_by("last_name", "first_name", "id")
+    serializer_class = TfkStaffSerializer
 
 
 class CoachViewSet(viewsets.ModelViewSet):

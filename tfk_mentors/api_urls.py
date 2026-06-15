@@ -15,10 +15,12 @@ from .views import (
     SeasonViewSet,
     SiteAuthView,
     SiteConfigView,
+    TfkStaffViewSet,
 )
 
 router = DefaultRouter()
 router.register("season", SeasonViewSet, basename="season")
+router.register("tfk-staff", TfkStaffViewSet, basename="tfk-staff")
 router.register("coach", CoachViewSet, basename="coach")
 router.register(
     "coach-practice-assignment",

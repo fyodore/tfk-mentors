@@ -168,6 +168,7 @@ export async function deletePractice(id) {
 }
 
 const COACH_LIST = apiPath('/api/coach/')
+const TFK_STAFF_LIST = apiPath('/api/tfk-staff/')
 const MENTOR_LIST = apiPath('/api/mentor/')
 const COACH_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/coach-practice-assignment/')
 const MENTOR_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/mentor-practice-assignment/')
@@ -225,6 +226,69 @@ export async function patchCoach(id, body) {
 /** @param {number|string} id */
 export async function deleteCoach(id) {
   const res = await fetch(`${COACH_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+/** @param {unknown} data */
+export function normalizeTfkStaffList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+/** List TFK staff from Django: `GET /api/tfk-staff/`. */
+export async function fetchTfkStaff() {
+  const res = await fetch(TFK_STAFF_LIST, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizeTfkStaffList(data)
+}
+
+/** @param {Record<string, unknown>} body */
+export async function createTfkStaff(body) {
+  const res = await fetch(TFK_STAFF_LIST, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchTfkStaff(id, body) {
+  const res = await fetch(`${TFK_STAFF_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deleteTfkStaff(id) {
+  const res = await fetch(`${TFK_STAFF_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {

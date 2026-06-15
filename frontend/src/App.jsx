@@ -11,6 +11,7 @@ import PracticeDetailPage from './pages/PracticeDetailPage.jsx'
 import PracticesPage from './pages/PracticesPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import SeasonsPage from './pages/SeasonsPage.jsx'
+import TfkStaffPage from './pages/TfkStaffPage.jsx'
 
 import './App.css'
 
@@ -61,6 +62,14 @@ export default function App() {
           element={
             <Protected>
               <CoachesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/tfk-staff"
+          element={
+            <Protected>
+              <TfkStaffPage />
             </Protected>
           }
         />
