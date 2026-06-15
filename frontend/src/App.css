@@ -455,6 +455,16 @@
   border-top: 1px solid var(--border, #ddd);
 }
 
+.practice-available-mentors-section {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border, #ddd);
+}
+
+.practice-available-mentors-section .practices-section-heading {
+  margin-bottom: 0.75rem;
+}
+
 .field-select {
   display: block;
 }
@@ -514,12 +524,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-}
-
-.practice-row-available-first {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
 }
 
 .practice-row-available .muted {

@@ -183,11 +183,67 @@ export default function PracticeDetailPage() {
     )
   }, [mentors, practiceSeasonId, assignedMentorIds])
 
-  const displayMentorReplies = useMemo(() => {
-    const assigned = sortByPaceThenName(mentorReplies)
-    const available = sortByPaceThenName(availableMentorReplies)
-    return [...assigned, ...available]
-  }, [mentorReplies, availableMentorReplies])
+  const assignedMentorReplies = useMemo(
+    () => sortByPaceThenName(mentorReplies),
+    [mentorReplies]
+  )
+
+  const sortedAvailableMentorReplies = useMemo(
+    () => sortByPaceThenName(availableMentorReplies),
+    [availableMentorReplies]
+  )
+
+  function renderMentorReplyRow(r, isAvailable) {
+    const m = mentorById.get(r.mentor_id)
+    return (
+      <li
+        key={r.id}
+        className={
+          isAvailable ? 'practice-row practice-row-available' : 'practice-row'
+        }
+      >
+        <div className="practice-row-main">
+          <span className="practice-date">
+            {r.first_name && r.last_name
+              ? `${r.first_name} ${r.last_name}`
+              : m
+                ? `${m.first_name} ${m.last_name}`
+                : `Mentor #${r.mentor_id}`}
+          </span>
+          <span className="muted">Pace group {r.pace}</span>
+        </div>
+        <div className="practice-row-actions">
+          {isAvailable ? (
+            <button
+              type="button"
+              className="btn btn-text"
+              disabled={saving}
+              onClick={() => handleAddMentorToPractice(r.mentor_id, r.pace)}
+            >
+              Add to Practice
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-text"
+              disabled={saving}
+              onClick={() => handleMakeMentorAvailable(r.mentor_id)}
+            >
+              Make available
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-text btn-text-danger"
+            disabled={saving}
+            onClick={() => handleRemoveMentor(r.mentor_id)}
+          >
+            Remove
+          </button>
+        </div>
+      </li>
+    )
+  }
 
   async function handleAddCoach(e) {
     e.preventDefault()
@@ -377,75 +433,31 @@ export default function PracticeDetailPage() {
 
             <h2>Mentors + Pace Group</h2>
             <ul className="practice-list">
-              {displayMentorReplies.map((r, index) => {
-                const m = mentorById.get(r.mentor_id)
-                const isAvailable = r.attendance === 'available'
-                const isFirstAvailable =
-                  isAvailable &&
-                  (index === 0 ||
-                    displayMentorReplies[index - 1]?.attendance !== 'available')
-                return (
-                  <li
-                    key={r.id}
-                    className={[
-                      'practice-row',
-                      isAvailable ? 'practice-row-available' : '',
-                      isFirstAvailable ? 'practice-row-available-first' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                  >
-                    <div className="practice-row-main">
-                      <span className="practice-date">
-                        {r.first_name && r.last_name
-                          ? `${r.first_name} ${r.last_name}`
-                          : m
-                            ? `${m.first_name} ${m.last_name}`
-                            : `Mentor #${r.mentor_id}`}
-                      </span>
-                      <span className="muted">
-                        Pace group {r.pace}
-                        {isAvailable ? ' · Available' : ''}
-                      </span>
-                    </div>
-                    <div className="practice-row-actions">
-                      {isAvailable ? (
-                        <button
-                          type="button"
-                          className="btn btn-text"
-                          disabled={saving}
-                          onClick={() =>
-                            handleAddMentorToPractice(r.mentor_id, r.pace)
-                          }
-                        >
-                          Add to Practice
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-text"
-                          disabled={saving}
-                          onClick={() => handleMakeMentorAvailable(r.mentor_id)}
-                        >
-                          Make available
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-text btn-text-danger"
-                        disabled={saving}
-                        onClick={() => handleRemoveMentor(r.mentor_id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-              {displayMentorReplies.length === 0 && (
-                <li className="muted">No mentors assigned.</li>
-              )}
+              {assignedMentorReplies.map((r) => renderMentorReplyRow(r, false))}
+              {assignedMentorReplies.length === 0 &&
+                sortedAvailableMentorReplies.length === 0 && (
+                  <li className="muted">No mentors assigned.</li>
+                )}
             </ul>
+
+            {sortedAvailableMentorReplies.length > 0 && (
+              <section
+                className="practices-section practice-available-mentors-section"
+                aria-labelledby="available-mentors-heading"
+              >
+                <h3
+                  id="available-mentors-heading"
+                  className="practices-section-heading"
+                >
+                  Available Mentors
+                </h3>
+                <ul className="practice-list">
+                  {sortedAvailableMentorReplies.map((r) =>
+                    renderMentorReplyRow(r, true)
+                  )}
+                </ul>
+              </section>
+            )}
 
             <form className="modal-form-stack" onSubmit={handleAddMentor}>
               <label className="field-label" htmlFor="add-mentor">Add mentor</label>
