@@ -46,14 +46,24 @@ class MentorNonResponseReportTests(TestCase):
         self.mentor_responded.seasons.add(self.season)
         self.mentor_pending.seasons.add(self.season)
 
+        now = timezone.now()
         self.scheduled = ScheduledEmail.objects.create(
-            scheduled_send_at=timezone.now() - timedelta(days=1),
-            task_completed_at=timezone.now() - timedelta(hours=1),
+            scheduled_send_at=now - timedelta(days=1),
             body_text="Hi {{ first_name }}",
             recipient_season=self.season,
         )
         self.scheduled.practices.add(self.practice)
         self.scheduled.sync_mentor_tokens()
+        self.scheduled.task_completed_at = now - timedelta(hours=1)
+        self.scheduled.mark_sent_recipients()
+        self.scheduled.save(
+            update_fields=[
+                "task_completed_at",
+                "recipients_emailed_count",
+                "updated_at",
+            ]
+        )
+        self.scheduled.mentor_tokens.update(included_in_send=True)
 
         token = ScheduledEmailMentorToken.objects.get(
             scheduled_email=self.scheduled,

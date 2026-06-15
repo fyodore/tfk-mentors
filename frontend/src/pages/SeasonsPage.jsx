@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 
-import { createSeason, deleteSeason, fetchSeasons, patchSeason } from '../api'
+import { createSeason, deleteSeason, fetchSeasons, patchSeason, setCurrentSeason } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
+import { sortSeasonsByYearDesc } from '../seasonHelpers.js'
 
 function sortSeasons(list) {
-  return [...list].sort(
-    (a, b) => Number(b.year) - Number(a.year) || b.id - a.id
-  )
+  return sortSeasonsByYearDesc(list)
 }
 
 export default function SeasonsPage() {
@@ -134,6 +133,21 @@ export default function SeasonsPage() {
     }
   }
 
+  const handleSetCurrent = async (season) => {
+    if (season.is_current) return
+    setLoadError(null)
+    setBusy(true)
+    try {
+      await setCurrentSeason(season.id)
+      const list = await fetchSeasons()
+      setSeasons(sortSeasons(list))
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <>
       <AppHeader />
@@ -171,11 +185,25 @@ export default function SeasonsPage() {
                 <div className="season-row-main">
                   <span className="season-label">Year</span>
                   <span className="year">{s.year}</span>
+                  {s.is_current ? (
+                    <span className="season-current-badge">Current season</span>
+                  ) : null}
                 </div>
                 <div className="season-row-actions">
+                  {!s.is_current ? (
+                    <button
+                      type="button"
+                      className="btn btn-text"
+                      disabled={busy}
+                      onClick={() => handleSetCurrent(s)}
+                    >
+                      Set as current
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-text"
+                    disabled={busy}
                     onClick={() => openEdit(s)}
                   >
                     Edit
@@ -183,6 +211,7 @@ export default function SeasonsPage() {
                   <button
                     type="button"
                     className="btn btn-text btn-text-danger"
+                    disabled={busy}
                     onClick={() => openDelete(s)}
                   >
                     Delete

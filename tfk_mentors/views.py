@@ -137,6 +137,22 @@ class SeasonViewSet(viewsets.ModelViewSet):
     queryset = Season.objects.all().order_by("-year", "-id")
     serializer_class = SeasonSerializer
 
+    def _clear_other_current_seasons(self, keep_id=None):
+        queryset = Season.objects.filter(is_current=True)
+        if keep_id is not None:
+            queryset = queryset.exclude(pk=keep_id)
+        queryset.update(is_current=False)
+
+    def create(self, request, *args, **kwargs):
+        if request.data.get("is_current") is True:
+            self._clear_other_current_seasons()
+        return super().create(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if request.data.get("is_current") is True:
+            self._clear_other_current_seasons(keep_id=kwargs.get("pk"))
+        return super().partial_update(request, *args, **kwargs)
+
 
 class CoachViewSet(viewsets.ModelViewSet):
     """Full CRUD for Coach at /api/coach/."""
@@ -462,7 +478,11 @@ class PracticeViewSet(viewsets.ModelViewSet):
             return PracticeDetailSerializer
         return PracticeSerializer
 
-    @action(detail=True, methods=["get", "post", "delete"], url_path="mentor-replies")
+    @action(
+        detail=True,
+        methods=["get", "post", "patch", "delete"],
+        url_path="mentor-replies",
+    )
     def mentor_replies(self, request, pk=None):
         """Mentors assigned to this practice via ScheduledEmailMentorPracticeReply."""
         practice = self.get_object()
@@ -470,11 +490,53 @@ class PracticeViewSet(viewsets.ModelViewSet):
         if request.method == "GET":
             practice.sync_mentor_assignments_from_replies()
             return Response(
-                [
-                    practice_mentor_reply_payload(r)
-                    for r in practice.latest_attending_mentor_replies()
-                ]
+                {
+                    "mentors": [
+                        practice_mentor_reply_payload(r)
+                        for r in practice.latest_attending_mentor_replies()
+                    ],
+                    "available_mentors": [
+                        practice_mentor_reply_payload(r)
+                        for r in practice.latest_available_mentor_replies()
+                    ],
+                }
             )
+
+        if request.method == "PATCH":
+            mentor_id = request.data.get("mentor")
+            attendance = (request.data.get("attendance") or "").strip()
+            try:
+                mentor_id = int(mentor_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid mentor id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if attendance != PracticeAttendanceReply.AVAILABLE:
+                return Response(
+                    {"detail": "Only 'available' attendance is supported."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            reply = (
+                ScheduledEmailMentorPracticeReply.objects.filter(
+                    practice=practice,
+                    mentor_id=mentor_id,
+                    attendance__in=ATTENDING_REPLY_VALUES,
+                )
+                .select_related("mentor", "mentor_token__scheduled_email")
+                .order_by("-updated_at")
+                .first()
+            )
+            if reply is None:
+                return Response(
+                    {"detail": "Mentor is not assigned to this practice."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            with transaction.atomic():
+                reply.attendance = PracticeAttendanceReply.AVAILABLE
+                reply.save(update_fields=["attendance", "updated_at"])
+                practice.sync_mentor_assignments_from_replies()
+            return Response(practice_mentor_reply_payload(reply))
 
         if request.method == "POST":
             mentor_id = request.data.get("mentor")
@@ -613,6 +675,8 @@ def validate_practice_attendance(practice, mentor, attendance):
     valid_vals = {c.value for c in PracticeAttendanceReply}
     if attendance not in valid_vals:
         raise ValueError("Invalid attendance choice.")
+    if attendance == PracticeAttendanceReply.AVAILABLE:
+        return
     if mentor.type == MentorTypes.REMOTE:
         if attendance not in (
             PracticeAttendanceReply.ATTENDING,
@@ -643,10 +707,15 @@ def validate_practice_attendance(practice, mentor, attendance):
         raise ValueError("Choose attending or not attending.")
 
 
+PACE_REQUIRED_REPLY_VALUES = ATTENDING_REPLY_VALUES | {
+    PracticeAttendanceReply.AVAILABLE,
+}
+
+
 def validate_reply_pace(mentor, attendance, pace):
     """Raise ValueError if pace is missing or invalid for this reply."""
     pace = normalize_pace(pace) if pace else ""
-    if attendance not in ATTENDING_REPLY_VALUES:
+    if attendance not in PACE_REQUIRED_REPLY_VALUES:
         if pace:
             raise ValueError("Pace should only be set when attending a practice.")
         return
@@ -662,11 +731,11 @@ def validate_reply_pace(mentor, attendance, pace):
         raise ValueError("Invalid pace choice.")
 
 
-def mentors_from_practice_replies(practice):
-    """Latest attending mentor reply per mentor, using prefetched replies when available."""
+def _latest_replies_from_prefetch(practice, attendance_values):
+    """Latest reply per mentor for attendance values, using prefetched replies when set."""
     latest_by_mentor = {}
     for reply in practice.mentor_email_replies.all():
-        if reply.attendance not in ATTENDING_REPLY_VALUES:
+        if reply.attendance not in attendance_values:
             continue
         existing = latest_by_mentor.get(reply.mentor_id)
         if existing is None or reply.updated_at > existing.updated_at:
@@ -674,6 +743,18 @@ def mentors_from_practice_replies(practice):
     return sorted(
         latest_by_mentor.values(),
         key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
+    )
+
+
+def mentors_from_practice_replies(practice):
+    """Latest attending mentor reply per mentor, using prefetched replies when available."""
+    return _latest_replies_from_prefetch(practice, ATTENDING_REPLY_VALUES)
+
+
+def mentors_available_from_practice_replies(practice):
+    """Latest available mentor reply per mentor, using prefetched replies when available."""
+    return _latest_replies_from_prefetch(
+        practice, {PracticeAttendanceReply.AVAILABLE}
     )
 
 
@@ -748,6 +829,24 @@ def build_practice_roster_report(practices):
                     "pace": normalize_pace(reply.pace or mentor.pace or ""),
                     "mentor_type": mentor.type,
                     "attendance": reply.attendance,
+                    "available": False,
+                }
+            )
+
+        available_mentors = []
+        for reply in mentors_available_from_practice_replies(practice):
+            mentor = reply.mentor
+            available_mentors.append(
+                {
+                    "mentor_id": mentor.id,
+                    "role": "Mentor",
+                    "first_name": mentor.first_name,
+                    "last_name": mentor.last_name,
+                    "email": mentor.email,
+                    "pace": normalize_pace(reply.pace or mentor.pace or ""),
+                    "mentor_type": mentor.type,
+                    "attendance": reply.attendance,
+                    "available": True,
                 }
             )
 
@@ -761,6 +860,7 @@ def build_practice_roster_report(practices):
                 "full_practice": practice.full_practice,
                 "coaches": coaches,
                 "mentors": mentors,
+                "available_mentors": available_mentors,
                 "mentor_pace_counts": mentor_pace_counts_from_rows(
                     mentors, include_zero=True
                 ),
@@ -793,6 +893,7 @@ class PracticeRosterReportView(APIView):
                     "mentor_email_replies",
                     queryset=ScheduledEmailMentorPracticeReply.objects.filter(
                         attendance__in=ATTENDING_REPLY_VALUES
+                        | {PracticeAttendanceReply.AVAILABLE}
                     )
                     .select_related("mentor", "mentor_token__scheduled_email")
                     .order_by("-updated_at"),

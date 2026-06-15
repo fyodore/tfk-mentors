@@ -16,22 +16,11 @@ import {
   formatDateTime,
   isoToDateAndQuarterTime,
 } from '../datetime.js'
-
-function sortSeasonsByYearDesc(list) {
-  return [...list].sort(
-    (a, b) => Number(b.year) - Number(a.year) || b.id - a.id
-  )
-}
-
-function sortPracticesByDateDesc(list) {
-  return [...list].sort((a, b) => {
-    const ta = new Date(a.date).getTime()
-    const tb = new Date(b.date).getTime()
-    return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta) || b.id - a.id
-  })
-}
-
-const pad2 = (n) => String(n).padStart(2, '0')
+import {
+  currentSeasonFromList,
+  sortSeasonsByYearDesc,
+  splitPracticesByUpcoming,
+} from '../seasonHelpers.js'
 
 function isoToPracticeDateAndTime(iso) {
   const { date, time } = isoToDateAndQuarterTime(iso)
@@ -67,7 +56,12 @@ export default function PracticesPage() {
     [seasons]
   )
 
-  const defaultSeasonId = sortedSeasons[0]?.id ?? ''
+  const currentSeason = useMemo(
+    () => currentSeasonFromList(seasons),
+    [seasons]
+  )
+
+  const defaultSeasonId = currentSeason?.id ?? sortedSeasons[0]?.id ?? ''
 
   const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
 
@@ -89,8 +83,13 @@ export default function PracticesPage() {
           fetchSeasons(),
         ])
         if (!cancelled) {
-          setPractices(sortPracticesByDateDesc(pList))
-          setSeasons(sortSeasonsByYearDesc(sList))
+          setPractices(pList)
+          const orderedSeasons = sortSeasonsByYearDesc(sList)
+          setSeasons(orderedSeasons)
+          const current = currentSeasonFromList(orderedSeasons)
+          if (current) {
+            setSeasonFilter(String(current.id))
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -109,10 +108,16 @@ export default function PracticesPage() {
   }, [])
 
   const filteredPractices = useMemo(() => {
-    if (!seasonFilter) return practices
+    if (!seasonFilter) return []
     const id = Number.parseInt(seasonFilter, 10)
+    if (Number.isNaN(id)) return []
     return practices.filter((p) => p.season === id)
   }, [practices, seasonFilter])
+
+  const { upcoming: upcomingPractices, past: pastPractices } = useMemo(
+    () => splitPracticesByUpcoming(filteredPractices),
+    [filteredPractices]
+  )
 
   const resetModal = () => {
     setModal(null)
@@ -180,7 +185,7 @@ export default function PracticesPage() {
     setBusy(true)
     try {
       const created = await createPractice(built.payload)
-      setPractices((prev) => sortPracticesByDateDesc([...prev, created]))
+      setPractices((prev) => [...prev, created])
       resetModal()
     } catch (err) {
       setModalError(err instanceof Error ? err.message : String(err))
@@ -202,10 +207,7 @@ export default function PracticesPage() {
     try {
       const updated = await patchPractice(activePractice.id, built.payload)
       setPractices((prev) =>
-        sortPracticesByDateDesc([
-          ...prev.filter((p) => p.id !== activePractice.id),
-          updated,
-        ])
+        prev.map((p) => (p.id === activePractice.id ? updated : p))
       )
       resetModal()
     } catch (err) {
@@ -230,6 +232,53 @@ export default function PracticesPage() {
     }
   }
 
+  function renderPracticeRow(p) {
+    return (
+      <li key={p.id} className="practice-row">
+        <div className="practice-row-main">
+          <span className="practice-date">
+            {p.date ? formatDateTime(p.date) : '—'}
+          </span>
+          <span className="practice-race">
+            {p.nyrr_race?.trim() ? (
+              p.nyrr_race
+            ) : (
+              <span className="muted">No race name</span>
+            )}
+          </span>
+          <span className="muted">
+            Season {seasonYearById.get(p.season) ?? p.season}
+            {p.full_practice ? ' · Full practice' : ' · Partial'}
+          </span>
+        </div>
+        <div className="practice-row-actions">
+          <Link className="btn btn-text" to={`/practices/${p.id}`}>
+            View
+          </Link>
+          <button
+            type="button"
+            className="btn btn-text"
+            onClick={() => openEdit(p)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="btn btn-text btn-text-danger"
+            onClick={() => openDelete(p)}
+          >
+            Delete
+          </button>
+        </div>
+      </li>
+    )
+  }
+
+  const selectedSeasonYear =
+    seasonFilter !== ''
+      ? seasonYearById.get(Number.parseInt(seasonFilter, 10))
+      : null
+
   return (
     <>
       <AppHeader />
@@ -242,7 +291,7 @@ export default function PracticesPage() {
             className="btn-icon-plus"
             aria-label="Add practice"
             title="Add practice"
-            disabled={loading}
+            disabled={loading || sortedSeasons.length === 0}
             onClick={openCreate}
           >
             +
@@ -251,21 +300,31 @@ export default function PracticesPage() {
 
         <div className="practices-filter">
           <label className="field-label" htmlFor="season-filter">
-            Filter by season
+            Season
           </label>
           <select
             id="season-filter"
             className="field-input field-select"
             value={seasonFilter}
             onChange={(e) => setSeasonFilter(e.target.value)}
+            disabled={sortedSeasons.length === 0}
           >
-            <option value="">All seasons</option>
-            {sortedSeasons.map((s) => (
-              <option key={s.id} value={String(s.id)}>
-                {s.year}
-              </option>
-            ))}
+            {sortedSeasons.length === 0 ? (
+              <option value="">No seasons</option>
+            ) : (
+              sortedSeasons.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.year}
+                  {s.is_current ? ' (current)' : ''}
+                </option>
+              ))
+            )}
           </select>
+          {currentSeason && seasonFilter === String(currentSeason.id) ? (
+            <p className="muted practices-filter-note">
+              Showing the current season by default.
+            </p>
+          ) : null}
         </div>
 
         {loading && <p className="muted">Loading…</p>}
@@ -275,59 +334,50 @@ export default function PracticesPage() {
           </p>
         )}
 
-        {!loading && !loadError && filteredPractices.length === 0 && (
+        {!loading && !loadError && sortedSeasons.length === 0 && (
           <p className="muted">
-            {practices.length === 0
-              ? 'No practices yet. Use + to add one.'
-              : 'No practices match this season filter.'}
+            Create a season first, then add practices for that season.
           </p>
         )}
 
-        {!loading && !loadError && filteredPractices.length > 0 && (
-          <ul className="practice-list">
-            {filteredPractices.map((p) => (
-              <li key={p.id} className="practice-row">
-                <div className="practice-row-main">
-                  <span className="practice-date">
-                    {p.date
-                      ? formatDateTime(p.date)
-                      : '—'}
-                  </span>
-                  <span className="practice-race">
-                    {p.nyrr_race?.trim()
-                      ? p.nyrr_race
-                      : <span className="muted">No race name</span>}
-                  </span>
-                  <span className="muted">
-                    Season {seasonYearById.get(p.season) ?? p.season}
-                    {p.full_practice ? ' · Full practice' : ' · Partial'}
-                  </span>
-                </div>
-                <div className="practice-row-actions">
-                  <Link
-                    className="btn btn-text"
-                    to={`/practices/${p.id}`}
-                  >
-                    View
-                  </Link>
-                  <button
-                    type="button"
-                    className="btn btn-text"
-                    onClick={() => openEdit(p)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-text btn-text-danger"
-                    onClick={() => openDelete(p)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+        {!loading &&
+          !loadError &&
+          seasonFilter &&
+          filteredPractices.length === 0 && (
+            <p className="muted">
+              No practices yet for season {selectedSeasonYear ?? '—'}. Use + to
+              add one.
+            </p>
+          )}
+
+        {!loading && !loadError && upcomingPractices.length > 0 && (
+          <section className="practices-section" aria-label="Upcoming practices">
+            <ul className="practice-list">
+              {upcomingPractices.map((p) => renderPracticeRow(p))}
+            </ul>
+          </section>
+        )}
+
+        {!loading &&
+          !loadError &&
+          seasonFilter &&
+          upcomingPractices.length === 0 &&
+          pastPractices.length > 0 && (
+            <p className="muted">No upcoming practices for this season.</p>
+          )}
+
+        {!loading && !loadError && pastPractices.length > 0 && (
+          <section
+            className="practices-section practices-past-section"
+            aria-labelledby="past-practices-heading"
+          >
+            <h3 id="past-practices-heading" className="practices-section-heading">
+              Past practices
+            </h3>
+            <ul className="practice-list">
+              {pastPractices.map((p) => renderPracticeRow(p))}
+            </ul>
+          </section>
         )}
       </main>
 
@@ -380,6 +430,7 @@ export default function PracticesPage() {
             {sortedSeasons.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.year}
+                {s.is_current ? ' (current)' : ''}
               </option>
             ))}
           </select>
@@ -501,6 +552,7 @@ export default function PracticesPage() {
             {sortedSeasons.map((s) => (
               <option key={s.id} value={String(s.id)}>
                 {s.year}
+                {s.is_current ? ' (current)' : ''}
               </option>
             ))}
           </select>

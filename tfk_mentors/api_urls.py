@@ -73,6 +73,7 @@ urlpatterns = [
             {
                 "get": "mentor_replies",
                 "post": "mentor_replies",
+                "patch": "mentor_replies",
                 "delete": "mentor_replies",
             }
         ),

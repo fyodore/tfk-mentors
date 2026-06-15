@@ -19,8 +19,23 @@ from .models import (
 class SeasonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Season
-        fields = ["id", "year", "created_at", "updated_at"]
+        fields = ["id", "year", "is_current", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def _clear_other_current_seasons(self, keep_id):
+        Season.objects.filter(is_current=True).exclude(pk=keep_id).update(
+            is_current=False
+        )
+
+    def create(self, validated_data):
+        if validated_data.get("is_current"):
+            self._clear_other_current_seasons(None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if validated_data.get("is_current"):
+            self._clear_other_current_seasons(instance.pk)
+        return super().update(instance, validated_data)
 
 
 class CoachSerializer(serializers.ModelSerializer):
@@ -146,15 +161,25 @@ class PracticeSerializer(serializers.ModelSerializer):
 
 class PracticeDetailSerializer(PracticeSerializer):
     mentor_replies = serializers.SerializerMethodField()
+    available_mentor_replies = serializers.SerializerMethodField()
 
     class Meta(PracticeSerializer.Meta):
-        fields = PracticeSerializer.Meta.fields + ["mentor_replies"]
+        fields = PracticeSerializer.Meta.fields + [
+            "mentor_replies",
+            "available_mentor_replies",
+        ]
 
     def get_mentor_replies(self, obj):
         obj.sync_mentor_assignments_from_replies()
         return [
             practice_mentor_reply_payload(r)
             for r in obj.latest_attending_mentor_replies()
+        ]
+
+    def get_available_mentor_replies(self, obj):
+        return [
+            practice_mentor_reply_payload(r)
+            for r in obj.latest_available_mentor_replies()
         ]
 
 

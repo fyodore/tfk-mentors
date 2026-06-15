@@ -217,9 +217,9 @@ class MentorEmailReplySubmitTests(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["attendance"], PracticeAttendanceReply.FIRST_HALF)
-        self.assertEqual(response.data[0]["pace"], "11-12")
+        self.assertEqual(len(response.data["mentors"]), 1)
+        self.assertEqual(response.data["mentors"][0]["attendance"], PracticeAttendanceReply.FIRST_HALF)
+        self.assertEqual(response.data["mentors"][0]["pace"], "11-12")
 
     def test_reply_stats_counts_full_responses(self):
         stats = self.scheduled.reply_stats()

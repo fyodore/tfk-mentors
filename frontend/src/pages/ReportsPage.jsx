@@ -14,6 +14,7 @@ const ROSTER_HEADERS = [
   'Last Name',
   'Email',
   'Pace',
+  'Available',
 ]
 
 const PACE_COLUMN_INDEX = ROSTER_HEADERS.indexOf('Pace')
@@ -61,10 +62,22 @@ function sortPracticesByDateAsc(practices) {
   })
 }
 
-/** @param {Array<{ coaches?: unknown[], mentors?: unknown[] }>} practices */
+/** @param {Array<{ coaches?: unknown[], mentors?: unknown[], available_mentors?: unknown[] }>} practices */
 function sortPracticePeople(practices, sortKey, direction) {
   return practices.map((practice) => {
-    const people = [...(practice.coaches ?? []), ...(practice.mentors ?? [])]
+    const attendingMentors = (practice.mentors ?? []).map((mentor) => ({
+      ...mentor,
+      available: false,
+    }))
+    const availableMentors = (practice.available_mentors ?? []).map((mentor) => ({
+      ...mentor,
+      available: true,
+    }))
+    const people = [
+      ...(practice.coaches ?? []),
+      ...attendingMentors,
+      ...availableMentors,
+    ]
     people.sort((a, b) => comparePeople(a, b, sortKey, direction))
     return { ...practice, people }
   })
@@ -85,6 +98,7 @@ function buildRosterRows(practices) {
         person.last_name,
         person.email ?? '',
         person.pace ?? '',
+        person.available ? 'X' : '',
       ])
     }
   }
@@ -117,6 +131,7 @@ function downloadExcel(filename, practices) {
     { wch: 14 },
     { wch: 28 },
     { wch: 8 },
+    { wch: 10 },
   ]
 
   const workbook = XLSX.utils.book_new()
@@ -655,6 +670,7 @@ export default function ReportsPage() {
             {displayPractices.map((practice) => {
               const coachCount = practice.coaches?.length ?? 0
               const mentorCount = practice.mentors?.length ?? 0
+              const availableCount = practice.available_mentors?.length ?? 0
               return (
               <section key={practice.id} className="report-practice-block">
                 <header className="report-practice-header">
@@ -671,6 +687,9 @@ export default function ReportsPage() {
                     {coachCount} coach{coachCount === 1 ? '' : 'es'}
                     {' · '}
                     {mentorCount} mentor{mentorCount === 1 ? '' : 's'}
+                    {availableCount > 0
+                      ? ` · ${availableCount} available`
+                      : ''}
                   </p>
                   <MentorPaceBreakdownTable
                     mentors={practice.mentors}
@@ -714,6 +733,7 @@ export default function ReportsPage() {
                               Pace{sortIndicator('pace')}
                             </button>
                           </th>
+                          <th scope="col">Available</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -723,6 +743,7 @@ export default function ReportsPage() {
                             <td>{fullName(person.first_name, person.last_name)}</td>
                             <td>{person.email || '—'}</td>
                             <td>{person.pace || '—'}</td>
+                            <td>{person.available ? 'X' : ''}</td>
                           </tr>
                         ))}
                       </tbody>

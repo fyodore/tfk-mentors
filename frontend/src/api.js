@@ -73,8 +73,9 @@ export async function createSeason(year) {
   return res.json()
 }
 
-/** @param {number|string} id @param {number} year */
-export async function patchSeason(id, year) {
+/** @param {number|string} id @param {number | { year?: number, is_current?: boolean }} body */
+export async function patchSeason(id, body) {
+  const payload = typeof body === 'number' ? { year: body } : body
   const res = await fetch(`${SEASON_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -82,10 +83,15 @@ export async function patchSeason(id, year) {
       'Content-Type': 'application/json',
       ...csrfHeaders(),
     },
-    body: JSON.stringify({ year }),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
+}
+
+/** @param {number|string} id */
+export async function setCurrentSeason(id) {
+  return patchSeason(id, { is_current: true })
 }
 
 /** @param {number|string} id */
@@ -345,6 +351,21 @@ export async function createPracticeMentorReply(practiceId, body) {
       ...csrfHeaders(),
     },
     body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} practiceId @param {number|string} mentorId */
+export async function makePracticeMentorAvailable(practiceId, mentorId) {
+  const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ mentor: mentorId, attendance: 'available' }),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

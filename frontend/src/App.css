@@ -224,7 +224,18 @@
 .season-row-main {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.season-current-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-bg, #eef6ff);
+  color: var(--accent, #1a5fb4);
+  font-size: 0.8125rem;
+  font-weight: 600;
 }
 
 .season-label {
@@ -413,6 +424,27 @@
 .practices-filter {
   margin-bottom: 1.25rem;
   max-width: 20rem;
+}
+
+.practices-filter-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+}
+
+.practices-section {
+  margin-bottom: 1.5rem;
+}
+
+.practices-section-heading {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.practices-past-section {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border, #ddd);
 }
 
 .field-select {

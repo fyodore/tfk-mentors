@@ -11,6 +11,7 @@ import {
   fetchMentors,
   fetchPractice,
   fetchSeasons,
+  makePracticeMentorAvailable,
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateTime } from '../datetime.js'
@@ -31,6 +32,7 @@ export default function PracticeDetailPage() {
   const [mentors, setMentors] = useState([])
   const [coachAssignments, setCoachAssignments] = useState([])
   const [mentorReplies, setMentorReplies] = useState([])
+  const [availableMentorReplies, setAvailableMentorReplies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -82,6 +84,9 @@ export default function PracticeDetailPage() {
       setMentorReplies(
         Array.isArray(p.mentor_replies) ? p.mentor_replies : []
       )
+      setAvailableMentorReplies(
+        Array.isArray(p.available_mentor_replies) ? p.available_mentor_replies : []
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -119,6 +124,11 @@ export default function PracticeDetailPage() {
           setMentorReplies(
             Array.isArray(p.mentor_replies) ? p.mentor_replies : []
           )
+          setAvailableMentorReplies(
+            Array.isArray(p.available_mentor_replies)
+              ? p.available_mentor_replies
+              : []
+          )
         }
       } catch (e) {
         if (!cancelled) {
@@ -140,8 +150,12 @@ export default function PracticeDetailPage() {
   )
 
   const assignedMentorIds = useMemo(
-    () => new Set(mentorReplies.map((r) => r.mentor_id)),
-    [mentorReplies]
+    () =>
+      new Set([
+        ...mentorReplies.map((r) => r.mentor_id),
+        ...availableMentorReplies.map((r) => r.mentor_id),
+      ]),
+    [mentorReplies, availableMentorReplies]
   )
 
   const practiceSeasonId = practice?.season
@@ -227,6 +241,19 @@ export default function PracticeDetailPage() {
     setError(null)
     try {
       await deletePracticeMentorReply(practiceId, mentorId)
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleMakeMentorAvailable(mentorId) {
+    setSaving(true)
+    setError(null)
+    try {
+      await makePracticeMentorAvailable(practiceId, mentorId)
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -336,6 +363,46 @@ export default function PracticeDetailPage() {
                       </span>
                       <span className="muted">Pace group {r.pace}</span>
                     </div>
+                    <div className="practice-row-actions">
+                      <button
+                        type="button"
+                        className="btn btn-text"
+                        disabled={saving}
+                        onClick={() => handleMakeMentorAvailable(r.mentor_id)}
+                      >
+                        Make available
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-text btn-text-danger"
+                        disabled={saving}
+                        onClick={() => handleRemoveMentor(r.mentor_id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+              {mentorReplies.length === 0 && <li className="muted">No mentors assigned.</li>}
+            </ul>
+
+            <h2>Available mentors</h2>
+            <ul className="practice-list">
+              {availableMentorReplies.map((r) => {
+                const m = mentorById.get(r.mentor_id)
+                return (
+                  <li key={r.id} className="practice-row">
+                    <div className="practice-row-main">
+                      <span className="practice-date">
+                        {r.first_name && r.last_name
+                          ? `${r.first_name} ${r.last_name}`
+                          : m
+                            ? `${m.first_name} ${m.last_name}`
+                            : `Mentor #${r.mentor_id}`}
+                      </span>
+                      <span className="muted">Pace group {r.pace}</span>
+                    </div>
                     <button
                       type="button"
                       className="btn btn-text btn-text-danger"
@@ -347,7 +414,9 @@ export default function PracticeDetailPage() {
                   </li>
                 )
               })}
-              {mentorReplies.length === 0 && <li className="muted">No mentors assigned.</li>}
+              {availableMentorReplies.length === 0 && (
+                <li className="muted">No mentors marked available.</li>
+              )}
             </ul>
 
             <form className="modal-form-stack" onSubmit={handleAddMentor}>

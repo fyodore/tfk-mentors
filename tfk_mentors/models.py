@@ -53,6 +53,7 @@ class PracticeAttendanceReply(models.TextChoices):
     NOT_ATTENDING = "not_attending", "Not attending"
     FIRST_HALF = "first_half", "First half"
     SECOND_HALF = "second_half", "Second half"
+    AVAILABLE = "available", "Available"
 
 
 class TimeStampedModel(models.Model):
@@ -78,9 +79,29 @@ class TimeStampedModel(models.Model):
 class Season(TimeStampedModel):
     """Model for an item with timestamps."""
     year = models.IntegerField()
+    is_current = models.BooleanField(
+        default=False,
+        help_text="When true, this season is the active season for the app.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["is_current"],
+                condition=models.Q(is_current=True),
+                name="unique_current_season",
+            )
+        ]
 
     def __str__(self):
         return str(self.year)
+
+    def save(self, *args, **kwargs):
+        if self.is_current:
+            Season.objects.filter(is_current=True).exclude(pk=self.pk).update(
+                is_current=False
+            )
+        super().save(*args, **kwargs)
 
     def get_year(self):
         return self.year
@@ -272,15 +293,10 @@ class Practice(TimeStampedModel):
     def set_mentors(self, mentors):
         self.mentors.set(mentors)
 
-    def latest_attending_mentor_replies(self):
-        """Latest attending reply per mentor linked via ScheduledEmailMentorPracticeReply."""
-        attending_values = (
-            PracticeAttendanceReply.ATTENDING,
-            PracticeAttendanceReply.FIRST_HALF,
-            PracticeAttendanceReply.SECOND_HALF,
-        )
+    def _latest_mentor_replies_for_attendance(self, attendance_values):
+        """Latest reply per mentor for the given attendance values."""
         replies = (
-            self.mentor_email_replies.filter(attendance__in=attending_values)
+            self.mentor_email_replies.filter(attendance__in=attendance_values)
             .select_related("mentor", "mentor_token__scheduled_email")
             .order_by("-updated_at")
         )
@@ -291,6 +307,21 @@ class Practice(TimeStampedModel):
         return sorted(
             latest_by_mentor.values(),
             key=lambda reply: (reply.mentor.last_name, reply.mentor.first_name),
+        )
+
+    def latest_attending_mentor_replies(self):
+        """Latest attending reply per mentor linked via ScheduledEmailMentorPracticeReply."""
+        attending_values = (
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.FIRST_HALF,
+            PracticeAttendanceReply.SECOND_HALF,
+        )
+        return self._latest_mentor_replies_for_attendance(attending_values)
+
+    def latest_available_mentor_replies(self):
+        """Latest available reply per mentor for this practice."""
+        return self._latest_mentor_replies_for_attendance(
+            (PracticeAttendanceReply.AVAILABLE,)
         )
 
     def sync_mentor_assignments_from_replies(self):
