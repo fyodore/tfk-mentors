@@ -136,7 +136,7 @@ def open_csv_dict_reader(text):
 class SeasonViewSet(viewsets.ModelViewSet):
     """Full CRUD for Season at /api/season/."""
 
-    queryset = Season.objects.all().order_by("-year", "-id")
+    queryset = Season.objects.select_related("head_coach").order_by("-year", "-id")
     serializer_class = SeasonSerializer
 
     def _clear_other_current_seasons(self, keep_id=None):

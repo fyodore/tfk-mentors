@@ -85,6 +85,13 @@ class Season(TimeStampedModel):
         default=False,
         help_text="When true, this season is the active season for the app.",
     )
+    head_coach = models.ForeignKey(
+        "Coach",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="head_coach_seasons",
+    )
 
     class Meta:
         constraints = [
@@ -110,6 +117,12 @@ class Season(TimeStampedModel):
 
     def set_year(self, value):
         self.year = value
+
+    def get_head_coach(self):
+        return self.head_coach
+
+    def set_head_coach(self, value):
+        self.head_coach = value
 
 
 class Coach(TimeStampedModel):
@@ -300,6 +313,7 @@ class Practice(TimeStampedModel):
     date = models.DateTimeField()
     nyrr_race = models.CharField(max_length=150, blank=True, default="")
     description = models.TextField(blank=True, default="")
+    start_location = models.CharField(max_length=255, blank=True, default="")
     mentors = models.ManyToManyField(Mentor)
     full_practice = models.BooleanField(default=True)
     season = models.ForeignKey(Season, on_delete=models.CASCADE)
@@ -324,6 +338,12 @@ class Practice(TimeStampedModel):
 
     def set_description(self, value):
         self.description = value
+
+    def get_start_location(self):
+        return self.start_location
+
+    def set_start_location(self, value):
+        self.start_location = value
 
     def get_full_practice(self):
         return self.full_practice

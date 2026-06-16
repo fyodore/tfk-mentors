@@ -1,6 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-import { createSeason, deleteSeason, fetchSeasons, patchSeason, setCurrentSeason } from '../api'
+import {
+  createSeason,
+  deleteSeason,
+  fetchCoaches,
+  fetchSeasons,
+  patchSeason,
+  setCurrentSeason,
+} from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import { sortSeasonsByYearDesc } from '../seasonHelpers.js'
@@ -9,16 +16,36 @@ function sortSeasons(list) {
   return sortSeasonsByYearDesc(list)
 }
 
+function sortCoaches(list) {
+  return [...list].sort((a, b) => {
+    const ln = (a.last_name || '').localeCompare(b.last_name || '')
+    if (ln !== 0) return ln
+    return (a.first_name || '').localeCompare(b.first_name || '')
+  })
+}
+
+function coachLabel(coach) {
+  return `${coach.first_name ?? ''} ${coach.last_name ?? ''}`.trim()
+}
+
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState([])
+  const [coaches, setCoaches] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
   const [modal, setModal] = useState(null)
   const [activeSeason, setActiveSeason] = useState(null)
   const [formYear, setFormYear] = useState('')
+  const [formHeadCoachId, setFormHeadCoachId] = useState('')
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const coachById = useMemo(() => {
+    const map = new Map()
+    for (const coach of coaches) map.set(coach.id, coach)
+    return map
+  }, [coaches])
 
   useEffect(() => {
     let cancelled = false
@@ -27,12 +54,19 @@ export default function SeasonsPage() {
       setLoading(true)
       setLoadError(null)
       try {
-        const list = await fetchSeasons()
-        if (!cancelled) setSeasons(sortSeasons(list))
+        const [seasonList, coachList] = await Promise.all([
+          fetchSeasons(),
+          fetchCoaches(),
+        ])
+        if (!cancelled) {
+          setSeasons(sortSeasons(seasonList))
+          setCoaches(sortCoaches(coachList))
+        }
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : String(e))
           setSeasons([])
+          setCoaches([])
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -44,9 +78,24 @@ export default function SeasonsPage() {
     }
   }, [])
 
+  function coachesForSeason(seasonId) {
+    if (!seasonId) return []
+    return coaches.filter(
+      (coach) =>
+        Array.isArray(coach.seasons) && coach.seasons.includes(seasonId)
+    )
+  }
+
+  function headCoachLabel(season) {
+    if (!season?.head_coach) return null
+    const coach = coachById.get(season.head_coach)
+    return coach ? coachLabel(coach) : `Coach #${season.head_coach}`
+  }
+
   const openCreate = () => {
     setModalError('')
     setFormYear('')
+    setFormHeadCoachId('')
     setActiveSeason(null)
     setModal('create')
   }
@@ -54,6 +103,9 @@ export default function SeasonsPage() {
   const openEdit = (season) => {
     setModalError('')
     setFormYear(String(season.year))
+    setFormHeadCoachId(
+      season.head_coach != null ? String(season.head_coach) : ''
+    )
     setActiveSeason(season)
     setModal('edit')
   }
@@ -75,6 +127,14 @@ export default function SeasonsPage() {
     resetModal()
   }
 
+  const buildSeasonPayload = (year) => {
+    const headCoachId = Number.parseInt(formHeadCoachId, 10)
+    return {
+      year,
+      head_coach: Number.isNaN(headCoachId) ? null : headCoachId,
+    }
+  }
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault()
     setModalError('')
@@ -85,7 +145,7 @@ export default function SeasonsPage() {
     }
     setBusy(true)
     try {
-      const created = await createSeason(year)
+      const created = await createSeason({ year })
       setSeasons((prev) => sortSeasons([...prev, created]))
       resetModal()
     } catch (err) {
@@ -106,7 +166,7 @@ export default function SeasonsPage() {
     }
     setBusy(true)
     try {
-      const updated = await patchSeason(activeSeason.id, year)
+      const updated = await patchSeason(activeSeason.id, buildSeasonPayload(year))
       setSeasons((prev) =>
         sortSeasons([...prev.filter((s) => s.id !== activeSeason.id), updated])
       )
@@ -148,6 +208,59 @@ export default function SeasonsPage() {
     }
   }
 
+  const editSeasonCoaches = activeSeason
+    ? coachesForSeason(activeSeason.id)
+    : []
+
+  function seasonFormFields(formId) {
+    return (
+      <>
+        <label className="field-label" htmlFor={`${formId}-year`}>
+          Year
+        </label>
+        <input
+          id={`${formId}-year`}
+          name="year"
+          type="number"
+          className="field-input"
+          value={formYear}
+          onChange={(e) => setFormYear(e.target.value)}
+          min={1900}
+          max={2100}
+          step={1}
+          required
+          autoFocus
+        />
+
+        {modal === 'edit' ? (
+          <>
+            <label className="field-label" htmlFor={`${formId}-head-coach`}>
+              Head coach
+            </label>
+            <select
+              id={`${formId}-head-coach`}
+              className="field-input field-select"
+              value={formHeadCoachId}
+              onChange={(e) => setFormHeadCoachId(e.target.value)}
+            >
+              <option value="">None</option>
+              {editSeasonCoaches.map((coach) => (
+                <option key={coach.id} value={String(coach.id)}>
+                  {coachLabel(coach)}
+                </option>
+              ))}
+            </select>
+            {editSeasonCoaches.length === 0 ? (
+              <p className="muted">
+                Assign coaches to this season first, then choose a head coach.
+              </p>
+            ) : null}
+          </>
+        ) : null}
+      </>
+    )
+  }
+
   return (
     <>
       <AppHeader />
@@ -180,45 +293,53 @@ export default function SeasonsPage() {
 
         {!loading && !loadError && seasons.length > 0 && (
           <ul className="season-list">
-            {seasons.map((s) => (
-              <li key={s.id}>
-                <div className="season-row-main">
-                  <span className="season-label">Year</span>
-                  <span className="year">{s.year}</span>
-                  {s.is_current ? (
-                    <span className="season-current-badge">Current season</span>
-                  ) : null}
-                </div>
-                <div className="season-row-actions">
-                  {!s.is_current ? (
+            {seasons.map((s) => {
+              const headCoach = headCoachLabel(s)
+              return (
+                <li key={s.id}>
+                  <div className="season-row-main">
+                    <span className="season-label">Year</span>
+                    <span className="year">{s.year}</span>
+                    {s.is_current ? (
+                      <span className="season-current-badge">Current season</span>
+                    ) : null}
+                    {headCoach ? (
+                      <span className="muted">Head coach: {headCoach}</span>
+                    ) : (
+                      <span className="muted">No head coach</span>
+                    )}
+                  </div>
+                  <div className="season-row-actions">
+                    {!s.is_current ? (
+                      <button
+                        type="button"
+                        className="btn btn-text"
+                        disabled={busy}
+                        onClick={() => handleSetCurrent(s)}
+                      >
+                        Set as current
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="btn btn-text"
                       disabled={busy}
-                      onClick={() => handleSetCurrent(s)}
+                      onClick={() => openEdit(s)}
                     >
-                      Set as current
+                      Edit
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-text"
-                    disabled={busy}
-                    onClick={() => openEdit(s)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-text btn-text-danger"
-                    disabled={busy}
-                    onClick={() => openDelete(s)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
+                    <button
+                      type="button"
+                      className="btn btn-text btn-text-danger"
+                      disabled={busy}
+                      onClick={() => openDelete(s)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </main>
@@ -250,22 +371,7 @@ export default function SeasonsPage() {
         }
       >
         <form id="season-create-form" onSubmit={handleCreateSubmit}>
-          <label className="field-label" htmlFor="create-year">
-            Year
-          </label>
-          <input
-            id="create-year"
-            name="year"
-            type="number"
-            className="field-input"
-            value={formYear}
-            onChange={(e) => setFormYear(e.target.value)}
-            min={1900}
-            max={2100}
-            step={1}
-            required
-            autoFocus
-          />
+          {seasonFormFields('create')}
           {modalError ? (
             <p className="error modal-error" role="alert">
               {modalError}
@@ -301,22 +407,7 @@ export default function SeasonsPage() {
         }
       >
         <form id="season-edit-form" onSubmit={handleEditSubmit}>
-          <label className="field-label" htmlFor="edit-year">
-            Year
-          </label>
-          <input
-            id="edit-year"
-            name="year"
-            type="number"
-            className="field-input"
-            value={formYear}
-            onChange={(e) => setFormYear(e.target.value)}
-            min={1900}
-            max={2100}
-            step={1}
-            required
-            autoFocus
-          />
+          {seasonFormFields('edit')}
           {modalError ? (
             <p className="error modal-error" role="alert">
               {modalError}

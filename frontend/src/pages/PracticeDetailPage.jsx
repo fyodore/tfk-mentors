@@ -374,6 +374,11 @@ export default function PracticeDetailPage() {
             {practice.description?.trim() ? (
               <p className="practice-description">{practice.description.trim()}</p>
             ) : null}
+            {practice.start_location?.trim() ? (
+              <p className="muted">
+                Start location: {practice.start_location.trim()}
+              </p>
+            ) : null}
 
             <h2>Coaches + Pace</h2>
             <ul className="practice-list">

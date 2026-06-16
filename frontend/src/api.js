@@ -58,8 +58,9 @@ export async function fetchSeasons() {
   return normalizeSeasonList(data)
 }
 
-/** @param {number} year */
-export async function createSeason(year) {
+/** @param {number | { year: number, head_coach?: number|null }} body */
+export async function createSeason(body) {
+  const payload = typeof body === 'number' ? { year: body } : body
   const res = await fetch(SEASON_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -67,13 +68,13 @@ export async function createSeason(year) {
       'Content-Type': 'application/json',
       ...csrfHeaders(),
     },
-    body: JSON.stringify({ year }),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @param {number|string} id @param {number | { year?: number, is_current?: boolean }} body */
+/** @param {number|string} id @param {number | { year?: number, is_current?: boolean, head_coach?: number|null }} body */
 export async function patchSeason(id, body) {
   const payload = typeof body === 'number' ? { year: body } : body
   const res = await fetch(`${SEASON_LIST}${id}/`, {

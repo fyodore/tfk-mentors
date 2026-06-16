@@ -33,6 +33,7 @@ function emptyPracticeForm(defaultSeasonId) {
     practiceTime: '09:00',
     nyrr_race: '',
     description: '',
+    start_location: '',
     full_practice: true,
     season: defaultSeasonId === '' ? '' : String(defaultSeasonId),
   }
@@ -184,6 +185,7 @@ export default function PracticesPage() {
       practiceTime,
       nyrr_race: practice.nyrr_race ?? '',
       description: practice.description ?? '',
+      start_location: practice.start_location ?? '',
       full_practice: Boolean(practice.full_practice),
       season: String(practice.season ?? ''),
     })
@@ -206,6 +208,7 @@ export default function PracticesPage() {
         date: iso,
         nyrr_race: form.nyrr_race.trim(),
         description: form.description.trim(),
+        start_location: form.start_location.trim(),
         full_practice: form.full_practice,
         season: seasonId,
       },
@@ -292,6 +295,9 @@ export default function PracticesPage() {
             <span className="muted practice-description-preview">
               {p.description.trim()}
             </span>
+          ) : null}
+          {p.start_location?.trim() ? (
+            <span className="muted">Start: {p.start_location.trim()}</span>
           ) : null}
         </div>
         <div className="practice-row-actions">
@@ -538,6 +544,20 @@ export default function PracticesPage() {
             }
           />
 
+          <label className="field-label" htmlFor="pc-start-location">
+            Start location <span className="muted">(optional)</span>
+          </label>
+          <input
+            id="pc-start-location"
+            type="text"
+            className="field-input"
+            value={form.start_location}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, start_location: e.target.value }))
+            }
+            maxLength={255}
+          />
+
           <label className="field-label checkbox-label">
             <input
               type="checkbox"
@@ -666,6 +686,20 @@ export default function PracticesPage() {
             onChange={(description) =>
               setForm((f) => ({ ...f, description }))
             }
+          />
+
+          <label className="field-label" htmlFor="pe-start-location">
+            Start location <span className="muted">(optional)</span>
+          </label>
+          <input
+            id="pe-start-location"
+            type="text"
+            className="field-input"
+            value={form.start_location}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, start_location: e.target.value }))
+            }
+            maxLength={255}
           />
 
           <label className="field-label checkbox-label">

@@ -18,10 +18,35 @@ from .models import (
 
 
 class SeasonSerializer(serializers.ModelSerializer):
+    head_coach = serializers.PrimaryKeyRelatedField(
+        queryset=Coach.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
     class Meta:
         model = Season
-        fields = ["id", "year", "is_current", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "year",
+            "is_current",
+            "head_coach",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_head_coach(self, value):
+        if value is None:
+            return value
+        season = self.instance
+        if season is None:
+            return value
+        if not value.seasons.filter(id=season.id).exists():
+            raise serializers.ValidationError(
+                "Head coach must belong to this season."
+            )
+        return value
 
     def _clear_other_current_seasons(self, keep_id):
         Season.objects.filter(is_current=True).exclude(pk=keep_id).update(
@@ -158,6 +183,9 @@ class PracticeSerializer(serializers.ModelSerializer):
     nyrr_race = serializers.CharField(
         max_length=150, allow_blank=True, required=False
     )
+    start_location = serializers.CharField(
+        max_length=255, allow_blank=True, required=False
+    )
     mentors = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Mentor.objects.all(), required=False
     )
@@ -169,6 +197,7 @@ class PracticeSerializer(serializers.ModelSerializer):
             "date",
             "nyrr_race",
             "description",
+            "start_location",
             "mentors",
             "full_practice",
             "season",
