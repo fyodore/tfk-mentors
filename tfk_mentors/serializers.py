@@ -8,7 +8,9 @@ from .models import (
     MentorTypes,
     PaceTypes,
     Practice,
+    PracticeAttendanceReply,
     PracticeReminderEmail,
+    PracticeReminderKind,
     PracticeReminderSendRecord,
     Requests,
     ScheduledEmail,
@@ -181,6 +183,34 @@ def practice_mentor_reply_payload(reply):
     }
 
 
+def practice_mentor_assignment_payload(assignment):
+    """Serialized direct mentor assignment for admin practice view."""
+    mentor = assignment.mentor
+    return {
+        "id": None,
+        "mentor_id": mentor.id,
+        "first_name": mentor.first_name,
+        "last_name": mentor.last_name,
+        "mentor_type": mentor.type,
+        "attendance": PracticeAttendanceReply.ATTENDING,
+        "pace": normalize_pace(assignment.pace or mentor.pace or ""),
+        "responded_at": assignment.updated_at.isoformat(),
+        "scheduled_email_id": None,
+        "scheduled_send_at": None,
+    }
+
+
+def practice_attending_mentor_payloads(practice):
+    """Attending mentors from email replies and direct assignments."""
+    payloads = []
+    for _mentor, _pace, reply, assignment in practice.attending_mentor_roster_entries():
+        if reply is not None:
+            payloads.append(practice_mentor_reply_payload(reply))
+        else:
+            payloads.append(practice_mentor_assignment_payload(assignment))
+    return payloads
+
+
 class PracticeSerializer(serializers.ModelSerializer):
     nyrr_race = serializers.CharField(
         max_length=150, allow_blank=True, required=False
@@ -221,10 +251,7 @@ class PracticeDetailSerializer(PracticeSerializer):
 
     def get_mentor_replies(self, obj):
         obj.sync_mentor_assignments_from_replies()
-        return [
-            practice_mentor_reply_payload(r)
-            for r in obj.latest_attending_mentor_replies()
-        ]
+        return practice_attending_mentor_payloads(obj)
 
     def get_available_mentor_replies(self, obj):
         return [
@@ -430,12 +457,14 @@ class PracticeReminderSendRecordSerializer(serializers.ModelSerializer):
 class PracticeReminderEmailSerializer(serializers.ModelSerializer):
     send_records = PracticeReminderSendRecordSerializer(many=True, read_only=True)
     recipient_count = serializers.SerializerMethodField()
+    scheduled_send_at = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
         model = PracticeReminderEmail
         fields = [
             "id",
             "season",
+            "kind",
             "anchor_practice",
             "practice_one",
             "practice_two",
@@ -452,6 +481,7 @@ class PracticeReminderEmailSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "season",
+            "kind",
             "anchor_practice",
             "practice_one",
             "practice_two",

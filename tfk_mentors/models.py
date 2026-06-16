@@ -400,27 +400,8 @@ class Practice(TimeStampedModel):
             (PracticeAttendanceReply.AVAILABLE,)
         )
 
-    def sync_mentor_assignments_from_replies(self):
-        """Align MentorPracticeAssignment + practice.mentors with reply attendance."""
-        attending_replies = self.latest_attending_mentor_replies()
-        attending_mentor_ids = [reply.mentor_id for reply in attending_replies]
-
-        MentorPracticeAssignment.objects.filter(practice=self).exclude(
-            mentor_id__in=attending_mentor_ids
-        ).delete()
-
-        for reply in attending_replies:
-            pace = normalize_pace(reply.pace or reply.mentor.pace or "")
-            MentorPracticeAssignment.objects.update_or_create(
-                mentor_id=reply.mentor_id,
-                practice=self,
-                defaults={"pace": pace},
-            )
-
-        self.mentors.set(attending_mentor_ids)
-
-    def get_or_create_mentor_reply_token(self, mentor):
-        """Token for storing admin or mentor replies tied to this practice."""
+    def scheduled_email_for_mentor_replies(self):
+        """Scheduled email linked to this practice, if any."""
         scheduled = (
             ScheduledEmail.objects.filter(
                 practices=self,
@@ -435,6 +416,97 @@ class Practice(TimeStampedModel):
                 .order_by("-scheduled_send_at", "-id")
                 .first()
             )
+        return scheduled
+
+    def assign_mentor(self, mentor, pace):
+        """Add or update a mentor on this practice without an email reply."""
+        pace = normalize_pace(pace or mentor.pace or "")
+        assignment, _ = MentorPracticeAssignment.objects.update_or_create(
+            mentor=mentor,
+            practice=self,
+            defaults={"pace": pace},
+        )
+        self.mentors.add(mentor)
+        return assignment
+
+    def remove_mentor(self, mentor_id):
+        """Remove a mentor from this practice."""
+        ScheduledEmailMentorPracticeReply.objects.filter(
+            practice=self,
+            mentor_id=mentor_id,
+        ).update(
+            attendance=PracticeAttendanceReply.NOT_ATTENDING,
+            pace="",
+        )
+        MentorPracticeAssignment.objects.filter(
+            practice=self,
+            mentor_id=mentor_id,
+        ).delete()
+        self.mentors.remove(mentor_id)
+
+    def attending_mentor_roster_entries(self):
+        """All attending mentors from email replies and direct assignments."""
+        entries = []
+        seen = set()
+        for reply in self.latest_attending_mentor_replies():
+            mentor = reply.mentor
+            pace = normalize_pace(reply.pace or mentor.pace or "")
+            entries.append((mentor, pace, reply, None))
+            seen.add(mentor.id)
+
+        assignments = MentorPracticeAssignment.objects.filter(
+            practice=self
+        ).select_related("mentor")
+        for assignment in assignments:
+            if assignment.mentor_id in seen:
+                continue
+            mentor = assignment.mentor
+            pace = normalize_pace(assignment.pace or mentor.pace or "")
+            entries.append((mentor, pace, None, assignment))
+            seen.add(mentor.id)
+
+        return sorted(
+            entries,
+            key=lambda item: (
+                PACE_SORT.get(item[1], 99),
+                item[0].last_name,
+                item[0].first_name,
+            ),
+        )
+
+    def sync_mentor_assignments_from_replies(self):
+        """Align reply-based assignments; preserve direct admin assignments."""
+        attending_replies = self.latest_attending_mentor_replies()
+        attending_mentor_ids = {reply.mentor_id for reply in attending_replies}
+        mentors_with_any_reply = set(
+            self.mentor_email_replies.values_list("mentor_id", flat=True)
+        )
+
+        MentorPracticeAssignment.objects.filter(
+            practice=self,
+            mentor_id__in=mentors_with_any_reply,
+        ).exclude(
+            mentor_id__in=attending_mentor_ids,
+        ).delete()
+
+        for reply in attending_replies:
+            pace = normalize_pace(reply.pace or reply.mentor.pace or "")
+            MentorPracticeAssignment.objects.update_or_create(
+                mentor_id=reply.mentor_id,
+                practice=self,
+                defaults={"pace": pace},
+            )
+
+        assignment_mentor_ids = list(
+            MentorPracticeAssignment.objects.filter(practice=self).values_list(
+                "mentor_id", flat=True
+            )
+        )
+        self.mentors.set(assignment_mentor_ids)
+
+    def get_or_create_mentor_reply_token(self, mentor):
+        """Token for storing admin or mentor replies tied to this practice."""
+        scheduled = self.scheduled_email_for_mentor_replies()
         if scheduled is None:
             raise ValidationError(
                 "Link a scheduled email to this practice before assigning mentors."
@@ -646,19 +718,33 @@ class PracticeReminderRecipientKind(models.TextChoices):
     MENTOR = "mentor", "Mentor"
 
 
+class PracticeReminderKind(models.TextChoices):
+    BEFORE_FIRST = "before_first", "Before first practice"
+    AFTER_PRACTICE = "after_practice", "After practice"
+
+
 class PracticeReminderEmail(TimeStampedModel):
-    """Reminder email generated after a practice about upcoming session(s)."""
+    """Reminder email about upcoming practice session(s)."""
 
     season = models.ForeignKey(
         Season,
         on_delete=models.CASCADE,
         related_name="practice_reminder_emails",
     )
-    anchor_practice = models.OneToOneField(
+    kind = models.CharField(
+        max_length=20,
+        choices=PracticeReminderKind.choices,
+        default=PracticeReminderKind.AFTER_PRACTICE,
+        help_text="Whether this sends before the season's first practice or after an anchor practice.",
+    )
+    anchor_practice = models.ForeignKey(
         Practice,
         on_delete=models.CASCADE,
-        related_name="practice_reminder_email",
-        help_text="Practice after which this reminder is scheduled to send.",
+        related_name="practice_reminder_emails",
+        help_text=(
+            "For after-practice reminders, the practice after which this sends. "
+            "For before-first reminders, the season's first practice."
+        ),
     )
     practice_one = models.ForeignKey(
         Practice,
@@ -676,7 +762,13 @@ class PracticeReminderEmail(TimeStampedModel):
     )
     scheduled_send_at = models.DateTimeField(
         db_index=True,
-        help_text="Default: 6:15 AM the morning after anchor practice.",
+        null=True,
+        blank=True,
+        help_text=(
+            "When to send automatically. After-practice default: 6:15 AM the morning after "
+            "anchor practice. Before-first default: 6:15 AM two days before the first practice. "
+            "Null means manual send only (e.g. first practice is less than 48 hours away)."
+        ),
     )
     subject = models.TextField(
         help_text=(
@@ -704,10 +796,16 @@ class PracticeReminderEmail(TimeStampedModel):
     )
 
     class Meta:
-        ordering = ["scheduled_send_at", "id"]
+        ordering = [models.F("scheduled_send_at").asc(nulls_last=True), "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anchor_practice", "kind"],
+                name="unique_practice_reminder_anchor_kind",
+            )
+        ]
 
     def __str__(self):
-        return f"Practice reminder after practice {self.anchor_practice_id}"
+        return f"Practice reminder ({self.kind}) anchor {self.anchor_practice_id}"
 
 
 class PracticeReminderSendRecord(TimeStampedModel):

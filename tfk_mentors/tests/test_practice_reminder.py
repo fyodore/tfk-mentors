@@ -15,6 +15,7 @@ from tfk_mentors.models import (
     Practice,
     PracticeAttendanceReply,
     PracticeReminderEmail,
+    PracticeReminderKind,
     PracticeReminderSendRecord,
     ScheduledEmail,
     ScheduledEmailMentorPracticeReply,
@@ -26,8 +27,10 @@ from tfk_mentors.practice_reminder import (
     collect_recipients,
     default_subject,
     render_reminder_for_recipient,
+    schedule_for_before_first_practice,
     send_practice_reminder,
     sync_practice_reminders_for_season,
+    two_days_before_first_practice,
 )
 
 
@@ -112,25 +115,72 @@ class PracticeReminderTests(TestCase):
 
     def test_sync_creates_reminders_for_upcoming_practices(self):
         result = sync_practice_reminders_for_season(self.season)
-        self.assertEqual(result["created"], 2)
+        self.assertEqual(result["created"], 3)
         reminders = list(
             PracticeReminderEmail.objects.filter(season=self.season).order_by(
-                "scheduled_send_at"
+                "kind", "scheduled_send_at", "id"
             )
         )
-        self.assertEqual(len(reminders), 2)
-        self.assertEqual(reminders[0].anchor_practice_id, self.practices[0].id)
-        self.assertEqual(reminders[0].practice_one_id, self.practices[1].id)
-        self.assertEqual(reminders[0].practice_two_id, self.practices[2].id)
-        self.assertEqual(reminders[1].practice_one_id, self.practices[2].id)
-        self.assertIsNone(reminders[1].practice_two_id)
-        self.assertIn("TFK Practices", reminders[0].subject)
-        self.assertIn("TFK Practice", reminders[1].subject)
+        self.assertEqual(len(reminders), 3)
+        before_first = PracticeReminderEmail.objects.get(
+            anchor_practice=self.practices[0],
+            kind=PracticeReminderKind.BEFORE_FIRST,
+        )
+        self.assertEqual(before_first.practice_one_id, self.practices[0].id)
+        self.assertEqual(before_first.practice_two_id, self.practices[1].id)
+        self.assertIsNone(before_first.scheduled_send_at)
+        after_first = PracticeReminderEmail.objects.get(
+            anchor_practice=self.practices[0],
+            kind=PracticeReminderKind.AFTER_PRACTICE,
+        )
+        self.assertEqual(after_first.practice_one_id, self.practices[1].id)
+        self.assertEqual(after_first.practice_two_id, self.practices[2].id)
+        after_second = PracticeReminderEmail.objects.get(
+            anchor_practice=self.practices[1],
+            kind=PracticeReminderKind.AFTER_PRACTICE,
+        )
+        self.assertEqual(after_second.practice_one_id, self.practices[2].id)
+        self.assertIsNone(after_second.practice_two_id)
+        self.assertIn("TFK Practices", after_first.subject)
+        self.assertIn("TFK Practice", after_second.subject)
+
+    def test_before_first_within_48_hours_has_no_schedule(self):
+        Practice.objects.all().delete()
+        now = timezone.now()
+        soon = Practice.objects.create(
+            date=now + timedelta(hours=24),
+            season=self.season,
+            full_practice=True,
+        )
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(
+            anchor_practice=soon,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+        )
+        self.assertIsNone(reminder.scheduled_send_at)
+        self.assertIsNone(schedule_for_before_first_practice(soon.date))
+
+    def test_before_first_scheduled_two_days_prior_at_615(self):
+        Practice.objects.all().delete()
+        now = timezone.now()
+        later = Practice.objects.create(
+            date=now + timedelta(days=10),
+            season=self.season,
+            full_practice=True,
+        )
+        expected = two_days_before_first_practice(later.date)
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(
+            anchor_practice=later,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+        )
+        self.assertEqual(reminder.scheduled_send_at, expected)
 
     def test_collect_recipients_includes_staff_coaches_and_mentors(self):
         sync_practice_reminders_for_season(self.season)
         reminder = PracticeReminderEmail.objects.get(
-            anchor_practice=self.practices[0]
+            anchor_practice=self.practices[0],
+            kind=PracticeReminderKind.AFTER_PRACTICE,
         )
         recipients = collect_recipients(reminder)
         emails = {item.email for item in recipients}
@@ -142,7 +192,8 @@ class PracticeReminderTests(TestCase):
     def test_render_includes_mentor_schedule_notice(self):
         sync_practice_reminders_for_season(self.season)
         reminder = PracticeReminderEmail.objects.get(
-            anchor_practice=self.practices[0]
+            anchor_practice=self.practices[0],
+            kind=PracticeReminderKind.AFTER_PRACTICE,
         )
         recipients = collect_recipients(reminder)
         mentor_recipient = next(
@@ -158,7 +209,8 @@ class PracticeReminderTests(TestCase):
     def test_send_creates_history_records(self, _mock_verify):
         sync_practice_reminders_for_season(self.season)
         reminder = PracticeReminderEmail.objects.get(
-            anchor_practice=self.practices[0]
+            anchor_practice=self.practices[0],
+            kind=PracticeReminderKind.AFTER_PRACTICE,
         )
         result = send_practice_reminder(reminder)
         self.assertGreater(result["sent"], 0)

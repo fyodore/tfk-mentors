@@ -89,10 +89,15 @@ export default function PracticeReminderEmailsPanel() {
     return [...reminders]
       .filter((row) => !row.task_completed_at)
       .sort((a, b) => {
-        const ta = new Date(a.scheduled_send_at).getTime()
-        const tb = new Date(b.scheduled_send_at).getTime()
+        const ta = a.scheduled_send_at
+          ? new Date(a.scheduled_send_at).getTime()
+          : Number.NEGATIVE_INFINITY
+        const tb = b.scheduled_send_at
+          ? new Date(b.scheduled_send_at).getTime()
+          : Number.NEGATIVE_INFINITY
         return (
-          (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
+          (Number.isNaN(ta) ? Number.NEGATIVE_INFINITY : ta) -
+            (Number.isNaN(tb) ? Number.NEGATIVE_INFINITY : tb) || a.id - b.id
         )
       })
   }, [reminders])
@@ -181,7 +186,9 @@ export default function PracticeReminderEmailsPanel() {
   function openEdit(row) {
     setModalError('')
     setActiveReminder(row)
-    const { sendDate, sendTime } = isoToSendDateAndTime(row.scheduled_send_at)
+    const { sendDate, sendTime } = row.scheduled_send_at
+      ? isoToSendDateAndTime(row.scheduled_send_at)
+      : { sendDate: '', sendTime: '06:15' }
     setForm({
       sendDate,
       sendTime,
@@ -200,10 +207,6 @@ export default function PracticeReminderEmailsPanel() {
   async function handleSaveEdit() {
     if (!activeReminder) return
     const scheduled_send_at = dateAndQuarterTimeToIso(form.sendDate, form.sendTime)
-    if (!scheduled_send_at) {
-      setModalError('Schedule date and time are required (15-minute times).')
-      return
-    }
     const subject = form.subject.trim()
     const body_text = form.body_text.trim()
     if (!subject) {
@@ -218,7 +221,7 @@ export default function PracticeReminderEmailsPanel() {
     setModalError('')
     try {
       await patchPracticeReminderEmail(activeReminder.id, {
-        scheduled_send_at,
+        scheduled_send_at: scheduled_send_at || null,
         subject,
         body_text,
       })
@@ -260,10 +263,19 @@ export default function PracticeReminderEmailsPanel() {
   }
 
   function reminderSummary(row) {
-    const after = practiceLabel(row.anchor_practice)
     const first = practiceLabel(row.practice_one)
     const second =
       row.practice_two != null ? practiceLabel(row.practice_two) : null
+    if (row.kind === 'before_first') {
+      return (
+        <>
+          <span className="practice-date">Before first practice</span>
+          <span className="muted">Covers {first}</span>
+          {second ? <span className="muted">and {second}</span> : null}
+        </>
+      )
+    }
+    const after = practiceLabel(row.anchor_practice)
     return (
       <>
         <span className="practice-date">After {after}</span>
@@ -273,15 +285,20 @@ export default function PracticeReminderEmailsPanel() {
     )
   }
 
+  function scheduleLabel(row) {
+    if (!row.scheduled_send_at) {
+      return 'Not scheduled — set a send time or use Send now'
+    }
+    return `Scheduled ${formatDateTime(row.scheduled_send_at)}`
+  }
+
   function renderUpcomingRow(row) {
     const sending = sendingId === row.id
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
           {reminderSummary(row)}
-          <span className="muted">
-            Scheduled {formatDateTime(row.scheduled_send_at)}
-          </span>
+          <span className="muted">{scheduleLabel(row)}</span>
           <span className="muted">
             {row.recipient_count ?? 0} recipient
             {(row.recipient_count ?? 0) === 1 ? '' : 's'}
@@ -326,7 +343,9 @@ export default function PracticeReminderEmailsPanel() {
             Sent · {formatDateTime(row.task_completed_at)}
           </span>
           <span className="muted">
-            Originally scheduled {formatDateTime(row.scheduled_send_at)}
+            {row.scheduled_send_at
+              ? `Originally scheduled ${formatDateTime(row.scheduled_send_at)}`
+              : 'Was not scheduled (manual send)'}
           </span>
           <span className="muted">
             {row.recipients_emailed_count ?? 0} recipient
@@ -348,9 +367,11 @@ export default function PracticeReminderEmailsPanel() {
   return (
     <>
       <p className="muted">
-        Practice reminders are generated automatically after each practice for the
-        next session(s). They send at 6:15 AM the morning after the anchor practice
-        unless you change the schedule. Each recipient gets a personalized email.
+        Practice reminders are generated automatically for the first practice
+        (two days before at 6:15 AM) and after each practice for the next
+        session(s) (6:15 AM the following morning). If the first practice is
+        less than 48 hours away, no send time is set — use Send now or edit
+        the schedule.
       </p>
 
       <div className="practices-toolbar practices-toolbar-secondary">
@@ -470,11 +491,11 @@ export default function PracticeReminderEmailsPanel() {
           />
         </label>
         <p className="muted form-hint">
-          Placeholders: {'{{first_name}}'}, {'{{last_name}}'}, {'{{year}}'},
-          {' {{date_of_practice_1}}'}, {'{{date_of_practice_2}}'},
+          Leave send date blank to keep this reminder manual-only (cron will not
+          send it until you set a time). Placeholders: {'{{first_name}}'}, {'{{last_name}}'},
+          {' {{year}}'}, {'{{date_of_practice_1}}'}, {'{{date_of_practice_2}}'},
           {' {{practice_1_section}}'}, {'{{practice_2_section}}'},
           {' {{mentor_practice_1_notice}}'}, {'{{mentor_practice_2_notice}}'}.
-          Coach and mentor lists are built automatically inside the section blocks.
         </p>
       </Modal>
 

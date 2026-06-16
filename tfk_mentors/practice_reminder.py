@@ -19,6 +19,7 @@ from .models import (
     PaceTypes,
     Practice,
     PracticeReminderEmail,
+    PracticeReminderKind,
     PracticeReminderSendRecord,
     Season,
     TfkStaff,
@@ -62,6 +63,81 @@ def morning_after_practice(practice_dt):
     return next_day
 
 
+def two_days_before_first_practice(practice_dt):
+    """6:15 AM local time, two calendar days before the first practice."""
+    if timezone.is_naive(practice_dt):
+        practice_dt = timezone.make_aware(practice_dt, display_time_zone())
+    local = timezone.localtime(practice_dt, display_time_zone())
+    return (local - timedelta(days=2)).replace(
+        hour=6, minute=15, second=0, microsecond=0
+    )
+
+
+def schedule_for_before_first_practice(practice_dt):
+    """
+    Return send time for the before-first reminder, or None when the practice
+    is already less than 48 hours away (manual send only).
+    """
+    if timezone.is_naive(practice_dt):
+        practice_dt = timezone.make_aware(practice_dt, display_time_zone())
+    practice_at = timezone.localtime(practice_dt, display_time_zone())
+    if practice_at - timezone.localtime(timezone.now(), display_time_zone()) < timedelta(
+        hours=48
+    ):
+        return None
+    return two_days_before_first_practice(practice_dt)
+
+
+def _upsert_reminder(
+    *,
+    season,
+    anchor,
+    kind,
+    practice_one,
+    practice_two,
+    scheduled_send_at,
+    created_counter,
+    updated_counter,
+    update_schedule_on_sync=False,
+):
+    defaults = {
+        "season": season,
+        "practice_one": practice_one,
+        "practice_two": practice_two,
+        "subject": default_subject(practice_one, practice_two),
+        "body_text": DEFAULT_BODY_TEMPLATE,
+        "scheduled_send_at": scheduled_send_at,
+    }
+    reminder, was_created = PracticeReminderEmail.objects.get_or_create(
+        anchor_practice=anchor,
+        kind=kind,
+        defaults=defaults,
+    )
+    if was_created:
+        created_counter[0] += 1
+        return reminder
+    if reminder.task_completed_at is not None:
+        return reminder
+
+    reminder.season = season
+    reminder.practice_one = practice_one
+    reminder.practice_two = practice_two
+    update_fields = ["season", "practice_one", "practice_two", "updated_at"]
+    if update_schedule_on_sync:
+        reminder.scheduled_send_at = scheduled_send_at
+        update_fields.append("scheduled_send_at")
+    elif (
+        kind == PracticeReminderKind.BEFORE_FIRST
+        and reminder.scheduled_send_at is None
+        and scheduled_send_at is not None
+    ):
+        reminder.scheduled_send_at = scheduled_send_at
+        update_fields.append("scheduled_send_at")
+    reminder.save(update_fields=update_fields)
+    updated_counter[0] += 1
+    return reminder
+
+
 def default_subject(practice_one, practice_two):
     date_one = format_practice_date(practice_one)
     if practice_two is None:
@@ -96,11 +172,8 @@ def _mentors_for_practice_by_pace(practice):
         .prefetch_related("mentor_email_replies__mentor")
         .first()
     )
-    replies = practice.latest_attending_mentor_replies()
     by_pace = {pace: [] for pace in PACE_GROUPS}
-    for reply in replies:
-        mentor = reply.mentor
-        pace = normalize_pace(reply.pace or mentor.pace or "")
+    for mentor, pace, _reply, _assignment in practice.attending_mentor_roster_entries():
         if pace not in by_pace:
             continue
         by_pace[pace].append(
@@ -142,22 +215,15 @@ def build_practice_section(practice):
 def mentor_schedule_notice(recipient, practice):
     if recipient.mentor_id is None or practice is None:
         return ""
-    assignment = (
-        practice.mentorpracticeassignment_set.filter(mentor_id=recipient.mentor_id)
-        .first()
-    )
-    reply = None
-    for item in practice.latest_attending_mentor_replies():
-        if item.mentor_id == recipient.mentor_id:
-            reply = item
-            break
-    if assignment is None and reply is None:
-        return ""
     pace = ""
-    if reply is not None:
-        pace = normalize_pace(reply.pace or reply.mentor.pace or "")
-    elif assignment is not None:
-        pace = normalize_pace(assignment.pace or "")
+    for mentor, entry_pace, reply, assignment in practice.attending_mentor_roster_entries():
+        if mentor.id != recipient.mentor_id:
+            continue
+        if reply is not None:
+            pace = normalize_pace(reply.pace or mentor.pace or "")
+        elif assignment is not None:
+            pace = normalize_pace(assignment.pace or mentor.pace or "")
+        break
     if not pace:
         return ""
     return (
@@ -239,9 +305,9 @@ def collect_recipients(reminder: PracticeReminderEmail):
         practice = practice_by_id.get(pid)
         if practice is None:
             continue
-        for reply in practice.latest_attending_mentor_replies():
-            if reply.mentor.type == MentorTypes.REMOTE:
-                remote_attending_ids.add(reply.mentor_id)
+        for mentor, _pace, _reply, _assignment in practice.attending_mentor_roster_entries():
+            if mentor.type == MentorTypes.REMOTE:
+                remote_attending_ids.add(mentor.id)
 
     for mentor in Mentor.objects.filter(pk__in=remote_attending_ids).order_by(
         "last_name", "first_name", "id"
@@ -296,55 +362,58 @@ def sync_practice_reminders_for_season(season):
     practices = list(
         Practice.objects.filter(season=season).order_by("date", "id")
     )
-    created = 0
-    updated = 0
+    created = [0]
+    updated = [0]
+
+    if practices:
+        first = practices[0]
+        first_practice_two = practices[1] if len(practices) > 1 else None
+        _upsert_reminder(
+            season=season,
+            anchor=first,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+            practice_one=first,
+            practice_two=first_practice_two,
+            scheduled_send_at=schedule_for_before_first_practice(first.date),
+            created_counter=created,
+            updated_counter=updated,
+        )
+    else:
+        PracticeReminderEmail.objects.filter(
+            season=season,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+        ).delete()
 
     for index, anchor in enumerate(practices):
         practice_one = practices[index + 1] if index + 1 < len(practices) else None
         if practice_one is None:
-            PracticeReminderEmail.objects.filter(anchor_practice=anchor).delete()
+            PracticeReminderEmail.objects.filter(
+                anchor_practice=anchor,
+                kind=PracticeReminderKind.AFTER_PRACTICE,
+            ).delete()
             continue
 
-        practice_two = (
-            practices[index + 2] if index + 2 < len(practices) else None
+        practice_two = practices[index + 2] if index + 2 < len(practices) else None
+        _upsert_reminder(
+            season=season,
+            anchor=anchor,
+            kind=PracticeReminderKind.AFTER_PRACTICE,
+            practice_one=practice_one,
+            practice_two=practice_two,
+            scheduled_send_at=morning_after_practice(anchor.date),
+            created_counter=created,
+            updated_counter=updated,
+            update_schedule_on_sync=True,
         )
-        defaults = {
-            "season": season,
-            "practice_one": practice_one,
-            "practice_two": practice_two,
-            "subject": default_subject(practice_one, practice_two),
-            "body_text": DEFAULT_BODY_TEMPLATE,
-            "scheduled_send_at": morning_after_practice(anchor.date),
-        }
-        reminder, was_created = PracticeReminderEmail.objects.get_or_create(
-            anchor_practice=anchor,
-            defaults=defaults,
-        )
-        if was_created:
-            created += 1
-        elif reminder.task_completed_at is None:
-            reminder.season = season
-            reminder.practice_one = practice_one
-            reminder.practice_two = practice_two
-            reminder.scheduled_send_at = morning_after_practice(anchor.date)
-            reminder.save(
-                update_fields=[
-                    "season",
-                    "practice_one",
-                    "practice_two",
-                    "scheduled_send_at",
-                    "updated_at",
-                ]
-            )
-            updated += 1
 
-    return {"created": created, "updated": updated, "season": season.id}
+    return {"created": created[0], "updated": updated[0], "season": season.id}
 
 
 def due_practice_reminder_emails():
     return (
         PracticeReminderEmail.objects.filter(
             task_completed_at__isnull=True,
+            scheduled_send_at__isnull=False,
             scheduled_send_at__lte=timezone.now(),
         )
         .select_related(

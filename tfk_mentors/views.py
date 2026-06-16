@@ -58,6 +58,8 @@ from .serializers import (
     SeasonSerializer,
     TfkStaffSerializer,
     practice_mentor_reply_payload,
+    practice_mentor_assignment_payload,
+    practice_attending_mentor_payloads,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
@@ -519,10 +521,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
             practice.sync_mentor_assignments_from_replies()
             return Response(
                 {
-                    "mentors": [
-                        practice_mentor_reply_payload(r)
-                        for r in practice.latest_attending_mentor_replies()
-                    ],
+                    "mentors": practice_attending_mentor_payloads(practice),
                     "available_mentors": [
                         practice_mentor_reply_payload(r)
                         for r in practice.latest_available_mentor_replies()
@@ -595,14 +594,18 @@ class PracticeViewSet(viewsets.ModelViewSet):
                     {"detail": "Invalid pace choice."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            try:
-                mentor_token = practice.get_or_create_mentor_reply_token(mentor)
-            except ValidationError as e:
-                return Response(
-                    {"detail": e.messages[0] if e.messages else str(e)},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            scheduled = practice.scheduled_email_for_mentor_replies()
             with transaction.atomic():
+                if scheduled is None:
+                    assignment = practice.assign_mentor(mentor, pace)
+                    return Response(
+                        practice_mentor_assignment_payload(assignment),
+                        status=status.HTTP_201_CREATED,
+                    )
+                mentor_token = ScheduledEmailMentorToken.objects.get_or_create(
+                    scheduled_email=scheduled,
+                    mentor=mentor,
+                )[0]
                 reply, _ = ScheduledEmailMentorPracticeReply.objects.update_or_create(
                     mentor_token=mentor_token,
                     practice=practice,
@@ -627,13 +630,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         with transaction.atomic():
-            ScheduledEmailMentorPracticeReply.objects.filter(
-                practice=practice,
-                mentor_id=mentor_id,
-            ).update(
-                attendance=PracticeAttendanceReply.NOT_ATTENDING,
-                pace="",
-            )
+            practice.remove_mentor(mentor_id)
             practice.sync_mentor_assignments_from_replies()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -845,8 +842,7 @@ def build_practice_roster_report(practices):
             )
 
         mentors = []
-        for reply in mentors_from_practice_replies(practice):
-            mentor = reply.mentor
+        for mentor, pace, reply, _assignment in practice.attending_mentor_roster_entries():
             mentors.append(
                 {
                     "mentor_id": mentor.id,
@@ -854,9 +850,13 @@ def build_practice_roster_report(practices):
                     "first_name": mentor.first_name,
                     "last_name": mentor.last_name,
                     "email": mentor.email,
-                    "pace": normalize_pace(reply.pace or mentor.pace or ""),
+                    "pace": pace,
                     "mentor_type": mentor.type,
-                    "attendance": reply.attendance,
+                    "attendance": (
+                        reply.attendance
+                        if reply is not None
+                        else PracticeAttendanceReply.ATTENDING
+                    ),
                     "available": False,
                 }
             )
@@ -916,6 +916,10 @@ class PracticeRosterReportView(APIView):
                 Prefetch(
                     "coachpracticeassignment_set",
                     queryset=CoachPracticeAssignment.objects.select_related("coach"),
+                ),
+                Prefetch(
+                    "mentorpracticeassignment_set",
+                    queryset=MentorPracticeAssignment.objects.select_related("mentor"),
                 ),
                 Prefetch(
                     "mentor_email_replies",
