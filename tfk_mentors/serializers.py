@@ -221,10 +221,20 @@ class RequestsSerializer(serializers.ModelSerializer):
 
 
 class CoachPracticeAssignmentSerializer(serializers.ModelSerializer):
+    pace = serializers.CharField(max_length=11, allow_blank=True, required=False)
+
     class Meta:
         model = CoachPracticeAssignment
         fields = ["id", "coach", "practice", "pace", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_pace(self, value):
+        if not (value or "").strip():
+            return ""
+        normalized = normalize_pace(value)
+        if normalized not in {choice.value for choice in PaceTypes}:
+            raise serializers.ValidationError("Invalid pace choice.")
+        return normalized
 
 
 class MentorPracticeAssignmentSerializer(serializers.ModelSerializer):

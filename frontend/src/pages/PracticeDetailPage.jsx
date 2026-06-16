@@ -37,8 +37,8 @@ export default function PracticeDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [coachIdToAdd, setCoachIdToAdd] = useState('')
-  const [coachPaceToAdd, setCoachPaceToAdd] = useState('8-9')
+  const [coachIdsToAdd, setCoachIdsToAdd] = useState([])
+  const [coachPaceToAdd, setCoachPaceToAdd] = useState('')
   const [mentorIdToAdd, setMentorIdToAdd] = useState('')
   const [mentorPaceToAdd, setMentorPaceToAdd] = useState('8-9')
   const [saving, setSaving] = useState(false)
@@ -247,18 +247,24 @@ export default function PracticeDetailPage() {
 
   async function handleAddCoach(e) {
     e.preventDefault()
-    const coach = Number.parseInt(coachIdToAdd, 10)
-    if (Number.isNaN(coach)) return
+    const coachIds = coachIdsToAdd
+      .map((id) => Number.parseInt(String(id), 10))
+      .filter((id) => !Number.isNaN(id))
+    if (coachIds.length === 0) return
     setSaving(true)
     setError(null)
     try {
-      await createCoachPracticeAssignment({
-        coach,
-        practice: practiceId,
-        pace: coachPaceToAdd,
-      })
-      setCoachIdToAdd('')
-      setCoachPaceToAdd('8-9')
+      await Promise.all(
+        coachIds.map((coach) =>
+          createCoachPracticeAssignment({
+            coach,
+            practice: practiceId,
+            pace: coachPaceToAdd,
+          })
+        )
+      )
+      setCoachIdsToAdd([])
+      setCoachPaceToAdd('')
       await loadAll()
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : String(e2))
@@ -379,7 +385,9 @@ export default function PracticeDetailPage() {
                       <span className="practice-date">
                         {c ? `${c.first_name} ${c.last_name}` : `Coach #${a.coach}`}
                       </span>
-                      <span className="muted">Pace {a.pace}</span>
+                      <span className="muted">
+                        {a.pace ? `Pace ${a.pace}` : 'No pace assigned'}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -396,29 +404,40 @@ export default function PracticeDetailPage() {
             </ul>
 
             <form className="modal-form-stack" onSubmit={handleAddCoach}>
-              <label className="field-label" htmlFor="add-coach">Add coach</label>
+              <label className="field-label" htmlFor="add-coach">
+                Add coaches
+              </label>
               <select
                 id="add-coach"
-                className="field-input field-select"
-                value={coachIdToAdd}
-                onChange={(e) => setCoachIdToAdd(e.target.value)}
-                required
+                className="field-input field-select email-mentor-multiselect"
+                value={coachIdsToAdd}
+                onChange={(e) =>
+                  setCoachIdsToAdd(
+                    Array.from(e.target.selectedOptions).map((o) => o.value)
+                  )
+                }
+                multiple
+                size={Math.min(Math.max(availableCoaches.length, 3), 8)}
               >
-                <option value="" disabled>Select coach</option>
                 {availableCoaches.map((c) => (
                   <option key={c.id} value={String(c.id)}>
                     {c.first_name} {c.last_name}
                   </option>
                 ))}
               </select>
-              <label className="field-label" htmlFor="add-coach-pace">Pace</label>
+              <p className="muted">
+                Hold Ctrl (Windows) or ⌘ (Mac) to select multiple coaches.
+              </p>
+              <label className="field-label" htmlFor="add-coach-pace">
+                Pace <span className="muted">(optional)</span>
+              </label>
               <select
                 id="add-coach-pace"
                 className="field-input field-select"
                 value={coachPaceToAdd}
                 onChange={(e) => setCoachPaceToAdd(e.target.value)}
-                required
               >
+                <option value="">No pace</option>
                 <option value="8-9">8-9</option>
                 <option value="9-10">9-10</option>
                 <option value="10-11">10-11</option>
@@ -426,8 +445,16 @@ export default function PracticeDetailPage() {
                 <option value="12-13">12-13</option>
                 <option value="13+">13+</option>
               </select>
-              <button type="submit" className="btn btn-primary" disabled={saving || availableCoaches.length === 0}>
-                Add Coach
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={
+                  saving ||
+                  availableCoaches.length === 0 ||
+                  coachIdsToAdd.length === 0
+                }
+              >
+                Add Coach{coachIdsToAdd.length > 1 ? 'es' : ''}
               </button>
             </form>
 

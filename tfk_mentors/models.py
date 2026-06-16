@@ -429,7 +429,12 @@ class Practice(TimeStampedModel):
 class CoachPracticeAssignment(TimeStampedModel):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     practice = models.ForeignKey(Practice, on_delete=models.CASCADE)
-    pace = models.CharField(choices=PaceTypes, max_length=11)
+    pace = models.CharField(
+        choices=PaceTypes,
+        max_length=11,
+        blank=True,
+        default="",
+    )
 
     class Meta:
         constraints = [
