@@ -665,6 +665,97 @@ export async function deleteScheduledEmail(id) {
     throw new Error(await parseError(res))
 }
 
+const PRACTICE_REMINDER_EMAIL_LIST = apiPath('/api/practice-reminder-email/')
+
+/** @param {unknown} data */
+export function normalizePracticeReminderEmailList(data) {
+  if (!data || typeof data !== 'object') return []
+  if (Array.isArray(data)) return data
+  if ('results' in data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+/** @param {number|string} [seasonId] */
+export async function fetchPracticeReminderEmails(seasonId) {
+  const query =
+    seasonId != null && seasonId !== ''
+      ? `?season=${encodeURIComponent(String(seasonId))}`
+      : ''
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${query}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return normalizePracticeReminderEmailList(data)
+}
+
+/** @param {number|string} id */
+export async function fetchPracticeReminderEmail(id) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} seasonId */
+export async function syncPracticeReminderEmails(seasonId) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}sync/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ season: Number(seasonId) }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id @param {Record<string, unknown>} body */
+export async function patchPracticeReminderEmail(id, body) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function deletePracticeReminderEmail(id) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: {
+      ...csrfHeaders(),
+    },
+  })
+  if (!res.ok && res.status !== 204)
+    throw new Error(await parseError(res))
+}
+
+/** @param {number|string} id */
+export async function sendPracticeReminderEmailNow(id) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/send-now/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({}),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 const AUTH_SESSION = apiPath('/api/auth/session/')
 
 /** Bootstrap CSRF cookie and report whether the admin session is active. */

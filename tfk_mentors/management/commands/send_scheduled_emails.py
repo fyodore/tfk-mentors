@@ -2,10 +2,17 @@ from django.core.management.base import BaseCommand, CommandError
 
 from tfk_mentors.email_sending import due_scheduled_emails, send_scheduled_email
 from tfk_mentors.models import ScheduledEmail
+from tfk_mentors.practice_reminder import (
+    due_practice_reminder_emails,
+    send_practice_reminder,
+)
 
 
 class Command(BaseCommand):
-    help = "Send scheduled mentor emails whose send time has passed."
+    help = (
+        "Send scheduled mentor emails and practice reminder emails "
+        "whose send time has passed."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -42,10 +49,12 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"ScheduledEmail {email_id} was already sent. Use --force to resend."
                 )
+            reminder_rows = []
         else:
             rows = list(due_scheduled_emails())
+            reminder_rows = list(due_practice_reminder_emails())
 
-        if not rows:
+        if not rows and not reminder_rows:
             self.stdout.write("No scheduled emails due.")
             return
 
@@ -68,5 +77,27 @@ class Command(BaseCommand):
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"Sent {label} to {result['sent']} mentor(s)."
+                    )
+                )
+
+        for reminder in reminder_rows:
+            label = (
+                f"PracticeReminderEmail {reminder.pk} "
+                f"(due {reminder.scheduled_send_at.isoformat()})"
+            )
+            try:
+                result = send_practice_reminder(reminder, dry_run=dry_run)
+            except Exception as exc:
+                raise CommandError(f"{label}: {exc}") from exc
+
+            if dry_run:
+                self.stdout.write(
+                    f"DRY RUN {label}: would email {result['recipients']} recipient(s) "
+                    f"with subject {result['subject']!r}"
+                )
+            else:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Sent {label} to {result['sent']} recipient(s)."
                     )
                 )

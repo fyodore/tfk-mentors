@@ -26,6 +26,7 @@ from .models import (
     PACE_SORT,
     Practice,
     PracticeAttendanceReply,
+    PracticeReminderEmail,
     Requests,
     ScheduledEmail,
     ScheduledEmailMentorPracticeReply,
@@ -50,6 +51,7 @@ from .serializers import (
     MentorSerializer,
     MentorPracticeAssignmentSerializer,
     PracticeDetailSerializer,
+    PracticeReminderEmailSerializer,
     PracticeSerializer,
     RequestsSerializer,
     ScheduledEmailSerializer,
@@ -59,6 +61,10 @@ from .serializers import (
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
+from .practice_reminder import (
+    send_practice_reminder,
+    sync_practice_reminders_for_season,
+)
 
 
 def normalize_csv_header_key(key):
@@ -486,6 +492,19 @@ class PracticeViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             return PracticeDetailSerializer
         return PracticeSerializer
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        sync_practice_reminders_for_season(instance.season_id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        sync_practice_reminders_for_season(instance.season_id)
+
+    def perform_destroy(self, instance):
+        season_id = instance.season_id
+        super().perform_destroy(instance)
+        sync_practice_reminders_for_season(season_id)
 
     @action(
         detail=True,
@@ -1415,6 +1434,82 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
         )
         try:
             result = send_reply_reminders_for_email(scheduled, dry_run=dry_run)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ConnectionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(result)
+
+
+class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
+    """Practice reminder emails at /api/practice-reminder-email/."""
+
+    queryset = (
+        PracticeReminderEmail.objects.all()
+        .select_related(
+            "season",
+            "anchor_practice",
+            "practice_one",
+            "practice_two",
+        )
+        .prefetch_related("send_records")
+        .order_by("scheduled_send_at", "id")
+    )
+    serializer_class = PracticeReminderEmailSerializer
+    http_method_names = ["get", "patch", "delete", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        season_id = self.request.query_params.get("season")
+        if season_id:
+            try:
+                sync_practice_reminders_for_season(int(season_id))
+            except (TypeError, ValueError, Season.DoesNotExist):
+                pass
+            qs = qs.filter(season_id=season_id)
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        reminder = self.get_object()
+        if reminder.task_completed_at:
+            return Response(
+                {"detail": "Sent practice reminders cannot be deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=["post"], url_path="sync")
+    def sync(self, request):
+        season_id = request.data.get("season") if isinstance(request.data, dict) else None
+        if season_id is None:
+            return Response(
+                {"detail": "season is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = sync_practice_reminders_for_season(int(season_id))
+        except Season.DoesNotExist:
+            return Response(
+                {"detail": "Season not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(result)
+
+    @action(detail=True, methods=["post"], url_path="send-now")
+    def send_now(self, request, pk=None):
+        reminder = self.get_object()
+        if reminder.task_completed_at:
+            return Response(
+                {"detail": "This practice reminder has already been sent."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        dry_run = (
+            request.data.get("dry_run") is True
+            if isinstance(request.data, dict)
+            else False
+        )
+        try:
+            result = send_practice_reminder(reminder, dry_run=dry_run)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except ConnectionError as exc:

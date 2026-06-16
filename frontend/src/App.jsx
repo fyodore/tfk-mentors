@@ -4,6 +4,7 @@ import { PasswordGate } from './components/PasswordGate.jsx'
 import CoachesPage from './pages/CoachesPage.jsx'
 import EmailsPage from './pages/EmailsPage.jsx'
 import EmailDetailPage from './pages/EmailDetailPage.jsx'
+import PracticeReminderDetailPage from './pages/PracticeReminderDetailPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import MentorReplyPage from './pages/MentorReplyPage.jsx'
 import MentorsPage from './pages/MentorsPage.jsx'
@@ -86,6 +87,14 @@ export default function App() {
           element={
             <Protected>
               <EmailsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/emails/practice-reminder/:id"
+          element={
+            <Protected>
+              <PracticeReminderDetailPage />
             </Protected>
           }
         />

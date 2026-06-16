@@ -14,6 +14,7 @@ import {
 } from '../api'
 import { normalizePendingMentorRows, pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
+import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
   buildQuarterTimeOptions,
@@ -60,6 +61,7 @@ function createEmptyEmailForm(defaultSeasonId) {
 }
 
 export default function EmailsPage() {
+  const [activeTab, setActiveTab] = useState('mentor-practice-request')
   const [emails, setEmails] = useState([])
   const [practices, setPractices] = useState([])
   const [seasons, setSeasons] = useState([])
@@ -786,18 +788,45 @@ export default function EmailsPage() {
       <main className="panel emails-panel">
         <div className="practices-toolbar">
           <h2>Emails</h2>
+          {activeTab === 'mentor-practice-request' ? (
+            <button
+              type="button"
+              className="btn-icon-plus"
+              aria-label="Schedule email"
+              title="Schedule email"
+              disabled={loading}
+              onClick={openCreate}
+            >
+              +
+            </button>
+          ) : null}
+        </div>
+
+        <div className="emails-tabs" role="tablist" aria-label="Email types">
           <button
             type="button"
-            className="btn-icon-plus"
-            aria-label="Schedule email"
-            title="Schedule email"
-            disabled={loading}
-            onClick={openCreate}
+            role="tab"
+            className={`emails-tab${activeTab === 'mentor-practice-request' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'mentor-practice-request'}
+            onClick={() => setActiveTab('mentor-practice-request')}
           >
-            +
+            Mentor Practice Request
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`emails-tab${activeTab === 'practice-reminder' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'practice-reminder'}
+            onClick={() => setActiveTab('practice-reminder')}
+          >
+            Practice Reminder
           </button>
         </div>
 
+        {activeTab === 'practice-reminder' ? (
+          <PracticeReminderEmailsPanel />
+        ) : (
+          <>
         <p className="muted">
           Upcoming messages can be sent manually with <strong>Send now</strong>, sent
           later on schedule, or marked complete with <strong>Mark sent</strong> if
@@ -839,6 +868,8 @@ export default function EmailsPage() {
               )}
             </section>
           </div>
+        )}
+          </>
         )}
       </main>
 

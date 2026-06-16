@@ -10,6 +10,7 @@ from .views import (
     PracticeRosterReportView,
     MentorNonResponseReportView,
     PracticeViewSet,
+    PracticeReminderEmailViewSet,
     RequestsViewSet,
     ScheduledEmailViewSet,
     SeasonViewSet,
@@ -34,6 +35,11 @@ router.register(
 )
 router.register("mentor", MentorViewSet, basename="mentor")
 router.register("practice", PracticeViewSet, basename="practice")
+router.register(
+    "practice-reminder-email",
+    PracticeReminderEmailViewSet,
+    basename="practice-reminder-email",
+)
 router.register("requests", RequestsViewSet, basename="requests")
 router.register(
     "scheduled-email",

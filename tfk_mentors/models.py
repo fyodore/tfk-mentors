@@ -640,6 +640,102 @@ class MentorAnswers(TimeStampedModel):
         self.comments = value
 
 
+class PracticeReminderRecipientKind(models.TextChoices):
+    STAFF = "staff", "TFK Staff"
+    COACH = "coach", "Coach"
+    MENTOR = "mentor", "Mentor"
+
+
+class PracticeReminderEmail(TimeStampedModel):
+    """Reminder email generated after a practice about upcoming session(s)."""
+
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="practice_reminder_emails",
+    )
+    anchor_practice = models.OneToOneField(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="practice_reminder_email",
+        help_text="Practice after which this reminder is scheduled to send.",
+    )
+    practice_one = models.ForeignKey(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="practice_reminders_as_first",
+        help_text="First upcoming practice covered in this email.",
+    )
+    practice_two = models.ForeignKey(
+        Practice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="practice_reminders_as_second",
+        help_text="Second upcoming practice covered in this email, if any.",
+    )
+    scheduled_send_at = models.DateTimeField(
+        db_index=True,
+        help_text="Default: 6:15 AM the morning after anchor practice.",
+    )
+    subject = models.TextField(
+        help_text=(
+            "Subject template. Use {{ date_of_practice_1 }}, {{ date_of_practice_2 }}, "
+            "and {{ first_name }} / {{ last_name }} for the recipient."
+        ),
+    )
+    body_text = models.TextField(
+        help_text=(
+            "Body template. Use {{ first_name }}, {{ last_name }}, {{ year }}, "
+            "{{ date_of_practice_1 }}, {{ date_of_practice_2 }}, {{ practice_1_section }}, "
+            "{{ practice_2_section }}, {{ mentor_practice_1_notice }}, "
+            "{{ mentor_practice_2_notice }}."
+        ),
+    )
+    task_completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the send task finished (null if not run yet).",
+    )
+    recipients_emailed_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="How many recipients received this email when it was sent.",
+    )
+
+    class Meta:
+        ordering = ["scheduled_send_at", "id"]
+
+    def __str__(self):
+        return f"Practice reminder after practice {self.anchor_practice_id}"
+
+
+class PracticeReminderSendRecord(TimeStampedModel):
+    """Rendered copy of a practice reminder email sent to one recipient."""
+
+    reminder = models.ForeignKey(
+        PracticeReminderEmail,
+        on_delete=models.CASCADE,
+        related_name="send_records",
+    )
+    recipient_email = models.EmailField()
+    recipient_first_name = models.CharField(max_length=100, blank=True)
+    recipient_last_name = models.CharField(max_length=100, blank=True)
+    recipient_kind = models.CharField(
+        max_length=16,
+        choices=PracticeReminderRecipientKind.choices,
+    )
+    rendered_subject = models.TextField()
+    rendered_body = models.TextField()
+    sent_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["recipient_last_name", "recipient_first_name", "id"]
+
+    def __str__(self):
+        return f"{self.recipient_email} ← reminder {self.reminder_id}"
+
+
 class ScheduledEmail(TimeStampedModel):
     """Scheduled bulk email to mentors with per-recipient template placeholders."""
 

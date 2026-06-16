@@ -8,6 +8,8 @@ from .models import (
     MentorTypes,
     PaceTypes,
     Practice,
+    PracticeReminderEmail,
+    PracticeReminderSendRecord,
     Requests,
     ScheduledEmail,
     ScheduledEmailRecipientMode,
@@ -405,4 +407,73 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
             attrs["recipient_season"] = None
 
         attrs["recipient_mode"] = mode
+        return attrs
+
+
+class PracticeReminderSendRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PracticeReminderSendRecord
+        fields = [
+            "id",
+            "recipient_email",
+            "recipient_first_name",
+            "recipient_last_name",
+            "recipient_kind",
+            "rendered_subject",
+            "rendered_body",
+            "sent_at",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class PracticeReminderEmailSerializer(serializers.ModelSerializer):
+    send_records = PracticeReminderSendRecordSerializer(many=True, read_only=True)
+    recipient_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PracticeReminderEmail
+        fields = [
+            "id",
+            "season",
+            "anchor_practice",
+            "practice_one",
+            "practice_two",
+            "scheduled_send_at",
+            "subject",
+            "body_text",
+            "task_completed_at",
+            "recipients_emailed_count",
+            "recipient_count",
+            "send_records",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "season",
+            "anchor_practice",
+            "practice_one",
+            "practice_two",
+            "task_completed_at",
+            "recipients_emailed_count",
+            "recipient_count",
+            "send_records",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_recipient_count(self, obj):
+        from .practice_reminder import collect_recipients
+
+        if obj.task_completed_at:
+            return obj.recipients_emailed_count or 0
+        return len(collect_recipients(obj))
+
+    def validate(self, attrs):
+        instance = self.instance
+        if instance and instance.task_completed_at:
+            raise serializers.ValidationError(
+                "Sent practice reminders cannot be edited."
+            )
         return attrs
