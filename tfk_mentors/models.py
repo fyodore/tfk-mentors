@@ -808,6 +808,36 @@ class PracticeReminderEmail(TimeStampedModel):
         return f"Practice reminder ({self.kind}) anchor {self.anchor_practice_id}"
 
 
+class PracticeReminderSuppression(TimeStampedModel):
+    """User-dismissed reminder that sync should not recreate."""
+
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.CASCADE,
+        related_name="practice_reminder_suppressions",
+    )
+    anchor_practice = models.ForeignKey(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="practice_reminder_suppressions",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=PracticeReminderKind.choices,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["anchor_practice", "kind"],
+                name="unique_practice_reminder_suppression",
+            )
+        ]
+
+    def __str__(self):
+        return f"Suppressed {self.kind} reminder for practice {self.anchor_practice_id}"
+
+
 class PracticeReminderSendRecord(TimeStampedModel):
     """Rendered copy of a practice reminder email sent to one recipient."""
 

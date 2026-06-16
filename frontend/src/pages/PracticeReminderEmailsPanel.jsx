@@ -238,10 +238,12 @@ export default function PracticeReminderEmailsPanel() {
     if (!activeReminder) return
     setBusy(true)
     setModalError('')
+    const deletedId = activeReminder.id
     try {
-      await deletePracticeReminderEmail(activeReminder.id)
-      await reloadReminders()
+      await deletePracticeReminderEmail(deletedId)
+      setReminders((prev) => prev.filter((row) => row.id !== deletedId))
       resetModal()
+      await reloadReminders()
     } catch (e) {
       setModalError(e instanceof Error ? e.message : String(e))
     } finally {

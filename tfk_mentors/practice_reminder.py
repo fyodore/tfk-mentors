@@ -21,6 +21,7 @@ from .models import (
     PracticeReminderEmail,
     PracticeReminderKind,
     PracticeReminderSendRecord,
+    PracticeReminderSuppression,
     Season,
     TfkStaff,
     normalize_pace,
@@ -100,6 +101,17 @@ def _upsert_reminder(
     updated_counter,
     update_schedule_on_sync=False,
 ):
+    if PracticeReminderSuppression.objects.filter(
+        anchor_practice=anchor,
+        kind=kind,
+    ).exists():
+        PracticeReminderEmail.objects.filter(
+            anchor_practice=anchor,
+            kind=kind,
+            task_completed_at__isnull=True,
+        ).delete()
+        return None
+
     defaults = {
         "season": season,
         "practice_one": practice_one,

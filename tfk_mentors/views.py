@@ -27,6 +27,9 @@ from .models import (
     Practice,
     PracticeAttendanceReply,
     PracticeReminderEmail,
+    PracticeReminderKind,
+    PracticeReminderSendRecord,
+    PracticeReminderSuppression,
     Requests,
     ScheduledEmail,
     ScheduledEmailMentorPracticeReply,
@@ -1480,6 +1483,11 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
                 {"detail": "Sent practice reminders cannot be deleted."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        PracticeReminderSuppression.objects.get_or_create(
+            season_id=reminder.season_id,
+            anchor_practice_id=reminder.anchor_practice_id,
+            kind=reminder.kind,
+        )
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["post"], url_path="sync")

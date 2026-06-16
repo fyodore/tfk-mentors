@@ -260,3 +260,28 @@ class PracticeReminderTests(TestCase):
         detail = self.client.get(f"/api/practice-reminder-email/{reminder.id}/")
         self.assertEqual(detail.status_code, 200)
         self.assertGreater(len(detail.data["send_records"]), 0)
+
+    def test_delete_unsent_reminder_and_sync_does_not_recreate(self):
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.filter(
+            kind=PracticeReminderKind.BEFORE_FIRST,
+            task_completed_at__isnull=True,
+        ).first()
+        self.assertIsNotNone(reminder)
+        response = self.client.delete(
+            f"/api/practice-reminder-email/{reminder.id}/"
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(PracticeReminderEmail.objects.filter(pk=reminder.id).exists())
+        list_response = self.client.get(
+            f"/api/practice-reminder-email/?season={self.season.id}"
+        )
+        self.assertEqual(list_response.status_code, 200)
+        ids = {row["id"] for row in list_response.data}
+        self.assertNotIn(reminder.id, ids)
+        self.assertFalse(
+            PracticeReminderEmail.objects.filter(
+                anchor_practice=reminder.anchor_practice,
+                kind=PracticeReminderKind.BEFORE_FIRST,
+            ).exists()
+        )
