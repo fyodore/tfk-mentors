@@ -317,7 +317,7 @@ def build_mentor_practice_rows(mentor):
     return rows
 
 
-def build_public_mentor_directory_practices(mentor):
+def build_public_mentor_directory():
     """Mentor summaries for the public directory (practices loaded on expand)."""
     mentors = list(
         Mentor.objects.all()
