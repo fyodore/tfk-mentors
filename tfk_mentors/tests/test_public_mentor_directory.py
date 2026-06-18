@@ -74,31 +74,42 @@ class PublicMentorDirectoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 2)
 
-    def test_public_payload_excludes_contact_info_and_unassigned_practices(self):
+    def test_public_summary_payload_excludes_contact_info_and_practices(self):
         response = self.client.get("/api/public/mentor-directory/")
         pat = next(row for row in response.data if row["last_name"] == "Alpha")
 
         self.assertEqual(pat["type"], MentorTypes.PRACTICE)
         self.assertEqual(pat["pace"], "9-10")
+        self.assertEqual(pat["assigned_count"], 1)
+        self.assertEqual(pat["available_count"], 1)
         self.assertNotIn("email", pat)
         self.assertNotIn("cell_phone", pat)
-        self.assertEqual(len(pat["assigned_practices"]), 1)
+        self.assertNotIn("assigned_practices", pat)
+        self.assertNotIn("available_practices", pat)
+
+    def test_public_practices_endpoint_loads_on_expand(self):
+        response = self.client.get(
+            f"/api/public/mentor-directory/{self.mentor.id}/practices/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["assigned_practices"]), 1)
         self.assertEqual(
-            pat["assigned_practices"][0]["practice_id"],
+            response.data["assigned_practices"][0]["practice_id"],
             self.assigned_practice.id,
         )
-        self.assertEqual(len(pat["available_practices"]), 1)
+        self.assertEqual(len(response.data["available_practices"]), 1)
         self.assertEqual(
-            pat["available_practices"][0]["practice_id"],
+            response.data["available_practices"][0]["practice_id"],
             self.available_practice.id,
         )
         practice_ids = {
             row["practice_id"]
-            for row in pat["assigned_practices"] + pat["available_practices"]
+            for row in response.data["assigned_practices"]
+            + response.data["available_practices"]
         }
         self.assertNotIn(self.unassigned_practice.id, practice_ids)
 
-    def test_public_payload_includes_email_reply_assignments(self):
+    def test_public_practices_endpoint_includes_email_reply_assignments(self):
         scheduled = ScheduledEmail.objects.create(
             scheduled_send_at=timezone.now() + timedelta(days=1),
             body_text="Hello",
@@ -119,12 +130,16 @@ class PublicMentorDirectoryTests(TestCase):
         )
         self.unassigned_practice.sync_mentor_assignments_from_replies()
 
-        response = self.client.get("/api/public/mentor-directory/")
-        sam = next(row for row in response.data if row["last_name"] == "Beta")
+        summary = self.client.get("/api/public/mentor-directory/")
+        sam = next(row for row in summary.data if row["last_name"] == "Beta")
+        self.assertEqual(sam["assigned_count"], 1)
 
-        self.assertEqual(len(sam["assigned_practices"]), 1)
+        response = self.client.get(
+            f"/api/public/mentor-directory/{self.other_mentor.id}/practices/"
+        )
+        self.assertEqual(len(response.data["assigned_practices"]), 1)
         self.assertEqual(
-            sam["assigned_practices"][0]["practice_id"],
+            response.data["assigned_practices"][0]["practice_id"],
             self.unassigned_practice.id,
         )
 
