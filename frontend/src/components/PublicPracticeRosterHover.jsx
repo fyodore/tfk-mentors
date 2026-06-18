@@ -200,7 +200,10 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
             </button>
           ) : null}
           {roster?.description?.trim() ? (
-            <p className="public-practice-roster-description">{roster.description.trim()}</p>
+            <div className="public-practice-roster-description-block">
+              <span className="public-practice-roster-description-label">Practice Plan</span>
+              <p className="public-practice-roster-description">{roster.description.trim()}</p>
+            </div>
           ) : null}
           <span className="mentor-practice-hover-title">Mentors at this practice</span>
           {loading && roster === null ? (
