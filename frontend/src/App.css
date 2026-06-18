@@ -1530,6 +1530,15 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 
+.public-practice-roster-description {
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .public-practice-roster-close {
   position: absolute;
   top: 0.35rem;

@@ -462,6 +462,7 @@ def build_public_practice_mentor_roster(practice):
     )
     return {
         "practice_id": practice.id,
+        "description": practice.description or "",
         "attending_mentors": attending,
         "available_mentors": available,
     }

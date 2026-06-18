@@ -225,3 +225,13 @@ class PublicMentorDirectoryTests(TestCase):
             f"/api/public/practice/{self.available_practice.id}/mentors/"
         )
         self.assertEqual(len(available_response.data["available_mentors"]), 2)
+
+    def test_public_practice_roster_includes_description(self):
+        self.assigned_practice.description = "Long run from the reservoir."
+        self.assigned_practice.save(update_fields=["description", "updated_at"])
+
+        response = self.client.get(
+            f"/api/public/practice/{self.assigned_practice.id}/mentors/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["description"], "Long run from the reservoir.")

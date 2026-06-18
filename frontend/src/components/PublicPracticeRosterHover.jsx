@@ -109,7 +109,7 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
       setRoster(data)
     } catch {
       if (requestRef.current !== requestId) return
-      setRoster({ attending_mentors: [], available_mentors: [] })
+      setRoster({ attending_mentors: [], available_mentors: [], description: '' })
     } finally {
       if (requestRef.current === requestId) setLoading(false)
     }
@@ -198,6 +198,9 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
             >
               ×
             </button>
+          ) : null}
+          {roster?.description?.trim() ? (
+            <p className="public-practice-roster-description">{roster.description.trim()}</p>
           ) : null}
           <span className="mentor-practice-hover-title">Mentors at this practice</span>
           {loading && roster === null ? (
