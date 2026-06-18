@@ -9,6 +9,7 @@ from .models import (
     MentorPracticeShowUp,
     MentorTypes,
     PaceTypes,
+    PACE_SORT,
     Practice,
     PracticeAttendanceReply,
     PracticeReminderEmail,
@@ -314,6 +315,115 @@ def build_mentor_practice_rows(mentor):
             }
         )
     return rows
+
+
+def public_practice_row(practice, detail):
+    """Minimal practice row for the public mentor directory."""
+    return {
+        "practice_id": practice.id,
+        "date": practice.date.isoformat(),
+        "season_year": practice.season.year,
+        "nyrr_race": practice.nyrr_race or "",
+        "full_practice": practice.full_practice,
+        "pace": detail.get("pace") or "",
+        "attendance": detail.get("attendance"),
+    }
+
+
+def build_public_mentor_directory():
+    """All mentors with assigned and available practices for the public directory."""
+    mentors = (
+        Mentor.objects.all()
+        .prefetch_related("seasons")
+        .order_by("last_name", "first_name", "id")
+    )
+    season_ids = set()
+    for mentor in mentors:
+        season_ids.update(mentor.seasons.values_list("id", flat=True))
+
+    practices_by_season = {}
+    if season_ids:
+        practices = (
+            Practice.objects.filter(season_id__in=season_ids)
+            .select_related("season")
+            .prefetch_related(
+                "mentor_email_replies__mentor",
+                "mentor_email_replies__mentor_token__scheduled_email",
+                Prefetch(
+                    "mentorpracticeassignment_set",
+                    queryset=MentorPracticeAssignment.objects.select_related("mentor"),
+                ),
+            )
+            .order_by("date", "id")
+        )
+        for practice in practices:
+            practices_by_season.setdefault(practice.season_id, []).append(practice)
+
+    entries = []
+    for mentor in mentors:
+        mentor_season_ids = {season.id for season in mentor.seasons.all()}
+        assigned_practices = []
+        available_practices = []
+        for season_id in mentor_season_ids:
+            for practice in practices_by_season.get(season_id, []):
+                detail = mentor_status_for_practice(mentor, practice)
+                status = detail.get("status")
+                if status == "assigned":
+                    assigned_practices.append(public_practice_row(practice, detail))
+                elif status == "available":
+                    available_practices.append(public_practice_row(practice, detail))
+
+        entries.append(
+            {
+                "id": mentor.id,
+                "first_name": mentor.first_name,
+                "last_name": mentor.last_name,
+                "type": mentor.type,
+                "pace": normalize_pace(mentor.pace or ""),
+                "assigned_practices": assigned_practices,
+                "available_practices": available_practices,
+            }
+        )
+    return entries
+
+
+def _public_mentor_roster_row(payload):
+    return {
+        "mentor_id": payload["mentor_id"],
+        "first_name": payload["first_name"],
+        "last_name": payload["last_name"],
+        "pace": payload["pace"],
+        "attendance": payload.get("attendance"),
+    }
+
+
+def _sort_public_mentor_roster_rows(rows):
+    return sorted(
+        rows,
+        key=lambda row: (
+            PACE_SORT.get(normalize_pace(row.get("pace") or ""), 99),
+            row.get("last_name") or "",
+            row.get("first_name") or "",
+        ),
+    )
+
+
+def build_public_practice_mentor_roster(practice):
+    """Attending and available mentors for one practice (public, no contact info)."""
+    practice.sync_mentor_assignments_from_replies()
+    attending = _sort_public_mentor_roster_rows(
+        _public_mentor_roster_row(payload)
+        for payload in practice_attending_mentor_payloads(practice)
+    )
+    available = _sort_public_mentor_roster_rows(
+        _public_mentor_roster_row(payload)
+        for payload in practice_available_mentor_payloads(practice)
+    )
+    return {
+        "practice_id": practice.id,
+        "attending_mentors": attending,
+        "available_mentors": available,
+    }
 
 
 def practice_show_up_by_mentor(practice):

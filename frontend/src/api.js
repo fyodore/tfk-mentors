@@ -929,3 +929,19 @@ export async function patchPracticeAttendance(id, body) {
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
+
+const PUBLIC_MENTOR_DIRECTORY = apiPath('/api/public/mentor-directory/')
+
+/** @returns {Promise<Array<{ id: number, first_name: string, last_name: string, pace: string, assigned_practices: object[], available_practices: object[] }>>} */
+export async function fetchPublicMentorDirectory() {
+  const res = await fetch(PUBLIC_MENTOR_DIRECTORY)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} practiceId */
+export async function fetchPublicPracticeMentorRoster(practiceId) {
+  const res = await fetch(apiPath(`/api/public/practice/${practiceId}/mentors/`))
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}

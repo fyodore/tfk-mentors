@@ -8,6 +8,7 @@ import EmailDetailPage from './pages/EmailDetailPage.jsx'
 import PracticeReminderDetailPage from './pages/PracticeReminderDetailPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import MentorReplyPage from './pages/MentorReplyPage.jsx'
+import PublicMentorDirectoryPage from './pages/PublicMentorDirectoryPage.jsx'
 import MentorDetailPage from './pages/MentorDetailPage.jsx'
 import MentorsPage from './pages/MentorsPage.jsx'
 import PracticeDetailPage from './pages/PracticeDetailPage.jsx'
@@ -28,6 +29,7 @@ export default function App() {
       <Routes>
         <Route path="/mentor-reply" element={<MentorReplyPage />} />
         <Route path="/mentor-reply/:token" element={<MentorReplyPage />} />
+        <Route path="/mentor-directory" element={<PublicMentorDirectoryPage />} />
         <Route
           path="/"
           element={

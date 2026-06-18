@@ -12,6 +12,8 @@ from .views import (
     PracticeAttendanceDetailView,
     PracticeRosterReportView,
     MentorNonResponseReportView,
+    PublicMentorDirectoryView,
+    PublicPracticeMentorRosterView,
     PracticeViewSet,
     PracticeReminderEmailViewSet,
     RequestsViewSet,
@@ -104,6 +106,16 @@ urlpatterns = [
         "practice-attendance/<int:pk>/",
         PracticeAttendanceDetailView.as_view(),
         name="practice-attendance-detail",
+    ),
+    path(
+        "public/mentor-directory/",
+        PublicMentorDirectoryView.as_view(),
+        name="public-mentor-directory",
+    ),
+    path(
+        "public/practice/<int:pk>/mentors/",
+        PublicPracticeMentorRosterView.as_view(),
+        name="public-practice-mentor-roster",
     ),
     path("", include(router.urls)),
 ]

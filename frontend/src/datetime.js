@@ -61,6 +61,22 @@ export function formatDateTime(iso) {
   })
 }
 
+/** @param {string|number|Date} iso */
+export function formatMentorDirectoryPracticeDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  const tz = displayTimeZoneOptions()
+  const weekday = d.toLocaleDateString(undefined, { ...tz, weekday: 'short' })
+  const datePart = d.toLocaleDateString(undefined, {
+    ...tz,
+    month: 'short',
+    day: 'numeric',
+  })
+  const timePart = d.toLocaleTimeString(undefined, { ...tz, timeStyle: 'short' })
+  return `${weekday}, ${datePart}, ${timePart}`
+}
+
 /** @param {string|number|Date} iso @param {string} [nyrrRace] */
 export function formatPracticeWhen(iso, nyrrRace) {
   const d = new Date(iso)

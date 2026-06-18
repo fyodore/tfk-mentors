@@ -1366,3 +1366,184 @@
     color: #e5e7eb;
   }
 }
+
+.mentor-directory-panel {
+  max-width: 52rem;
+}
+
+.mentor-directory-section + .mentor-directory-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.mentor-directory-section h2 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+}
+
+.mentor-directory-filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .mentor-directory-filters {
+    grid-template-columns: 1fr 12rem;
+    align-items: end;
+  }
+}
+
+.mentor-directory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mentor-directory-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.mentor-directory-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name chevron'
+    'pace chevron'
+    'counts chevron';
+  gap: 0.15rem 0.75rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+@media (min-width: 640px) {
+  .mentor-directory-toggle {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas: 'name pace counts chevron';
+  }
+}
+
+.mentor-directory-toggle:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.mentor-directory-name {
+  grid-area: name;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.mentor-directory-pace {
+  grid-area: pace;
+  font-size: 0.92rem;
+}
+
+.mentor-directory-counts {
+  grid-area: counts;
+  font-size: 0.88rem;
+}
+
+.mentor-directory-chevron {
+  grid-area: chevron;
+  justify-self: end;
+  color: var(--text-h);
+}
+
+.mentor-directory-details {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.mentor-directory-practice-group + .mentor-directory-practice-group {
+  margin-top: 1rem;
+}
+
+.mentor-directory-practice-group h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.mentor-directory-practice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mentor-directory-practice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  background: #e8f4ea;
+  border: 1px solid #c6e0cb;
+}
+
+.mentor-directory-practice-hover {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  flex: 1 1 auto;
+}
+
+.mentor-directory-practice-hover-trigger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  flex: 1 1 auto;
+}
+
+.public-practice-roster-card {
+  min-width: 18rem;
+  max-width: 24rem;
+}
+
+.public-practice-roster-section + .public-practice-roster-section {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.public-practice-roster-section-title {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-h);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mentor-directory-practice-date {
+  font-weight: 600;
+}
+
+.mentor-directory-practice-status {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+@media (prefers-color-scheme: dark) {
+  .mentor-directory-practice-row {
+    background: rgba(31, 95, 42, 0.35);
+    border-color: rgba(198, 224, 203, 0.35);
+  }
+}

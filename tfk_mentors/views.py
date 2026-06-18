@@ -84,6 +84,8 @@ from .serializers import (
     build_practice_attendance_payload,
     build_archived_practice_attendance_row,
     build_mentor_practice_rows,
+    build_public_mentor_directory,
+    build_public_practice_mentor_roster,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
@@ -1754,3 +1756,30 @@ class PracticeAttendanceDetailView(APIView):
 
         practice.refresh_from_db()
         return Response(build_practice_attendance_payload(practice))
+
+
+class PublicMentorDirectoryView(APIView):
+    """Public mentor list with assigned and available practices."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(build_public_mentor_directory())
+
+
+class PublicPracticeMentorRosterView(APIView):
+    """Public attending and available mentors for one practice."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        try:
+            practice = Practice.objects.select_related("season").get(pk=pk)
+        except Practice.DoesNotExist:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(build_public_practice_mentor_roster(practice))
