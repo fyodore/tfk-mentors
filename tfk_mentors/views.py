@@ -1800,4 +1800,9 @@ class PublicPracticeMentorRosterView(APIView):
                 {"detail": "Practice not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        if not practice.show_to_mentors:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         return Response(build_public_practice_mentor_roster(practice))

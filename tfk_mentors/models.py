@@ -321,6 +321,10 @@ class Practice(TimeStampedModel):
     start_location = models.CharField(max_length=255, blank=True, default="")
     mentors = models.ManyToManyField(Mentor)
     full_practice = models.BooleanField(default=True)
+    show_to_mentors = models.BooleanField(
+        default=False,
+        help_text="When true, this practice appears on the public mentor directory.",
+    )
     season = models.ForeignKey(Season, on_delete=models.CASCADE)
     attendance_comments = models.TextField(
         blank=True,
@@ -360,6 +364,12 @@ class Practice(TimeStampedModel):
 
     def set_full_practice(self, value):
         self.full_practice = value
+
+    def get_show_to_mentors(self):
+        return self.show_to_mentors
+
+    def set_show_to_mentors(self, value):
+        self.show_to_mentors = value
 
     def get_season(self):
         return self.season

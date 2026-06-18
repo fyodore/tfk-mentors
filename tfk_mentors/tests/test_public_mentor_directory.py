@@ -55,6 +55,11 @@ class PublicMentorDirectoryTests(TestCase):
             season=self.season,
         )
 
+        self.assigned_practice.show_to_mentors = True
+        self.assigned_practice.save(update_fields=["show_to_mentors", "updated_at"])
+        self.available_practice.show_to_mentors = True
+        self.available_practice.save(update_fields=["show_to_mentors", "updated_at"])
+
         MentorPracticeAssignment.objects.create(
             mentor=self.mentor,
             practice=self.assigned_practice,
@@ -86,6 +91,35 @@ class PublicMentorDirectoryTests(TestCase):
         self.assertNotIn("cell_phone", pat)
         self.assertNotIn("assigned_practices", pat)
         self.assertNotIn("available_practices", pat)
+
+    def test_public_directory_excludes_practices_not_marked_show_to_mentors(self):
+        hidden_practice = Practice.objects.create(
+            date=timezone.now() + timedelta(days=28),
+            season=self.season,
+            show_to_mentors=False,
+        )
+        MentorPracticeAssignment.objects.create(
+            mentor=self.mentor,
+            practice=hidden_practice,
+            pace="9-10",
+            is_available=False,
+        )
+        hidden_practice.mentors.add(self.mentor)
+
+        summary = self.client.get("/api/public/mentor-directory/")
+        pat = next(row for row in summary.data if row["last_name"] == "Alpha")
+        self.assertEqual(pat["assigned_count"], 1)
+
+        response = self.client.get(
+            f"/api/public/mentor-directory/{self.mentor.id}/practices/"
+        )
+        practice_ids = {
+            row["practice_id"]
+            for row in response.data["assigned_practices"]
+            + response.data["available_practices"]
+        }
+        self.assertIn(self.assigned_practice.id, practice_ids)
+        self.assertNotIn(hidden_practice.id, practice_ids)
 
     def test_public_practices_endpoint_loads_on_expand(self):
         response = self.client.get(
@@ -129,6 +163,8 @@ class PublicMentorDirectoryTests(TestCase):
             pace="10-11",
         )
         self.unassigned_practice.sync_mentor_assignments_from_replies()
+        self.unassigned_practice.show_to_mentors = True
+        self.unassigned_practice.save(update_fields=["show_to_mentors", "updated_at"])
 
         summary = self.client.get("/api/public/mentor-directory/")
         sam = next(row for row in summary.data if row["last_name"] == "Beta")

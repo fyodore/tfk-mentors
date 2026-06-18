@@ -35,6 +35,7 @@ function emptyPracticeForm(defaultSeasonId) {
     description: '',
     start_location: '',
     full_practice: true,
+    show_to_mentors: false,
     season: defaultSeasonId === '' ? '' : String(defaultSeasonId),
   }
 }
@@ -187,6 +188,7 @@ export default function PracticesPage() {
       description: practice.description ?? '',
       start_location: practice.start_location ?? '',
       full_practice: Boolean(practice.full_practice),
+      show_to_mentors: Boolean(practice.show_to_mentors),
       season: String(practice.season ?? ''),
     })
     setModal('edit')
@@ -210,6 +212,7 @@ export default function PracticesPage() {
         description: form.description.trim(),
         start_location: form.start_location.trim(),
         full_practice: form.full_practice,
+        show_to_mentors: form.show_to_mentors,
         season: seasonId,
       },
     }
@@ -569,6 +572,17 @@ export default function PracticesPage() {
             Full practice
           </label>
 
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={form.show_to_mentors}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, show_to_mentors: e.target.checked }))
+              }
+            />
+            Show to mentors
+          </label>
+
           {modalError ? (
             <p className="error modal-error" role="alert">
               {modalError}
@@ -711,6 +725,17 @@ export default function PracticesPage() {
               }
             />
             Full practice
+          </label>
+
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={form.show_to_mentors}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, show_to_mentors: e.target.checked }))
+              }
+            />
+            Show to mentors
           </label>
 
           {modalError ? (

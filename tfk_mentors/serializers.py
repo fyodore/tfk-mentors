@@ -280,15 +280,17 @@ def mentor_status_for_practice(mentor, practice):
     return {"status": None, "pace": "", "attendance": None}
 
 
-def build_mentor_practice_rows(mentor):
+def build_mentor_practice_rows(mentor, *, show_to_mentors_only=False):
     """All practices in the mentor's seasons with assignment status."""
     season_ids = list(mentor.seasons.values_list("id", flat=True))
     if not season_ids:
         return []
 
+    practices = Practice.objects.filter(season_id__in=season_ids)
+    if show_to_mentors_only:
+        practices = practices.filter(show_to_mentors=True)
     practices = (
-        Practice.objects.filter(season_id__in=season_ids)
-        .select_related("season")
+        practices.select_related("season")
         .prefetch_related(
             "mentor_email_replies__mentor",
             "mentor_email_replies__mentor_token__scheduled_email",
@@ -337,7 +339,7 @@ def build_public_mentor_directory():
 
     if season_ids:
         practices = (
-            Practice.objects.filter(season_id__in=season_ids)
+            Practice.objects.filter(season_id__in=season_ids, show_to_mentors=True)
             .prefetch_related(
                 "mentor_email_replies__mentor",
                 "mentor_email_replies__mentor_token__scheduled_email",
@@ -402,7 +404,7 @@ def build_public_mentor_directory_practices(mentor):
     """Assigned and available practices for one mentor."""
     assigned_practices = []
     available_practices = []
-    for row in build_mentor_practice_rows(mentor):
+    for row in build_mentor_practice_rows(mentor, show_to_mentors_only=True):
         if row.get("status") not in {"assigned", "available"}:
             continue
         practice_row = {
@@ -556,6 +558,7 @@ class PracticeSerializer(serializers.ModelSerializer):
             "start_location",
             "mentors",
             "full_practice",
+            "show_to_mentors",
             "season",
             "attendance_comments",
             "created_at",
