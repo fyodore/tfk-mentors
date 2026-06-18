@@ -504,28 +504,33 @@ class Practice(TimeStampedModel):
             raise ValidationError("Invalid pace choice.")
 
         latest = self._latest_reply_by_mentor().get(mentor.id)
-        if (
-            latest is not None
-            and latest.attendance != PracticeAttendanceReply.NOT_ATTENDING
-        ):
+        if latest is not None and latest.attendance == PracticeAttendanceReply.AVAILABLE:
             latest.attendance = PracticeAttendanceReply.ATTENDING
             latest.pace = pace
             latest.save(update_fields=["attendance", "pace", "updated_at"])
             self.sync_mentor_assignments_from_replies()
             return latest
 
-        assignment = MentorPracticeAssignment.objects.filter(
+        available_assignment = MentorPracticeAssignment.objects.filter(
             practice=self,
             mentor=mentor,
+            is_available=True,
         ).first()
-        if assignment is not None:
-            assignment.pace = pace
-            assignment.is_available = False
-            assignment.save(
+        if available_assignment is not None:
+            available_assignment.pace = pace
+            available_assignment.is_available = False
+            available_assignment.save(
                 update_fields=["pace", "is_available", "updated_at"]
             )
             self.mentors.add(mentor)
-            return assignment
+            return available_assignment
+
+        if latest is not None and latest.attendance != PracticeAttendanceReply.NOT_ATTENDING:
+            latest.attendance = PracticeAttendanceReply.ATTENDING
+            latest.pace = pace
+            latest.save(update_fields=["attendance", "pace", "updated_at"])
+            self.sync_mentor_assignments_from_replies()
+            return latest
 
         scheduled = self.scheduled_email_for_mentor_replies()
         if scheduled is not None:

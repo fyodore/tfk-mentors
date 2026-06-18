@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
@@ -47,6 +47,21 @@ ATTENDING_REPLY_VALUES = frozenset(
     }
 )
 PACE_VALUES = frozenset(c.value for c in PaceTypes)
+
+
+def practice_mentor_result_payload(result):
+    if isinstance(result, ScheduledEmailMentorPracticeReply):
+        reply = ScheduledEmailMentorPracticeReply.objects.select_related(
+            "mentor", "mentor_token__scheduled_email"
+        ).get(pk=result.pk)
+        return practice_mentor_reply_payload(reply)
+    if isinstance(result, MentorPracticeAssignment):
+        assignment = MentorPracticeAssignment.objects.select_related("mentor").get(
+            pk=result.pk
+        )
+        return practice_mentor_assignment_payload(assignment)
+    raise TypeError(f"Unexpected mentor practice result type: {type(result)!r}")
+
 
 from .serializers import (
     CoachSerializer,
@@ -664,13 +679,18 @@ class PracticeViewSet(viewsets.ModelViewSet):
                     {"detail": messages[0]},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if isinstance(result, ScheduledEmailMentorPracticeReply):
+            except IntegrityError as exc:
                 return Response(
-                    practice_mentor_reply_payload(result),
-                    status=status.HTTP_201_CREATED,
+                    {
+                        "detail": (
+                            "Could not add mentor to this practice due to a "
+                            f"database conflict: {exc}"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
-                practice_mentor_assignment_payload(result),
+                practice_mentor_result_payload(result),
                 status=status.HTTP_201_CREATED,
             )
 
