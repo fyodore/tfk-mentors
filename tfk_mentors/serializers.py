@@ -317,35 +317,27 @@ def build_mentor_practice_rows(mentor):
     return rows
 
 
-def public_practice_row(practice, detail):
-    """Minimal practice row for the public mentor directory."""
-    return {
-        "practice_id": practice.id,
-        "date": practice.date.isoformat(),
-        "season_year": practice.season.year,
-        "nyrr_race": practice.nyrr_race or "",
-        "full_practice": practice.full_practice,
-        "pace": detail.get("pace") or "",
-        "attendance": detail.get("attendance"),
-    }
-
-
-def build_public_mentor_directory():
-    """All mentors with assigned and available practices for the public directory."""
-    mentors = (
+def build_public_mentor_directory_practices(mentor):
+    """Mentor summaries for the public directory (practices loaded on expand)."""
+    mentors = list(
         Mentor.objects.all()
         .prefetch_related("seasons")
         .order_by("last_name", "first_name", "id")
     )
-    season_ids = set()
-    for mentor in mentors:
-        season_ids.update(mentor.seasons.values_list("id", flat=True))
+    mentor_season_ids = {
+        mentor.id: {season.id for season in mentor.seasons.all()} for mentor in mentors
+    }
+    counts = {
+        mentor.id: {"assigned_count": 0, "available_count": 0} for mentor in mentors
+    }
 
-    practices_by_season = {}
+    season_ids = set()
+    for ids in mentor_season_ids.values():
+        season_ids.update(ids)
+
     if season_ids:
         practices = (
             Practice.objects.filter(season_id__in=season_ids)
-            .select_related("season")
             .prefetch_related(
                 "mentor_email_replies__mentor",
                 "mentor_email_replies__mentor_token__scheduled_email",
@@ -357,34 +349,81 @@ def build_public_mentor_directory():
             .order_by("date", "id")
         )
         for practice in practices:
-            practices_by_season.setdefault(practice.season_id, []).append(practice)
+            relevant_mentor_ids = [
+                mentor_id
+                for mentor_id, mentor_seasons in mentor_season_ids.items()
+                if practice.season_id in mentor_seasons
+            ]
+            if not relevant_mentor_ids:
+                continue
 
-    entries = []
-    for mentor in mentors:
-        mentor_season_ids = {season.id for season in mentor.seasons.all()}
-        assigned_practices = []
-        available_practices = []
-        for season_id in mentor_season_ids:
-            for practice in practices_by_season.get(season_id, []):
-                detail = mentor_status_for_practice(mentor, practice)
-                status = detail.get("status")
-                if status == "assigned":
-                    assigned_practices.append(public_practice_row(practice, detail))
-                elif status == "available":
-                    available_practices.append(public_practice_row(practice, detail))
-
-        entries.append(
-            {
-                "id": mentor.id,
-                "first_name": mentor.first_name,
-                "last_name": mentor.last_name,
-                "type": mentor.type,
-                "pace": normalize_pace(mentor.pace or ""),
-                "assigned_practices": assigned_practices,
-                "available_practices": available_practices,
+            attending_ids = {
+                mentor.id
+                for mentor, _pace, _reply, _assignment in practice.attending_mentor_roster_entries()
             }
-        )
-    return entries
+            available_ids = set()
+            for reply in practice.latest_available_mentor_replies():
+                if reply.mentor_id not in attending_ids:
+                    available_ids.add(reply.mentor_id)
+
+            latest_by_mentor = practice._latest_reply_by_mentor()
+            for assignment in practice.mentorpracticeassignment_set.all():
+                if not assignment.is_available or assignment.mentor_id in attending_ids:
+                    continue
+                latest = latest_by_mentor.get(assignment.mentor_id)
+                if (
+                    latest is not None
+                    and latest.attendance != PracticeAttendanceReply.AVAILABLE
+                ):
+                    continue
+                available_ids.add(assignment.mentor_id)
+
+            for mentor_id in relevant_mentor_ids:
+                if mentor_id in attending_ids:
+                    counts[mentor_id]["assigned_count"] += 1
+                elif mentor_id in available_ids:
+                    counts[mentor_id]["available_count"] += 1
+
+    return [
+        {
+            "id": mentor.id,
+            "first_name": mentor.first_name,
+            "last_name": mentor.last_name,
+            "type": mentor.type,
+            "pace": normalize_pace(mentor.pace or ""),
+            "assigned_count": counts[mentor.id]["assigned_count"],
+            "available_count": counts[mentor.id]["available_count"],
+        }
+        for mentor in mentors
+    ]
+
+
+def build_public_mentor_directory_practices(mentor):
+    """Assigned and available practices for one mentor."""
+    assigned_practices = []
+    available_practices = []
+    for row in build_mentor_practice_rows(mentor):
+        if row.get("status") not in {"assigned", "available"}:
+            continue
+        practice_row = {
+            "practice_id": row["practice_id"],
+            "date": row["date"],
+            "season_year": row["season_year"],
+            "nyrr_race": row["nyrr_race"],
+            "full_practice": row["full_practice"],
+            "pace": row.get("pace") or "",
+            "attendance": row.get("attendance"),
+        }
+        if row["status"] == "assigned":
+            assigned_practices.append(practice_row)
+        else:
+            available_practices.append(practice_row)
+
+    return {
+        "mentor_id": mentor.id,
+        "assigned_practices": assigned_practices,
+        "available_practices": available_practices,
+    }
 
 
 def _public_mentor_roster_row(payload):

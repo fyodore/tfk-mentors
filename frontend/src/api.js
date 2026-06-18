@@ -932,9 +932,18 @@ export async function patchPracticeAttendance(id, body) {
 
 const PUBLIC_MENTOR_DIRECTORY = apiPath('/api/public/mentor-directory/')
 
-/** @returns {Promise<Array<{ id: number, first_name: string, last_name: string, pace: string, assigned_practices: object[], available_practices: object[] }>>} */
+/** @returns {Promise<Array<{ id: number, first_name: string, last_name: string, type: string, pace: string, assigned_count: number, available_count: number }>>} */
 export async function fetchPublicMentorDirectory() {
   const res = await fetch(PUBLIC_MENTOR_DIRECTORY)
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} mentorId */
+export async function fetchPublicMentorDirectoryPractices(mentorId) {
+  const res = await fetch(
+    apiPath(`/api/public/mentor-directory/${mentorId}/practices/`)
+  )
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

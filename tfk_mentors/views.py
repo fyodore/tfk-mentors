@@ -85,6 +85,7 @@ from .serializers import (
     build_archived_practice_attendance_row,
     build_mentor_practice_rows,
     build_public_mentor_directory,
+    build_public_mentor_directory_practices,
     build_public_practice_mentor_roster,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
@@ -1766,6 +1767,23 @@ class PublicMentorDirectoryView(APIView):
 
     def get(self, request):
         return Response(build_public_mentor_directory())
+
+
+class PublicMentorDirectoryPracticesView(APIView):
+    """Public assigned and available practices for one mentor."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        try:
+            mentor = Mentor.objects.prefetch_related("seasons").get(pk=pk)
+        except Mentor.DoesNotExist:
+            return Response(
+                {"detail": "Mentor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(build_public_mentor_directory_practices(mentor))
 
 
 class PublicPracticeMentorRosterView(APIView):

@@ -13,6 +13,7 @@ from .views import (
     PracticeRosterReportView,
     MentorNonResponseReportView,
     PublicMentorDirectoryView,
+    PublicMentorDirectoryPracticesView,
     PublicPracticeMentorRosterView,
     PracticeViewSet,
     PracticeReminderEmailViewSet,
@@ -111,6 +112,11 @@ urlpatterns = [
         "public/mentor-directory/",
         PublicMentorDirectoryView.as_view(),
         name="public-mentor-directory",
+    ),
+    path(
+        "public/mentor-directory/<int:pk>/practices/",
+        PublicMentorDirectoryPracticesView.as_view(),
+        name="public-mentor-directory-practices",
     ),
     path(
         "public/practice/<int:pk>/mentors/",

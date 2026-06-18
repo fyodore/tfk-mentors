@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { fetchPublicMentorDirectory } from '../api'
+import {
+  fetchPublicMentorDirectory,
+  fetchPublicMentorDirectoryPractices,
+} from '../api'
 import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { PACE_GROUPS } from '../paceHelpers.js'
@@ -57,13 +60,24 @@ function PracticeList({ title, practices, emptyMessage }) {
   )
 }
 
-function MentorDirectoryList({ mentors, expandedIds, onToggleExpanded }) {
+function MentorDirectoryList({
+  mentors,
+  expandedIds,
+  practiceDetailsByMentorId,
+  loadingPracticeIds,
+  practiceErrorsByMentorId,
+  onToggleExpanded,
+}) {
   return (
     <ul className="mentor-directory-list">
       {mentors.map((mentor) => {
         const expanded = expandedIds.has(mentor.id)
-        const assignedCount = mentor.assigned_practices?.length ?? 0
-        const availableCount = mentor.available_practices?.length ?? 0
+        const assignedCount = mentor.assigned_count ?? 0
+        const availableCount = mentor.available_count ?? 0
+        const practiceDetails = practiceDetailsByMentorId[mentor.id]
+        const loadingPractices = loadingPracticeIds.has(mentor.id)
+        const practiceError = practiceErrorsByMentorId[mentor.id]
+
         return (
           <li key={mentor.id} className="mentor-directory-item">
             <button
@@ -86,16 +100,28 @@ function MentorDirectoryList({ mentors, expandedIds, onToggleExpanded }) {
 
             {expanded ? (
               <div className="mentor-directory-details">
-                <PracticeList
-                  title="Attending"
-                  practices={mentor.assigned_practices ?? []}
-                  emptyMessage="No assigned practices."
-                />
-                <PracticeList
-                  title="Available"
-                  practices={mentor.available_practices ?? []}
-                  emptyMessage="No available practices."
-                />
+                {loadingPractices && !practiceDetails ? (
+                  <p className="muted">Loading practices…</p>
+                ) : null}
+                {practiceError ? (
+                  <p className="error" role="alert">
+                    {practiceError}
+                  </p>
+                ) : null}
+                {practiceDetails ? (
+                  <>
+                    <PracticeList
+                      title="Attending"
+                      practices={practiceDetails.assigned_practices ?? []}
+                      emptyMessage="No assigned practices."
+                    />
+                    <PracticeList
+                      title="Available"
+                      practices={practiceDetails.available_practices ?? []}
+                      emptyMessage="No available practices."
+                    />
+                  </>
+                ) : null}
               </div>
             ) : null}
           </li>
@@ -112,6 +138,9 @@ export default function PublicMentorDirectoryPage() {
   const [nameFilter, setNameFilter] = useState('')
   const [paceFilter, setPaceFilter] = useState('')
   const [expandedIds, setExpandedIds] = useState(() => new Set())
+  const [practiceDetailsByMentorId, setPracticeDetailsByMentorId] = useState({})
+  const [loadingPracticeIds, setLoadingPracticeIds] = useState(() => new Set())
+  const [practiceErrorsByMentorId, setPracticeErrorsByMentorId] = useState({})
 
   useEffect(() => {
     let cancelled = false
@@ -158,13 +187,51 @@ export default function PublicMentorDirectoryPage() {
     [filteredMentors]
   )
 
-  function toggleExpanded(id) {
+  async function toggleExpanded(id) {
+    const willExpand = !expandedIds.has(id)
+
     setExpandedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (willExpand) next.add(id)
+      else next.delete(id)
       return next
     })
+
+    if (!willExpand || practiceDetailsByMentorId[id]) {
+      return
+    }
+
+    setLoadingPracticeIds((prev) => new Set(prev).add(id))
+    setPracticeErrorsByMentorId((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+
+    try {
+      const details = await fetchPublicMentorDirectoryPractices(id)
+      setPracticeDetailsByMentorId((prev) => ({ ...prev, [id]: details }))
+    } catch (e) {
+      setPracticeErrorsByMentorId((prev) => ({
+        ...prev,
+        [id]: e instanceof Error ? e.message : String(e),
+      }))
+    } finally {
+      setLoadingPracticeIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
+  const listProps = {
+    expandedIds,
+    practiceDetailsByMentorId,
+    loadingPracticeIds,
+    practiceErrorsByMentorId,
+    onToggleExpanded: toggleExpanded,
   }
 
   return (
@@ -226,11 +293,7 @@ export default function PublicMentorDirectoryPage() {
               {atPracticeMentors.length === 0 ? (
                 <p className="muted">No at-practice mentors match these filters.</p>
               ) : (
-                <MentorDirectoryList
-                  mentors={atPracticeMentors}
-                  expandedIds={expandedIds}
-                  onToggleExpanded={toggleExpanded}
-                />
+                <MentorDirectoryList mentors={atPracticeMentors} {...listProps} />
               )}
             </section>
 
@@ -239,11 +302,7 @@ export default function PublicMentorDirectoryPage() {
               {remoteMentors.length === 0 ? (
                 <p className="muted">No remote mentors match these filters.</p>
               ) : (
-                <MentorDirectoryList
-                  mentors={remoteMentors}
-                  expandedIds={expandedIds}
-                  onToggleExpanded={toggleExpanded}
-                />
+                <MentorDirectoryList mentors={remoteMentors} {...listProps} />
               )}
             </section>
           </>
