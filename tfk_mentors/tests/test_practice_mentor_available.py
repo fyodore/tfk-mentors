@@ -165,3 +165,19 @@ class PracticeMentorAvailableTests(TestCase):
         self.assertEqual(self.practice.latest_attending_mentor_replies(), [])
         self.assertEqual(len(self.practice.latest_available_mentor_replies()), 1)
         self.assertNotIn(self.mentor.email, build_practice_section(self.practice))
+
+    def test_update_email_reply_pace_without_changing_mentor_default(self):
+        response = self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": "8-9"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pace"], "8-9")
+
+        self.reply.refresh_from_db()
+        self.assertEqual(self.reply.pace, "8-9")
+
+        self.mentor.refresh_from_db()
+        self.assertEqual(self.mentor.pace, "11-12")
+

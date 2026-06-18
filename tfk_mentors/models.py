@@ -470,6 +470,33 @@ class Practice(TimeStampedModel):
         self.mentors.remove(mentor)
         return assignment
 
+    def update_mentor_pace(self, mentor, pace):
+        """Update a mentor's pace for this practice only."""
+        pace = normalize_pace(pace or "")
+        if not pace or pace not in {choice.value for choice in PaceTypes}:
+            raise ValidationError("Invalid pace choice.")
+
+        latest = self._latest_reply_by_mentor().get(mentor.id)
+        if (
+            latest is not None
+            and latest.attendance != PracticeAttendanceReply.NOT_ATTENDING
+        ):
+            latest.pace = pace
+            latest.save(update_fields=["pace", "updated_at"])
+            self.sync_mentor_assignments_from_replies()
+            return latest
+
+        assignment = MentorPracticeAssignment.objects.filter(
+            practice=self,
+            mentor=mentor,
+        ).first()
+        if assignment is not None:
+            assignment.pace = pace
+            assignment.save(update_fields=["pace", "updated_at"])
+            return assignment
+
+        raise ValidationError("Mentor is not assigned to this practice.")
+
     def remove_mentor(self, mentor_id):
         """Remove a mentor from this practice."""
         ScheduledEmailMentorPracticeReply.objects.filter(

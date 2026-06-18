@@ -107,3 +107,27 @@ class PracticeDirectMentorAssignmentTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.data["mentor_replies"], [])
         self.assertEqual(len(detail.data["available_mentor_replies"]), 1)
+
+    def test_update_direct_assignment_pace_without_changing_mentor_default(self):
+        self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": PaceTypes.TEN.value},
+            format="json",
+        )
+
+        response = self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": PaceTypes.ELEVEN.value},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pace"], PaceTypes.ELEVEN.value)
+
+        assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practice,
+        )
+        self.assertEqual(assignment.pace, PaceTypes.ELEVEN.value)
+
+        self.mentor.refresh_from_db()
+        self.assertEqual(self.mentor.pace, PaceTypes.TEN.value)

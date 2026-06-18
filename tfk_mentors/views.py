@@ -540,16 +540,13 @@ class PracticeViewSet(viewsets.ModelViewSet):
         if request.method == "PATCH":
             mentor_id = request.data.get("mentor")
             attendance = (request.data.get("attendance") or "").strip()
+            pace_raw = request.data.get("pace")
+            has_pace = pace_raw is not None and str(pace_raw).strip() != ""
             try:
                 mentor_id = int(mentor_id)
             except (TypeError, ValueError):
                 return Response(
                     {"detail": "Invalid mentor id."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if attendance != PracticeAttendanceReply.AVAILABLE:
-                return Response(
-                    {"detail": "Only 'available' attendance is supported."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
@@ -558,6 +555,46 @@ class PracticeViewSet(viewsets.ModelViewSet):
                 return Response(
                     {"detail": "Mentor not found."},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if has_pace and attendance != PracticeAttendanceReply.AVAILABLE:
+                pace = normalize_pace(str(pace_raw).strip())
+                if pace not in PACE_VALUES:
+                    return Response(
+                        {"detail": "Invalid pace choice."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                on_practice = MentorPracticeAssignment.objects.filter(
+                    practice=practice,
+                    mentor_id=mentor_id,
+                ).exists() or ScheduledEmailMentorPracticeReply.objects.filter(
+                    practice=practice,
+                    mentor_id=mentor_id,
+                ).exclude(
+                    attendance=PracticeAttendanceReply.NOT_ATTENDING,
+                ).exists()
+                if not on_practice:
+                    return Response(
+                        {"detail": "Mentor is not assigned to this practice."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                try:
+                    with transaction.atomic():
+                        result = practice.update_mentor_pace(mentor, pace)
+                except ValidationError as exc:
+                    messages = getattr(exc, "messages", None) or [str(exc)]
+                    return Response(
+                        {"detail": messages[0]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if isinstance(result, ScheduledEmailMentorPracticeReply):
+                    return Response(practice_mentor_reply_payload(result))
+                return Response(practice_mentor_assignment_payload(result))
+
+            if attendance != PracticeAttendanceReply.AVAILABLE:
+                return Response(
+                    {"detail": "Provide a valid pace or attendance value."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             on_roster = (
                 MentorPracticeAssignment.objects.filter(

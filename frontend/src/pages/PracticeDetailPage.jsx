@@ -12,11 +12,12 @@ import {
   fetchPractice,
   fetchSeasons,
   makePracticeMentorAvailable,
+  patchPracticeMentorPace,
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { MentorPracticeHover } from '../components/MentorPracticeHover.jsx'
 import { formatDateTime } from '../datetime.js'
-import { sortByPaceThenName } from '../paceHelpers.js'
+import { PACE_GROUPS, sortByPaceThenName } from '../paceHelpers.js'
 
 function byName(a, b) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -43,6 +44,7 @@ export default function PracticeDetailPage() {
   const [mentorIdToAdd, setMentorIdToAdd] = useState('')
   const [mentorPaceToAdd, setMentorPaceToAdd] = useState('8-9')
   const [saving, setSaving] = useState(false)
+  const [updatingMentorPaceId, setUpdatingMentorPaceId] = useState(null)
 
   const seasonById = useMemo(() => {
     const m = new Map()
@@ -228,7 +230,24 @@ export default function PracticeDetailPage() {
               {mentorName}
             </MentorPracticeHover>
           </span>
-          <span className="muted">Pace group {r.pace}</span>
+          <label className="practice-mentor-pace-label">
+            <span className="muted">Pace group</span>
+            <select
+              className="field-input field-select practice-mentor-pace-select"
+              value={r.pace || PACE_GROUPS[0]}
+              disabled={saving || updatingMentorPaceId === r.mentor_id}
+              aria-label={`Pace group for ${mentorName}`}
+              onChange={(e) =>
+                handleUpdateMentorPace(r.mentor_id, e.target.value, isAvailable)
+              }
+            >
+              {PACE_GROUPS.map((pace) => (
+                <option key={pace} value={pace}>
+                  {pace}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         <div className="practice-row-actions">
           {isAvailable ? (
@@ -368,6 +387,27 @@ export default function PracticeDetailPage() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleUpdateMentorPace(mentorId, pace, isAvailable) {
+    setUpdatingMentorPaceId(mentorId)
+    setError(null)
+    try {
+      const updated = await patchPracticeMentorPace(practiceId, mentorId, pace)
+      if (isAvailable) {
+        setAvailableMentorReplies((prev) =>
+          prev.map((row) => (row.mentor_id === mentorId ? updated : row))
+        )
+      } else {
+        setMentorReplies((prev) =>
+          prev.map((row) => (row.mentor_id === mentorId ? updated : row))
+        )
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUpdatingMentorPaceId(null)
     }
   }
 

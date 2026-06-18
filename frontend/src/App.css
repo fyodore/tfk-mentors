@@ -530,6 +530,20 @@
   font-style: italic;
 }
 
+.practice-mentor-pace-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+}
+
+.practice-mentor-pace-select {
+  width: auto;
+  min-width: 6.5rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.9rem;
+}
+
 .modal-form-stack {
   display: flex;
   flex-direction: column;

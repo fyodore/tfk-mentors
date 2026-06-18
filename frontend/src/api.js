@@ -438,6 +438,21 @@ export async function createPracticeMentorReply(practiceId, body) {
   return res.json()
 }
 
+/** @param {number|string} practiceId @param {number|string} mentorId @param {string} pace */
+export async function patchPracticeMentorPace(practiceId, mentorId, pace) {
+  const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ mentor: mentorId, pace }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {number|string} practiceId @param {number|string} mentorId */
 export async function makePracticeMentorAvailable(practiceId, mentorId) {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
