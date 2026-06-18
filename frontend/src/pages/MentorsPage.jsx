@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   createMentor,
@@ -540,6 +541,9 @@ export default function MentorsPage() {
                   </span>
                 </div>
                 <div className="practice-row-actions">
+                  <Link className="btn btn-text" to={`/mentors/${m.id}`}>
+                    View
+                  </Link>
                   <button type="button" className="btn btn-text" onClick={() => openEdit(m)}>
                     Edit
                   </button>

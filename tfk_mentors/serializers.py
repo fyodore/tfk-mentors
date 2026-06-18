@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework import serializers
 
 from .models import (
@@ -232,6 +233,81 @@ def practice_attending_mentor_payloads(practice):
         else:
             payloads.append(practice_mentor_assignment_payload(assignment))
     return payloads
+
+
+def mentor_status_for_practice(mentor, practice):
+    """Return assignment status for one mentor on one practice."""
+    mentor_id = mentor.id
+    for entry_mentor, pace, reply, _assignment in practice.attending_mentor_roster_entries():
+        if entry_mentor.id != mentor_id:
+            continue
+        attendance = (
+            reply.attendance
+            if reply is not None
+            else PracticeAttendanceReply.ATTENDING
+        )
+        return {
+            "status": "assigned",
+            "pace": pace,
+            "attendance": attendance,
+        }
+
+    for reply in practice.latest_available_mentor_replies():
+        if reply.mentor_id != mentor_id:
+            continue
+        return {
+            "status": "available",
+            "pace": normalize_pace(reply.pace or mentor.pace or ""),
+            "attendance": PracticeAttendanceReply.AVAILABLE,
+        }
+
+    for assignment in practice.mentorpracticeassignment_set.all():
+        if assignment.mentor_id != mentor_id or not assignment.is_available:
+            continue
+        return {
+            "status": "available",
+            "pace": normalize_pace(assignment.pace or mentor.pace or ""),
+            "attendance": PracticeAttendanceReply.AVAILABLE,
+        }
+
+    return {"status": None, "pace": "", "attendance": None}
+
+
+def build_mentor_practice_rows(mentor):
+    """All practices in the mentor's seasons with assignment status."""
+    season_ids = list(mentor.seasons.values_list("id", flat=True))
+    if not season_ids:
+        return []
+
+    practices = (
+        Practice.objects.filter(season_id__in=season_ids)
+        .select_related("season")
+        .prefetch_related(
+            "mentor_email_replies__mentor",
+            "mentor_email_replies__mentor_token__scheduled_email",
+            Prefetch(
+                "mentorpracticeassignment_set",
+                queryset=MentorPracticeAssignment.objects.select_related("mentor"),
+            ),
+        )
+        .order_by("date", "id")
+    )
+
+    rows = []
+    for practice in practices:
+        detail = mentor_status_for_practice(mentor, practice)
+        rows.append(
+            {
+                "practice_id": practice.id,
+                "date": practice.date.isoformat(),
+                "season_id": practice.season_id,
+                "season_year": practice.season.year,
+                "nyrr_race": practice.nyrr_race or "",
+                "full_practice": practice.full_practice,
+                **detail,
+            }
+        )
+    return rows
 
 
 class PracticeSerializer(serializers.ModelSerializer):

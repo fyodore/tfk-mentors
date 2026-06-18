@@ -14,6 +14,7 @@ import {
   makePracticeMentorAvailable,
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
+import { MentorPracticeHover } from '../components/MentorPracticeHover.jsx'
 import { formatDateTime } from '../datetime.js'
 import { sortByPaceThenName } from '../paceHelpers.js'
 
@@ -193,22 +194,39 @@ export default function PracticeDetailPage() {
     [availableMentorReplies]
   )
 
+  const mentorSignupRefreshKey = useMemo(
+    () =>
+      [...mentorReplies, ...availableMentorReplies]
+        .map((row) => `${row.mentor_id}:${row.pace}:${row.attendance ?? ''}`)
+        .join('|'),
+    [mentorReplies, availableMentorReplies]
+  )
+
   function renderMentorReplyRow(r, isAvailable) {
     const m = mentorById.get(r.mentor_id)
+    const mentorName =
+      r.first_name && r.last_name
+        ? `${r.first_name} ${r.last_name}`
+        : m
+          ? `${m.first_name} ${m.last_name}`
+          : `Mentor #${r.mentor_id}`
+
     return (
       <li
-        key={r.id}
+        key={r.mentor_id ?? r.id}
         className={
           isAvailable ? 'practice-row practice-row-available' : 'practice-row'
         }
       >
         <div className="practice-row-main">
           <span className="practice-date">
-            {r.first_name && r.last_name
-              ? `${r.first_name} ${r.last_name}`
-              : m
-                ? `${m.first_name} ${m.last_name}`
-                : `Mentor #${r.mentor_id}`}
+            <MentorPracticeHover
+              mentorId={r.mentor_id}
+              currentPracticeId={practiceId}
+              refreshKey={mentorSignupRefreshKey}
+            >
+              {mentorName}
+            </MentorPracticeHover>
           </span>
           <span className="muted">Pace group {r.pace}</span>
         </div>

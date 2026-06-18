@@ -331,6 +331,23 @@ export async function fetchMentors() {
   return normalizeMentorList(data)
 }
 
+/** @param {number|string} id */
+export async function fetchMentor(id) {
+  const res = await fetch(`${MENTOR_LIST}${id}/`, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function fetchMentorPractices(id) {
+  const res = await fetch(`${MENTOR_LIST}${id}/practices/`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
+}
+
 /** @param {Record<string, unknown>} body */
 export async function createMentor(body) {
   const res = await fetch(MENTOR_LIST, {

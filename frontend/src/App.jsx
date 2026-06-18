@@ -7,6 +7,7 @@ import EmailDetailPage from './pages/EmailDetailPage.jsx'
 import PracticeReminderDetailPage from './pages/PracticeReminderDetailPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import MentorReplyPage from './pages/MentorReplyPage.jsx'
+import MentorDetailPage from './pages/MentorDetailPage.jsx'
 import MentorsPage from './pages/MentorsPage.jsx'
 import PracticeDetailPage from './pages/PracticeDetailPage.jsx'
 import PracticesPage from './pages/PracticesPage.jsx'
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <Protected>
               <TfkStaffPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/mentors/:id"
+          element={
+            <Protected>
+              <MentorDetailPage />
             </Protected>
           }
         />

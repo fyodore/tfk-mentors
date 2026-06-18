@@ -64,6 +64,7 @@ from .serializers import (
     practice_mentor_assignment_payload,
     practice_attending_mentor_payloads,
     practice_available_mentor_payloads,
+    build_mentor_practice_rows,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
@@ -481,6 +482,12 @@ class MentorViewSet(viewsets.ModelViewSet):
             },
             status=code,
         )
+
+    @action(detail=True, methods=["get"], url_path="practices")
+    def practices(self, request, pk=None):
+        """Practices in the mentor's seasons with assigned/available status."""
+        mentor = self.get_object()
+        return Response(build_mentor_practice_rows(mentor))
 
 
 class PracticeViewSet(viewsets.ModelViewSet):

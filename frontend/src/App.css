@@ -1031,6 +1031,95 @@
   margin: 0 0 0.75rem;
 }
 
+.mentor-practice-hover {
+  position: relative;
+  display: inline;
+}
+
+.mentor-practice-hover-trigger {
+  border-bottom: 1px dotted var(--border, #bbb);
+  cursor: help;
+}
+
+.mentor-practice-hover-card {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 30;
+  min-width: 16rem;
+  max-width: 22rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: var(--panel, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  text-align: left;
+  font-weight: 400;
+}
+
+.mentor-practice-hover-title {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.mentor-practice-hover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.mentor-practice-hover-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.mentor-practice-hover-item-current .mentor-practice-hover-date {
+  font-weight: 600;
+}
+
+.mentor-practice-hover-date {
+  font-size: 0.88rem;
+  color: var(--text-h);
+}
+
+.mentor-practice-hover-meta {
+  font-size: 0.82rem;
+}
+
+.mentor-detail-header h2 {
+  margin: 0 0 0.35rem;
+}
+
+.mentor-practice-status {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mentor-practice-status-assigned {
+  background: #e8f4ea;
+  color: #1f5f2a;
+}
+
+.mentor-practice-status-available {
+  background: #fff3bf;
+  color: #7a5d00;
+}
+
+.mentor-practice-status-none {
+  color: var(--muted, #666);
+  font-weight: 500;
+}
+
 .report-table-wrap {
   overflow-x: auto;
 }
