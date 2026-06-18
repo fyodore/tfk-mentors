@@ -15,6 +15,7 @@ from .email_sending import _verify_email_delivery
 from .models import (
     Coach,
     Mentor,
+    MentorPracticeAssignment,
     MentorTypes,
     PaceTypes,
     Practice,
@@ -184,9 +185,18 @@ def _mentors_for_practice_by_pace(practice):
         .prefetch_related("mentor_email_replies__mentor")
         .first()
     )
+    available_ids = {
+        reply.mentor_id for reply in practice.latest_available_mentor_replies()
+    }
+    available_ids.update(
+        MentorPracticeAssignment.objects.filter(
+            practice=practice,
+            is_available=True,
+        ).values_list("mentor_id", flat=True)
+    )
     by_pace = {pace: [] for pace in PACE_GROUPS}
     for mentor, pace, _reply, _assignment in practice.attending_mentor_roster_entries():
-        if pace not in by_pace:
+        if mentor.id in available_ids or pace not in by_pace:
             continue
         by_pace[pace].append(
             _contact_line(

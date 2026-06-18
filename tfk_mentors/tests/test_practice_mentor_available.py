@@ -15,6 +15,7 @@ from tfk_mentors.models import (
     ScheduledEmailMentorToken,
     Season,
 )
+from tfk_mentors.practice_reminder import build_practice_section
 
 
 class PracticeMentorAvailableTests(TestCase):
@@ -125,3 +126,42 @@ class PracticeMentorAvailableTests(TestCase):
         self.assertEqual(len(practice_row["mentors"]), 0)
         self.assertEqual(len(practice_row["available_mentors"]), 1)
         self.assertTrue(practice_row["available_mentors"][0]["available"])
+
+    def test_available_mentor_excluded_from_reminder_pace_groups(self):
+        section = build_practice_section(self.practice)
+        self.assertIn(self.mentor.email, section)
+
+        self.reply.attendance = PracticeAttendanceReply.AVAILABLE
+        self.reply.save(update_fields=["attendance", "updated_at"])
+        self.practice.sync_mentor_assignments_from_replies()
+
+        section = build_practice_section(self.practice)
+        self.assertNotIn(self.mentor.email, section)
+
+    def test_stale_attending_reply_does_not_override_available_status(self):
+        other_email = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=14),
+            body_text="Follow up",
+            recipient_season=self.season,
+        )
+        other_email.practices.add(self.practice)
+        other_email.sync_mentor_tokens()
+        other_token = ScheduledEmailMentorToken.objects.get(
+            scheduled_email=other_email,
+            mentor=self.mentor,
+        )
+        ScheduledEmailMentorPracticeReply.objects.create(
+            mentor_token=other_token,
+            mentor=self.mentor,
+            practice=self.practice,
+            attendance=PracticeAttendanceReply.AVAILABLE,
+            pace="11-12",
+        )
+        ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor_token=other_token,
+            practice=self.practice,
+        ).update(updated_at=timezone.now() + timedelta(minutes=5))
+
+        self.assertEqual(self.practice.latest_attending_mentor_replies(), [])
+        self.assertEqual(len(self.practice.latest_available_mentor_replies()), 1)
+        self.assertNotIn(self.mentor.email, build_practice_section(self.practice))

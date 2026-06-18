@@ -363,19 +363,28 @@ class Practice(TimeStampedModel):
     def set_mentors(self, mentors):
         self.mentors.set(mentors)
 
-    def _latest_mentor_replies_for_attendance(self, attendance_values):
-        """Latest reply per mentor for the given attendance values."""
-        replies = (
-            self.mentor_email_replies.filter(attendance__in=attendance_values)
-            .select_related("mentor", "mentor_token__scheduled_email")
-            .order_by("-updated_at")
-        )
+    def _latest_reply_by_mentor(self):
+        """Most recent email reply per mentor for this practice."""
         latest_by_mentor = {}
-        for reply in replies:
+        for reply in (
+            self.mentor_email_replies.select_related(
+                "mentor", "mentor_token__scheduled_email"
+            ).order_by("-updated_at")
+        ):
             if reply.mentor_id not in latest_by_mentor:
                 latest_by_mentor[reply.mentor_id] = reply
+        return latest_by_mentor
+
+    def _latest_mentor_replies_for_attendance(self, attendance_values):
+        """Latest reply per mentor when that mentor's current status matches."""
+        attendance_set = frozenset(attendance_values)
+        replies = [
+            reply
+            for reply in self._latest_reply_by_mentor().values()
+            if reply.attendance in attendance_set
+        ]
         return sorted(
-            latest_by_mentor.values(),
+            replies,
             key=lambda reply: (
                 PACE_SORT.get(
                     normalize_pace(reply.pace or reply.mentor.pace or ""), 99
@@ -424,9 +433,41 @@ class Practice(TimeStampedModel):
         assignment, _ = MentorPracticeAssignment.objects.update_or_create(
             mentor=mentor,
             practice=self,
-            defaults={"pace": pace},
+            defaults={"pace": pace, "is_available": False},
         )
         self.mentors.add(mentor)
+        return assignment
+
+    def mark_mentor_available(self, mentor, *, pace=None):
+        """Move a mentor on this roster to the available list."""
+        pace = normalize_pace(pace or mentor.pace or "")
+        scheduled = self.scheduled_email_for_mentor_replies()
+        if scheduled is not None:
+            token, _ = ScheduledEmailMentorToken.objects.get_or_create(
+                scheduled_email=scheduled,
+                mentor=mentor,
+            )
+            reply, _ = ScheduledEmailMentorPracticeReply.objects.update_or_create(
+                mentor_token=token,
+                practice=self,
+                defaults={
+                    "mentor": mentor,
+                    "attendance": PracticeAttendanceReply.AVAILABLE,
+                    "pace": pace,
+                },
+            )
+            self.sync_mentor_assignments_from_replies()
+            return reply
+
+        assignment, _ = MentorPracticeAssignment.objects.update_or_create(
+            mentor=mentor,
+            practice=self,
+            defaults={"pace": pace, "is_available": True},
+        )
+        assignment.is_available = True
+        assignment.pace = pace
+        assignment.save(update_fields=["is_available", "pace", "updated_at"])
+        self.mentors.remove(mentor)
         return assignment
 
     def remove_mentor(self, mentor_id):
@@ -448,6 +489,7 @@ class Practice(TimeStampedModel):
         """All attending mentors from email replies and direct assignments."""
         entries = []
         seen = set()
+        latest_by_mentor = self._latest_reply_by_mentor()
         for reply in self.latest_attending_mentor_replies():
             mentor = reply.mentor
             pace = normalize_pace(reply.pace or mentor.pace or "")
@@ -459,6 +501,14 @@ class Practice(TimeStampedModel):
         ).select_related("mentor")
         for assignment in assignments:
             if assignment.mentor_id in seen:
+                continue
+            if assignment.is_available:
+                continue
+            latest = latest_by_mentor.get(assignment.mentor_id)
+            if (
+                latest is not None
+                and latest.attendance == PracticeAttendanceReply.AVAILABLE
+            ):
                 continue
             mentor = assignment.mentor
             pace = normalize_pace(assignment.pace or mentor.pace or "")
@@ -494,13 +544,14 @@ class Practice(TimeStampedModel):
             MentorPracticeAssignment.objects.update_or_create(
                 mentor_id=reply.mentor_id,
                 practice=self,
-                defaults={"pace": pace},
+                defaults={"pace": pace, "is_available": False},
             )
 
         assignment_mentor_ids = list(
-            MentorPracticeAssignment.objects.filter(practice=self).values_list(
-                "mentor_id", flat=True
-            )
+            MentorPracticeAssignment.objects.filter(
+                practice=self,
+                is_available=False,
+            ).values_list("mentor_id", flat=True)
         )
         self.mentors.set(assignment_mentor_ids)
 
@@ -555,6 +606,13 @@ class MentorPracticeAssignment(TimeStampedModel):
     mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE)
     practice = models.ForeignKey(Practice, on_delete=models.CASCADE)
     pace = models.CharField(choices=PaceTypes, max_length=11)
+    is_available = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, the mentor is listed as available for this practice "
+            "without an email reply row."
+        ),
+    )
 
     class Meta:
         constraints = [

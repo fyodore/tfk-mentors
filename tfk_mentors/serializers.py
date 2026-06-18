@@ -186,18 +186,41 @@ def practice_mentor_reply_payload(reply):
 def practice_mentor_assignment_payload(assignment):
     """Serialized direct mentor assignment for admin practice view."""
     mentor = assignment.mentor
+    attendance = (
+        PracticeAttendanceReply.AVAILABLE
+        if assignment.is_available
+        else PracticeAttendanceReply.ATTENDING
+    )
     return {
         "id": None,
         "mentor_id": mentor.id,
         "first_name": mentor.first_name,
         "last_name": mentor.last_name,
         "mentor_type": mentor.type,
-        "attendance": PracticeAttendanceReply.ATTENDING,
+        "attendance": attendance,
         "pace": normalize_pace(assignment.pace or mentor.pace or ""),
         "responded_at": assignment.updated_at.isoformat(),
         "scheduled_email_id": None,
         "scheduled_send_at": None,
     }
+
+
+def practice_available_mentor_payloads(practice):
+    """Available mentors from email replies and direct assignments."""
+    payloads = []
+    seen = set()
+    for reply in practice.latest_available_mentor_replies():
+        payloads.append(practice_mentor_reply_payload(reply))
+        seen.add(reply.mentor_id)
+    for assignment in MentorPracticeAssignment.objects.filter(
+        practice=practice,
+        is_available=True,
+    ).select_related("mentor"):
+        if assignment.mentor_id in seen:
+            continue
+        payloads.append(practice_mentor_assignment_payload(assignment))
+        seen.add(assignment.mentor_id)
+    return payloads
 
 
 def practice_attending_mentor_payloads(practice):
@@ -254,10 +277,7 @@ class PracticeDetailSerializer(PracticeSerializer):
         return practice_attending_mentor_payloads(obj)
 
     def get_available_mentor_replies(self, obj):
-        return [
-            practice_mentor_reply_payload(r)
-            for r in obj.latest_available_mentor_replies()
-        ]
+        return practice_available_mentor_payloads(obj)
 
 
 class RequestsSerializer(serializers.ModelSerializer):

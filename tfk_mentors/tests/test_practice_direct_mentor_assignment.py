@@ -77,3 +77,33 @@ class PracticeDirectMentorAssignmentTests(TestCase):
                 practice=self.practice,
             ).exists()
         )
+
+    def test_make_direct_assignment_available_without_scheduled_email(self):
+        self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": PaceTypes.TEN.value},
+            format="json",
+        )
+
+        response = self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "attendance": "available"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["attendance"], "available")
+
+        assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practice,
+        )
+        self.assertTrue(assignment.is_available)
+        self.assertNotIn(
+            self.mentor.id,
+            list(self.practice.mentors.values_list("pk", flat=True)),
+        )
+
+        detail = self.client.get(f"/api/practice/{self.practice.id}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["mentor_replies"], [])
+        self.assertEqual(len(detail.data["available_mentor_replies"]), 1)

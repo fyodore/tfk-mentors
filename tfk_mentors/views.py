@@ -63,6 +63,7 @@ from .serializers import (
     practice_mentor_reply_payload,
     practice_mentor_assignment_payload,
     practice_attending_mentor_payloads,
+    practice_available_mentor_payloads,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
@@ -525,10 +526,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     "mentors": practice_attending_mentor_payloads(practice),
-                    "available_mentors": [
-                        practice_mentor_reply_payload(r)
-                        for r in practice.latest_available_mentor_replies()
-                    ],
+                    "available_mentors": practice_available_mentor_payloads(practice),
                 }
             )
 
@@ -547,26 +545,42 @@ class PracticeViewSet(viewsets.ModelViewSet):
                     {"detail": "Only 'available' attendance is supported."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            reply = (
-                ScheduledEmailMentorPracticeReply.objects.filter(
+            try:
+                mentor = Mentor.objects.get(pk=mentor_id)
+            except Mentor.DoesNotExist:
+                return Response(
+                    {"detail": "Mentor not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            on_roster = (
+                MentorPracticeAssignment.objects.filter(
+                    practice=practice,
+                    mentor_id=mentor_id,
+                    is_available=False,
+                ).exists()
+                or ScheduledEmailMentorPracticeReply.objects.filter(
                     practice=practice,
                     mentor_id=mentor_id,
                     attendance__in=ATTENDING_REPLY_VALUES,
-                )
-                .select_related("mentor", "mentor_token__scheduled_email")
-                .order_by("-updated_at")
-                .first()
+                ).exists()
             )
-            if reply is None:
+            if not on_roster:
                 return Response(
                     {"detail": "Mentor is not assigned to this practice."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            assignment = MentorPracticeAssignment.objects.filter(
+                practice=practice,
+                mentor_id=mentor_id,
+            ).first()
+            pace = normalize_pace(
+                (assignment.pace if assignment else None) or mentor.pace or ""
+            )
             with transaction.atomic():
-                reply.attendance = PracticeAttendanceReply.AVAILABLE
-                reply.save(update_fields=["attendance", "updated_at"])
-                practice.sync_mentor_assignments_from_replies()
-            return Response(practice_mentor_reply_payload(reply))
+                result = practice.mark_mentor_available(mentor, pace=pace)
+            if isinstance(result, ScheduledEmailMentorPracticeReply):
+                return Response(practice_mentor_reply_payload(result))
+            return Response(practice_mentor_assignment_payload(result))
 
         if request.method == "POST":
             mentor_id = request.data.get("mentor")
