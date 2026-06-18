@@ -21,6 +21,15 @@ const ROSTER_HEADERS = [
 ]
 
 const PACE_COLUMN_INDEX = ROSTER_HEADERS.indexOf('Pace')
+const AVAILABLE_COLUMN_INDEX = ROSTER_HEADERS.indexOf('Available')
+
+const AVAILABLE_CELL_FILL = {
+  fill: {
+    patternType: 'solid',
+    fgColor: { rgb: 'FFFF00' },
+  },
+  alignment: { horizontal: 'center' },
+}
 
 const PACE_ORDER = {
   '8-9': 1,
@@ -110,20 +119,32 @@ function buildRosterRows(practices) {
 
 /** @param {ReturnType<typeof sortPracticePeople>} practices */
 async function downloadExcel(filename, practices) {
-  const XLSX = await import('xlsx')
+  const XLSX = await import('xlsx-js-style')
   const rows = buildRosterRows(practices)
   const worksheet = XLSX.utils.aoa_to_sheet(rows)
 
   for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-    const cellAddress = XLSX.utils.encode_cell({
+    const paceCellAddress = XLSX.utils.encode_cell({
       r: rowIndex,
       c: PACE_COLUMN_INDEX,
     })
-    const cell = worksheet[cellAddress]
-    if (!cell) continue
-    cell.t = 's'
-    cell.v = String(cell.v ?? '')
-    cell.z = '@'
+    const paceCell = worksheet[paceCellAddress]
+    if (paceCell) {
+      paceCell.t = 's'
+      paceCell.v = String(paceCell.v ?? '')
+      paceCell.z = '@'
+    }
+
+    if (rows[rowIndex][AVAILABLE_COLUMN_INDEX] === 'X') {
+      const availableCellAddress = XLSX.utils.encode_cell({
+        r: rowIndex,
+        c: AVAILABLE_COLUMN_INDEX,
+      })
+      const availableCell = worksheet[availableCellAddress]
+      if (availableCell) {
+        availableCell.s = AVAILABLE_CELL_FILL
+      }
+    }
   }
 
   worksheet['!cols'] = [
