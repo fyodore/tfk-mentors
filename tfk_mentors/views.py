@@ -655,30 +655,22 @@ class PracticeViewSet(viewsets.ModelViewSet):
                     {"detail": "Invalid pace choice."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            scheduled = practice.scheduled_email_for_mentor_replies()
-            with transaction.atomic():
-                if scheduled is None:
-                    assignment = practice.assign_mentor(mentor, pace)
-                    return Response(
-                        practice_mentor_assignment_payload(assignment),
-                        status=status.HTTP_201_CREATED,
-                    )
-                mentor_token = ScheduledEmailMentorToken.objects.get_or_create(
-                    scheduled_email=scheduled,
-                    mentor=mentor,
-                )[0]
-                reply, _ = ScheduledEmailMentorPracticeReply.objects.update_or_create(
-                    mentor_token=mentor_token,
-                    practice=practice,
-                    defaults={
-                        "mentor": mentor,
-                        "attendance": PracticeAttendanceReply.ATTENDING,
-                        "pace": pace,
-                    },
+            try:
+                with transaction.atomic():
+                    result = practice.mark_mentor_attending(mentor, pace)
+            except ValidationError as exc:
+                messages = getattr(exc, "messages", None) or [str(exc)]
+                return Response(
+                    {"detail": messages[0]},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-                practice.sync_mentor_assignments_from_replies()
+            if isinstance(result, ScheduledEmailMentorPracticeReply):
+                return Response(
+                    practice_mentor_reply_payload(result),
+                    status=status.HTTP_201_CREATED,
+                )
             return Response(
-                practice_mentor_reply_payload(reply),
+                practice_mentor_assignment_payload(result),
                 status=status.HTTP_201_CREATED,
             )
 

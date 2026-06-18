@@ -95,9 +95,11 @@ class PracticeMentorAvailableTests(TestCase):
         )
 
     def test_add_available_mentor_back_to_practice(self):
-        self.reply.attendance = PracticeAttendanceReply.AVAILABLE
-        self.reply.save(update_fields=["attendance", "updated_at"])
-        self.practice.sync_mentor_assignments_from_replies()
+        self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "attendance": "available"},
+            format="json",
+        )
 
         response = self.client.post(
             f"/api/practice/{self.practice.id}/mentor-replies/",
@@ -114,6 +116,28 @@ class PracticeMentorAvailableTests(TestCase):
                 mentor=self.mentor,
             ).exists()
         )
+
+    def test_add_available_mentor_back_after_patch_with_unsent_scheduled_email(self):
+        scheduled = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=14),
+            body_text="Future email",
+            recipient_season=self.season,
+        )
+        scheduled.practices.add(self.practice)
+
+        self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "attendance": "available"},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": "11-12"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["attendance"], "attending")
 
     def test_roster_report_includes_available_mentors(self):
         self.reply.attendance = PracticeAttendanceReply.AVAILABLE

@@ -180,7 +180,11 @@ def practice_mentor_reply_payload(reply):
         "pace": normalize_pace(reply.pace or mentor.pace or ""),
         "responded_at": reply.updated_at.isoformat(),
         "scheduled_email_id": scheduled.id,
-        "scheduled_send_at": scheduled.scheduled_send_at.isoformat(),
+        "scheduled_send_at": (
+            scheduled.scheduled_send_at.isoformat()
+            if scheduled.scheduled_send_at
+            else None
+        ),
     }
 
 

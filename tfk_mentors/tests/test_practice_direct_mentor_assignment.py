@@ -108,6 +108,38 @@ class PracticeDirectMentorAssignmentTests(TestCase):
         self.assertEqual(detail.data["mentor_replies"], [])
         self.assertEqual(len(detail.data["available_mentor_replies"]), 1)
 
+    def test_add_direct_available_mentor_back_to_practice(self):
+        self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": PaceTypes.TEN.value},
+            format="json",
+        )
+        self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "attendance": "available"},
+            format="json",
+        )
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": PaceTypes.ELEVEN.value},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["attendance"], "attending")
+        self.assertEqual(response.data["pace"], PaceTypes.ELEVEN.value)
+
+        assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practice,
+        )
+        self.assertFalse(assignment.is_available)
+        self.assertEqual(assignment.pace, PaceTypes.ELEVEN.value)
+        self.assertIn(
+            self.mentor.id,
+            list(self.practice.mentors.values_list("pk", flat=True)),
+        )
+
     def test_update_direct_assignment_pace_without_changing_mentor_default(self):
         self.client.post(
             f"/api/practice/{self.practice.id}/mentor-replies/",

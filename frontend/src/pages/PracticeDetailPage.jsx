@@ -361,11 +361,17 @@ export default function PracticeDetailPage() {
     setSaving(true)
     setError(null)
     try {
-      await createPracticeMentorReply(practiceId, {
+      const updated = await createPracticeMentorReply(practiceId, {
         mentor: mentorId,
         pace: pace || '8-9',
       })
-      await loadAll()
+      setAvailableMentorReplies((prev) =>
+        prev.filter((row) => row.mentor_id !== mentorId)
+      )
+      setMentorReplies((prev) => {
+        const without = prev.filter((row) => row.mentor_id !== mentorId)
+        return sortByPaceThenName([...without, updated])
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

@@ -497,6 +497,56 @@ class Practice(TimeStampedModel):
 
         raise ValidationError("Mentor is not assigned to this practice.")
 
+    def mark_mentor_attending(self, mentor, pace):
+        """Move a mentor back onto this practice roster from available or unassigned."""
+        pace = normalize_pace(pace or mentor.pace or "")
+        if not pace or pace not in {choice.value for choice in PaceTypes}:
+            raise ValidationError("Invalid pace choice.")
+
+        latest = self._latest_reply_by_mentor().get(mentor.id)
+        if (
+            latest is not None
+            and latest.attendance != PracticeAttendanceReply.NOT_ATTENDING
+        ):
+            latest.attendance = PracticeAttendanceReply.ATTENDING
+            latest.pace = pace
+            latest.save(update_fields=["attendance", "pace", "updated_at"])
+            self.sync_mentor_assignments_from_replies()
+            return latest
+
+        assignment = MentorPracticeAssignment.objects.filter(
+            practice=self,
+            mentor=mentor,
+        ).first()
+        if assignment is not None:
+            assignment.pace = pace
+            assignment.is_available = False
+            assignment.save(
+                update_fields=["pace", "is_available", "updated_at"]
+            )
+            self.mentors.add(mentor)
+            return assignment
+
+        scheduled = self.scheduled_email_for_mentor_replies()
+        if scheduled is not None:
+            token, _ = ScheduledEmailMentorToken.objects.get_or_create(
+                scheduled_email=scheduled,
+                mentor=mentor,
+            )
+            reply, _ = ScheduledEmailMentorPracticeReply.objects.update_or_create(
+                mentor_token=token,
+                practice=self,
+                defaults={
+                    "mentor": mentor,
+                    "attendance": PracticeAttendanceReply.ATTENDING,
+                    "pace": pace,
+                },
+            )
+            self.sync_mentor_assignments_from_replies()
+            return reply
+
+        return self.assign_mentor(mentor, pace)
+
     def remove_mentor(self, mentor_id):
         """Remove a mentor from this practice."""
         ScheduledEmailMentorPracticeReply.objects.filter(
