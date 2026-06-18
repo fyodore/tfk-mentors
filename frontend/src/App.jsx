@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 
 import { PasswordGate } from './components/PasswordGate.jsx'
+import AttendancePage from './pages/AttendancePage.jsx'
 import CoachesPage from './pages/CoachesPage.jsx'
 import EmailsPage from './pages/EmailsPage.jsx'
 import EmailDetailPage from './pages/EmailDetailPage.jsx'
@@ -56,6 +57,22 @@ export default function App() {
           element={
             <Protected>
               <PracticeDetailPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/attendance"
+          element={
+            <Protected>
+              <AttendancePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/attendance/:id"
+          element={
+            <Protected>
+              <AttendancePage />
             </Protected>
           }
         />

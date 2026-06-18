@@ -6,6 +6,7 @@ from .models import (
     CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
+    MentorPracticeShowUp,
     MentorTypes,
     PaceTypes,
     Practice,
@@ -17,6 +18,7 @@ from .models import (
     ScheduledEmail,
     ScheduledEmailRecipientMode,
     Season,
+    ShowUpStatus,
     TfkStaff,
     normalize_pace,
 )
@@ -314,6 +316,76 @@ def build_mentor_practice_rows(mentor):
     return rows
 
 
+def practice_show_up_by_mentor(practice):
+    """Map mentor_id -> show_up status for one practice."""
+    return {
+        row.mentor_id: row.show_up
+        for row in practice.mentor_show_ups.all()
+    }
+
+
+def practice_attendance_mentor_rows(practice):
+    """Assigned mentors with optional show-up status."""
+    practice.sync_mentor_assignments_from_replies()
+    show_up_by_mentor = practice_show_up_by_mentor(practice)
+    rows = []
+    for mentor, pace, reply, assignment in practice.attending_mentor_roster_entries():
+        assignment_payload = (
+            practice_mentor_reply_payload(reply)
+            if reply is not None
+            else practice_mentor_assignment_payload(assignment)
+        )
+        rows.append(
+            {
+                **assignment_payload,
+                "show_up": show_up_by_mentor.get(mentor.id),
+            }
+        )
+    return rows
+
+
+def build_practice_attendance_payload(practice, *, now=None):
+    """Full attendance payload for one practice."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    if now is None:
+        now = timezone.now()
+    return {
+        "practice_id": practice.id,
+        "date": practice.date.isoformat(),
+        "nyrr_race": practice.nyrr_race or "",
+        "description": practice.description or "",
+        "start_location": practice.start_location or "",
+        "season_id": practice.season_id,
+        "season_year": practice.season.year,
+        "full_practice": practice.full_practice,
+        "attendance_comments": practice.attendance_comments or "",
+        "assigned_mentors": practice_attendance_mentor_rows(practice),
+        "is_current_window": practice.date >= now - timedelta(hours=24),
+    }
+
+
+def build_archived_practice_attendance_row(practice):
+    """Summary row for archived practice attendance list."""
+    mentors = practice_attendance_mentor_rows(practice)
+    attended = sum(1 for row in mentors if row["show_up"] == ShowUpStatus.ATTENDED)
+    missed = sum(1 for row in mentors if row["show_up"] == ShowUpStatus.MISSED)
+    return {
+        "practice_id": practice.id,
+        "date": practice.date.isoformat(),
+        "nyrr_race": practice.nyrr_race or "",
+        "season_id": practice.season_id,
+        "season_year": practice.season.year,
+        "assigned_count": len(mentors),
+        "attended_count": attended,
+        "missed_count": missed,
+        "unset_count": len(mentors) - attended - missed,
+        "assigned_mentors": mentors,
+    }
+
+
 class PracticeSerializer(serializers.ModelSerializer):
     nyrr_race = serializers.CharField(
         max_length=150, allow_blank=True, required=False
@@ -336,6 +408,7 @@ class PracticeSerializer(serializers.ModelSerializer):
             "mentors",
             "full_practice",
             "season",
+            "attendance_comments",
             "created_at",
             "updated_at",
         ]

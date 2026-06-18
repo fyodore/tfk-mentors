@@ -7,6 +7,9 @@ from .views import (
     MentorPracticeAssignmentViewSet,
     MentorScheduledEmailReplyView,
     MentorViewSet,
+    PracticeAttendanceArchiveView,
+    PracticeAttendanceCurrentView,
+    PracticeAttendanceDetailView,
     PracticeRosterReportView,
     MentorNonResponseReportView,
     PracticeViewSet,
@@ -86,6 +89,21 @@ urlpatterns = [
             }
         ),
         name="practice-mentor-replies",
+    ),
+    path(
+        "practice-attendance/current/",
+        PracticeAttendanceCurrentView.as_view(),
+        name="practice-attendance-current",
+    ),
+    path(
+        "practice-attendance/archived/",
+        PracticeAttendanceArchiveView.as_view(),
+        name="practice-attendance-archived",
+    ),
+    path(
+        "practice-attendance/<int:pk>/",
+        PracticeAttendanceDetailView.as_view(),
+        name="practice-attendance-detail",
     ),
     path("", include(router.urls)),
 ]

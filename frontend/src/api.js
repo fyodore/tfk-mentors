@@ -878,3 +878,54 @@ export async function fetchMentorNonResponseReport(params = {}) {
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
+
+const PRACTICE_ATTENDANCE_CURRENT = apiPath('/api/practice-attendance/current/')
+const PRACTICE_ATTENDANCE_ARCHIVED = apiPath('/api/practice-attendance/archived/')
+
+/** @returns {Promise<{ practice: object|null }>} */
+export async function fetchCurrentPracticeAttendance() {
+  const res = await fetch(PRACTICE_ATTENDANCE_CURRENT, { credentials: 'include' })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {number|string} id */
+export async function fetchPracticeAttendance(id) {
+  const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {{ season?: number|string }} [params] */
+export async function fetchArchivedPracticeAttendance(params = {}) {
+  const qs = new URLSearchParams()
+  if (params.season != null && params.season !== '') {
+    qs.set('season', String(params.season))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await fetch(`${PRACTICE_ATTENDANCE_ARCHIVED}${suffix}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/**
+ * @param {number|string} id
+ * @param {{ attendance_comments?: string, mentors?: Array<{ mentor_id: number, show_up: string|null }> }} body
+ */
+export async function patchPracticeAttendance(id, body) {
+  const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}

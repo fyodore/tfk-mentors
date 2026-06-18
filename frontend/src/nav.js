@@ -3,6 +3,7 @@ export const SITE_NAV = [
   { path: '/', label: 'Home', end: true },
   { path: '/seasons', label: 'Seasons' },
   { path: '/practices', label: 'Practices' },
+  { path: '/attendance', label: 'Attendance' },
   { path: '/coaches', label: 'Coaches' },
   { path: '/tfk-staff', label: 'TFK Staff' },
   { path: '/mentors', label: 'Mentors' },
@@ -20,6 +21,12 @@ export const SITE_PAGE_CARDS = [
     path: '/practices',
     title: 'Practices',
     description: 'List practices, filter by season, add, edit, or remove.',
+  },
+  {
+    path: '/attendance',
+    title: 'Attendance',
+    description:
+      'Record which assigned mentors attended or missed a practice; add general comments.',
   },
   {
     path: '/coaches',

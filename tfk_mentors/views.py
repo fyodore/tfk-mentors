@@ -21,6 +21,7 @@ from .models import (
     CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
+    MentorPracticeShowUp,
     MentorTypes,
     PaceTypes,
     PACE_SORT,
@@ -35,6 +36,7 @@ from .models import (
     ScheduledEmailMentorPracticeReply,
     ScheduledEmailMentorToken,
     Season,
+    ShowUpStatus,
     TfkStaff,
     normalize_pace,
 )
@@ -79,6 +81,8 @@ from .serializers import (
     practice_mentor_assignment_payload,
     practice_attending_mentor_payloads,
     practice_available_mentor_payloads,
+    build_practice_attendance_payload,
+    build_archived_practice_attendance_row,
     build_mentor_practice_rows,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
@@ -1619,3 +1623,134 @@ class MentorPracticeAssignmentViewSet(viewsets.ModelViewSet):
         .order_by("-id")
     )
     serializer_class = MentorPracticeAssignmentSerializer
+
+
+class PracticeAttendanceCurrentView(APIView):
+    """Practice coming up or within the last 24 hours."""
+
+    def get(self, request):
+        practice = Practice.current_for_attendance()
+        if practice is None:
+            return Response({"practice": None})
+        return Response(
+            {"practice": build_practice_attendance_payload(practice)}
+        )
+
+
+class PracticeAttendanceArchiveView(APIView):
+    """Past practices with assigned mentor show-up status."""
+
+    def get(self, request):
+        from django.utils import timezone
+
+        now = timezone.now()
+        queryset = (
+            Practice.objects.filter(date__lt=now)
+            .select_related("season")
+            .prefetch_related("mentor_show_ups")
+            .order_by("-date", "-id")
+        )
+        season_id = request.query_params.get("season")
+        if season_id:
+            try:
+                queryset = queryset.filter(season_id=int(season_id))
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        rows = [build_archived_practice_attendance_row(p) for p in queryset]
+        return Response(rows)
+
+
+class PracticeAttendanceDetailView(APIView):
+    """Read or update show-up records and comments for one practice."""
+
+    def get_practice(self, pk):
+        try:
+            return Practice.objects.select_related("season").prefetch_related(
+                "mentor_show_ups"
+            ).get(pk=pk)
+        except Practice.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        practice = self.get_practice(pk)
+        if practice is None:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(build_practice_attendance_payload(practice))
+
+    def patch(self, request, pk):
+        practice = self.get_practice(pk)
+        if practice is None:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        practice.sync_mentor_assignments_from_replies()
+        assigned_ids = practice.assigned_mentor_ids()
+
+        if "attendance_comments" in request.data:
+            comments = request.data.get("attendance_comments")
+            if comments is None:
+                comments = ""
+            practice.attendance_comments = str(comments)
+            practice.save(update_fields=["attendance_comments", "updated_at"])
+
+        mentor_rows = request.data.get("mentors")
+        if mentor_rows is not None:
+            if not isinstance(mentor_rows, list):
+                return Response(
+                    {"detail": "mentors must be a list."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            valid_statuses = {ShowUpStatus.ATTENDED, ShowUpStatus.MISSED}
+            with transaction.atomic():
+                for row in mentor_rows:
+                    if not isinstance(row, dict):
+                        return Response(
+                            {"detail": "Each mentor entry must be an object."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    mentor_id = row.get("mentor_id")
+                    show_up = row.get("show_up")
+                    try:
+                        mentor_id = int(mentor_id)
+                    except (TypeError, ValueError):
+                        return Response(
+                            {"detail": "Invalid mentor id."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if mentor_id not in assigned_ids:
+                        return Response(
+                            {
+                                "detail": (
+                                    "Show-up can only be recorded for mentors "
+                                    "assigned to this practice."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if show_up is None or show_up == "":
+                        MentorPracticeShowUp.objects.filter(
+                            practice=practice,
+                            mentor_id=mentor_id,
+                        ).delete()
+                        continue
+                    if show_up not in valid_statuses:
+                        return Response(
+                            {"detail": "show_up must be attended or missed."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    MentorPracticeShowUp.objects.update_or_create(
+                        practice=practice,
+                        mentor_id=mentor_id,
+                        defaults={"show_up": show_up},
+                    )
+
+        practice.refresh_from_db()
+        return Response(build_practice_attendance_payload(practice))

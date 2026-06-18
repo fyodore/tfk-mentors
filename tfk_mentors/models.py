@@ -58,6 +58,11 @@ class PracticeAttendanceReply(models.TextChoices):
     AVAILABLE = "available", "Available"
 
 
+class ShowUpStatus(models.TextChoices):
+    ATTENDED = "attended", "Attended"
+    MISSED = "missed", "Missed"
+
+
 class TimeStampedModel(models.Model):
     """Abstract base class that adds created_at and updated_at fields to models."""
     created_at = models.DateTimeField(auto_now_add=True)
@@ -317,6 +322,11 @@ class Practice(TimeStampedModel):
     mentors = models.ManyToManyField(Mentor)
     full_practice = models.BooleanField(default=True)
     season = models.ForeignKey(Season, on_delete=models.CASCADE)
+    attendance_comments = models.TextField(
+        blank=True,
+        default="",
+        help_text="General notes recorded on the practice attendance page.",
+    )
 
     def __str__(self):
         return str(self.date)
@@ -637,6 +647,27 @@ class Practice(TimeStampedModel):
         )
         self.mentors.set(assignment_mentor_ids)
 
+    @classmethod
+    def current_for_attendance(cls, *, now=None):
+        """Practice coming up or within the last 24 hours (earliest in window)."""
+        if now is None:
+            from django.utils import timezone
+
+            now = timezone.now()
+        window_start = now - timedelta(hours=24)
+        return (
+            cls.objects.filter(date__gte=window_start)
+            .select_related("season")
+            .order_by("date", "id")
+            .first()
+        )
+
+    def assigned_mentor_ids(self):
+        """Mentor ids on the attending roster (not merely available)."""
+        return {
+            mentor.id for mentor, _pace, _reply, _assignment in self.attending_mentor_roster_entries()
+        }
+
     def get_or_create_mentor_reply_token(self, mentor):
         """Token for storing admin or mentor replies tied to this practice."""
         scheduled = self.scheduled_email_for_mentor_replies()
@@ -717,6 +748,37 @@ class MentorPracticeAssignment(TimeStampedModel):
     def save(self, *args, **kwargs):
         if self.pace:
             self.pace = normalize_pace(self.pace)
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class MentorPracticeShowUp(TimeStampedModel):
+    """Whether an assigned mentor actually attended or missed a practice."""
+
+    mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE)
+    practice = models.ForeignKey(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="mentor_show_ups",
+    )
+    show_up = models.CharField(max_length=10, choices=ShowUpStatus.choices)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mentor", "practice"],
+                name="unique_mentor_practice_show_up",
+            )
+        ]
+
+    def clean(self):
+        if self.mentor_id and self.practice_id:
+            if self.mentor_id not in self.practice.assigned_mentor_ids():
+                raise ValidationError(
+                    "Show-up can only be recorded for mentors assigned to this practice."
+                )
+
+    def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
 
