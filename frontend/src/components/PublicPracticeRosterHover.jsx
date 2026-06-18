@@ -18,13 +18,10 @@ function sortByName(list) {
   })
 }
 
-function buildPaceGroups(attending, available) {
+function buildPaceGroups(mentors) {
   const byPace = new Map()
-  const seen = new Set()
 
-  for (const mentor of [...attending, ...available]) {
-    if (seen.has(mentor.mentor_id)) continue
-    seen.add(mentor.mentor_id)
+  for (const mentor of mentors) {
     const pace = mentor.pace?.trim() || '—'
     if (!byPace.has(pace)) byPace.set(pace, [])
     byPace.get(pace).push(mentor)
@@ -37,19 +34,17 @@ function buildPaceGroups(attending, available) {
     byPace.delete(pace)
   }
 
-  for (const [pace, mentors] of [...byPace.entries()].sort(([a], [b]) =>
+  for (const [pace, paceMentors] of [...byPace.entries()].sort(([a], [b]) =>
     a.localeCompare(b)
   )) {
-    groups.push({ pace, mentors: sortByName(mentors) })
+    groups.push({ pace, mentors: sortByName(paceMentors) })
   }
 
   return groups
 }
 
-function PaceGroupRoster({ groups }) {
-  if (groups.length === 0) {
-    return <p className="muted public-practice-roster-empty">No mentors signed up.</p>
-  }
+function PaceGroupList({ groups }) {
+  if (groups.length === 0) return null
 
   return (
     <div className="public-practice-roster-pace-groups">
@@ -66,6 +61,19 @@ function PaceGroupRoster({ groups }) {
         </section>
       ))}
     </div>
+  )
+}
+
+function RosterSection({ title, groups, emptyMessage }) {
+  return (
+    <section className="public-practice-roster-section">
+      <h3 className="public-practice-roster-section-title">{title}</h3>
+      {groups.length === 0 ? (
+        <p className="muted public-practice-roster-empty">{emptyMessage}</p>
+      ) : (
+        <PaceGroupList groups={groups} />
+      )}
+    </section>
   )
 }
 
@@ -142,12 +150,13 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [pinned])
 
-  const paceGroups = useMemo(
-    () =>
-      buildPaceGroups(
-        roster?.attending_mentors ?? [],
-        roster?.available_mentors ?? []
-      ),
+  const attendingGroups = useMemo(
+    () => buildPaceGroups(roster?.attending_mentors ?? []),
+    [roster]
+  )
+
+  const availableGroups = useMemo(
+    () => buildPaceGroups(roster?.available_mentors ?? []),
     [roster]
   )
 
@@ -194,7 +203,18 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
           {loading && roster === null ? (
             <span className="muted">Loading…</span>
           ) : (
-            <PaceGroupRoster groups={paceGroups} />
+            <>
+              <RosterSection
+                title="Scheduled"
+                groups={attendingGroups}
+                emptyMessage="No scheduled mentors."
+              />
+              <RosterSection
+                title="Available"
+                groups={availableGroups}
+                emptyMessage="No available mentors."
+              />
+            </>
           )}
         </div>
       ) : null}

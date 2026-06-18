@@ -1594,7 +1594,7 @@
 
 .public-practice-roster-section-title {
   display: block;
-  margin-bottom: 0.35rem;
+  margin: 0 0 0.5rem;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-h);
