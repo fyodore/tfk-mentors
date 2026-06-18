@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import {
   deletePracticeReminderEmail,
+  fetchPracticeReminderEmail,
   fetchPracticeReminderEmails,
   fetchPractices,
   fetchSeasons,
@@ -56,6 +57,8 @@ export default function PracticeReminderEmailsPanel() {
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
   const [sendingId, setSendingId] = useState(null)
+  const [editRecipients, setEditRecipients] = useState([])
+  const [editRecipientsLoading, setEditRecipientsLoading] = useState(false)
 
   const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
 
@@ -176,6 +179,8 @@ export default function PracticeReminderEmailsPanel() {
     setModal(null)
     setActiveReminder(null)
     setModalError('')
+    setEditRecipients([])
+    setEditRecipientsLoading(false)
   }
 
   function closeModal() {
@@ -183,9 +188,11 @@ export default function PracticeReminderEmailsPanel() {
     resetModal()
   }
 
-  function openEdit(row) {
+  async function openEdit(row) {
     setModalError('')
     setActiveReminder(row)
+    setEditRecipients([])
+    setEditRecipientsLoading(true)
     const { sendDate, sendTime } = row.scheduled_send_at
       ? isoToSendDateAndTime(row.scheduled_send_at)
       : { sendDate: '', sendTime: '06:15' }
@@ -196,6 +203,17 @@ export default function PracticeReminderEmailsPanel() {
       body_text: row.body_text ?? DEFAULT_BODY,
     })
     setModal('edit')
+    try {
+      const detail = await fetchPracticeReminderEmail(row.id)
+      setActiveReminder(detail)
+      setEditRecipients(
+        Array.isArray(detail.pending_recipients) ? detail.pending_recipients : []
+      )
+    } catch (e) {
+      setModalError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setEditRecipientsLoading(false)
+    }
   }
 
   function openDelete(row) {
@@ -431,6 +449,7 @@ export default function PracticeReminderEmailsPanel() {
       <Modal
         open={modal === 'edit'}
         title="Edit practice reminder"
+        panelClassName="modal-panel-wide"
         onClose={closeModal}
         footer={
           <>
@@ -448,6 +467,36 @@ export default function PracticeReminderEmailsPanel() {
             {modalError}
           </p>
         ) : null}
+        <div className="email-recipients-block email-recipient-edit-block">
+          <span className="muted email-practices-label">
+            Recipients
+            {!editRecipientsLoading && editRecipients.length > 0
+              ? ` (${editRecipients.length})`
+              : ''}
+          </span>
+          {editRecipientsLoading ? (
+            <p className="muted">Loading recipients…</p>
+          ) : editRecipients.length === 0 ? (
+            <p className="muted">No recipients for this reminder.</p>
+          ) : (
+            <ul className="email-recipient-edit-list">
+              {editRecipients.map((recipient) => {
+                const name =
+                  recipient.name ||
+                  `${recipient.first_name || ''} ${recipient.last_name || ''}`.trim()
+                return (
+                  <li key={recipient.email}>
+                    <span className="email-recipient-edit-name">
+                      {name || recipient.email}
+                    </span>
+                    <span className="muted">{recipient.email}</span>
+                    <span className="muted">{recipient.kind_label || recipient.kind}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
         <div className="form-grid">
           <label>
             Send date

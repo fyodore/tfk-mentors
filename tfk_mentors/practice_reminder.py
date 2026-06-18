@@ -347,6 +347,42 @@ def collect_recipients(reminder: PracticeReminderEmail):
     return list(recipients.values())
 
 
+REMINDER_RECIPIENT_KIND_LABELS = {
+    "staff": "Staff",
+    "coach": "Coach",
+    "mentor": "Mentor",
+}
+
+
+def serialize_reminder_recipient(recipient: ReminderRecipient) -> dict:
+    return {
+        "email": recipient.email,
+        "first_name": recipient.first_name,
+        "last_name": recipient.last_name,
+        "name": f"{recipient.first_name} {recipient.last_name}".strip(),
+        "kind": recipient.kind,
+        "kind_label": REMINDER_RECIPIENT_KIND_LABELS.get(
+            recipient.kind, recipient.kind
+        ),
+        "mentor_id": recipient.mentor_id,
+        "coach_id": recipient.coach_id,
+        "staff_id": recipient.staff_id,
+    }
+
+
+def pending_recipients_for_reminder(reminder: PracticeReminderEmail):
+    recipients = collect_recipients(reminder)
+    return sorted(
+        (serialize_reminder_recipient(recipient) for recipient in recipients),
+        key=lambda item: (
+            item["kind"],
+            item["last_name"].lower(),
+            item["first_name"].lower(),
+            item["email"].lower(),
+        ),
+    )
+
+
 def render_reminder_for_recipient(reminder, recipient: ReminderRecipient):
     practice_one = reminder.practice_one
     practice_two = reminder.practice_two

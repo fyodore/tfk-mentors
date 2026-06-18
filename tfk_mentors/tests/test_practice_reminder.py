@@ -242,6 +242,20 @@ class PracticeReminderTests(TestCase):
         )
         self.assertEqual(patch_response.status_code, 200)
         self.assertEqual(patch_response.data["subject"], "Custom subject")
+        detail_response = self.client.get(
+            f"/api/practice-reminder-email/{reminder_id}/"
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        pending = detail_response.data["pending_recipients"]
+        self.assertGreater(len(pending), 0)
+        emails = {item["email"] for item in pending}
+        self.assertIn(self.staff.email, emails)
+        self.assertIn(self.coach.email, emails)
+        self.assertIn(self.practice_mentor.email, emails)
+        self.assertEqual(
+            detail_response.data["recipient_count"],
+            len(pending),
+        )
 
     @patch("tfk_mentors.practice_reminder._verify_email_delivery")
     def test_api_send_now_marks_complete(self, _mock_verify):

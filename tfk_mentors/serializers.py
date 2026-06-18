@@ -557,6 +557,7 @@ class PracticeReminderSendRecordSerializer(serializers.ModelSerializer):
 class PracticeReminderEmailSerializer(serializers.ModelSerializer):
     send_records = PracticeReminderSendRecordSerializer(many=True, read_only=True)
     recipient_count = serializers.SerializerMethodField()
+    pending_recipients = serializers.SerializerMethodField()
     scheduled_send_at = serializers.DateTimeField(required=False, allow_null=True)
 
     class Meta:
@@ -574,6 +575,7 @@ class PracticeReminderEmailSerializer(serializers.ModelSerializer):
             "task_completed_at",
             "recipients_emailed_count",
             "recipient_count",
+            "pending_recipients",
             "send_records",
             "created_at",
             "updated_at",
@@ -588,17 +590,33 @@ class PracticeReminderEmailSerializer(serializers.ModelSerializer):
             "task_completed_at",
             "recipients_emailed_count",
             "recipient_count",
+            "pending_recipients",
             "send_records",
             "created_at",
             "updated_at",
         ]
 
-    def get_recipient_count(self, obj):
-        from .practice_reminder import collect_recipients
+    def _pending_recipients_data(self, obj):
+        cache = getattr(self, "_pending_recipients_cache", None)
+        if cache is None:
+            cache = {}
+            self._pending_recipients_cache = cache
+        if obj.pk not in cache:
+            if obj.task_completed_at:
+                cache[obj.pk] = []
+            else:
+                from .practice_reminder import pending_recipients_for_reminder
 
+                cache[obj.pk] = pending_recipients_for_reminder(obj)
+        return cache[obj.pk]
+
+    def get_recipient_count(self, obj):
         if obj.task_completed_at:
             return obj.recipients_emailed_count or 0
-        return len(collect_recipients(obj))
+        return len(self._pending_recipients_data(obj))
+
+    def get_pending_recipients(self, obj):
+        return self._pending_recipients_data(obj)
 
     def validate(self, attrs):
         instance = self.instance
