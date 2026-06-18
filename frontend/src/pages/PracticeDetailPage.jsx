@@ -340,8 +340,12 @@ export default function PracticeDetailPage() {
     setSaving(true)
     setError(null)
     try {
-      await makePracticeMentorAvailable(practiceId, mentorId)
-      await loadAll()
+      const updated = await makePracticeMentorAvailable(practiceId, mentorId)
+      setMentorReplies((prev) => prev.filter((r) => r.mentor_id !== mentorId))
+      setAvailableMentorReplies((prev) => {
+        const without = prev.filter((r) => r.mentor_id !== mentorId)
+        return [...without, updated]
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
