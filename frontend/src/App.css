@@ -1492,8 +1492,8 @@
   gap: 0.35rem 0.85rem;
   padding: 0.55rem 0.75rem;
   border-radius: 6px;
-  background: #e8f4ea;
-  border: 1px solid #c6e0cb;
+  background: var(--secondary, #c4d600);
+  border: 1px solid var(--accent-border, #c4d600);
 }
 
 .mentor-directory-practice-hover {
@@ -1614,8 +1614,8 @@
 
 @media (prefers-color-scheme: dark) {
   .mentor-directory-practice-row {
-    background: rgba(31, 95, 42, 0.35);
-    border-color: rgba(198, 224, 203, 0.35);
+    background: color-mix(in srgb, var(--secondary, #c4d600) 28%, transparent);
+    border-color: color-mix(in srgb, var(--secondary, #c4d600) 45%, var(--border));
   }
 
   .public-practice-roster-close {
