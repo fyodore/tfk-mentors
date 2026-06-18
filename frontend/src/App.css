@@ -1497,22 +1497,93 @@
 }
 
 .mentor-directory-practice-hover {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.85rem;
-  flex: 1 1 auto;
+  position: relative;
+  display: inline;
 }
 
 .mentor-directory-practice-hover-trigger {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.85rem;
-  flex: 1 1 auto;
+  display: inline;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border-bottom: 1px dotted var(--border, #bbb);
+}
+
+.mentor-directory-practice-hover .mentor-directory-practice-hover-trigger:hover {
+  border-bottom-color: #166534;
 }
 
 .public-practice-roster-card {
   min-width: 18rem;
   max-width: 24rem;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 40;
+}
+
+.public-practice-roster-card-pinned {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.public-practice-roster-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--bg, #f3f4f6);
+  color: var(--text-h);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.public-practice-roster-close:hover {
+  background: #e5e7eb;
+}
+
+.public-practice-roster-pace-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.public-practice-roster-pace-group {
+  margin: 0;
+}
+
+.public-practice-roster-pace-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.public-practice-roster-mentor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.public-practice-roster-mentor-list li {
+  font-size: 0.88rem;
+}
+
+.public-practice-roster-empty {
+  margin: 0;
 }
 
 .public-practice-roster-section + .public-practice-roster-section {
@@ -1545,5 +1616,13 @@
   .mentor-directory-practice-row {
     background: rgba(31, 95, 42, 0.35);
     border-color: rgba(198, 224, 203, 0.35);
+  }
+
+  .public-practice-roster-close {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .public-practice-roster-close:hover {
+    background: rgba(255, 255, 255, 0.14);
   }
 }

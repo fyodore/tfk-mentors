@@ -41,18 +41,18 @@ function PracticeList({ title, practices, emptyMessage }) {
               <span className="mentor-directory-practice-date">
                 {practice.date ? formatMentorDirectoryPracticeDate(practice.date) : '—'}
               </span>
-              {practice.nyrr_race ? (
-                <span className="muted">{practice.nyrr_race}</span>
-              ) : null}
-              {title === 'Attending' ? (
-                <span className="mentor-directory-practice-status">
-                  {assignedPracticeLabel(practice)}
-                </span>
-              ) : null}
-              {practice.pace ? (
-                <span className="muted">Pace {practice.pace}</span>
-              ) : null}
             </PublicPracticeRosterHover>
+            {practice.nyrr_race ? (
+              <span className="muted">{practice.nyrr_race}</span>
+            ) : null}
+            {title === 'Attending' ? (
+              <span className="mentor-directory-practice-status">
+                {assignedPracticeLabel(practice)}
+              </span>
+            ) : null}
+            {practice.pace ? (
+              <span className="muted">Pace {practice.pace}</span>
+            ) : null}
           </li>
         ))}
       </ul>
