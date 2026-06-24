@@ -32,7 +32,7 @@ PACE_GROUPS = [choice.value for choice in PaceTypes]
 
 DEFAULT_BODY_TEMPLATE = """Dear {{first_name}},
 
-If you haven't done so, please join our facebook group: https://www.facebook.com/groups/{{year}}tfkmentors/.
+To see the most up to date schedule of you mentoring you can use: https://mentors.runsforkids.com/mentor-directory
 
 {{practice_1_section}}
 
@@ -40,11 +40,13 @@ If you haven't done so, please join our facebook group: https://www.facebook.com
 
 {{practice_2_section}}
 
-{{mentor_practice_2_notice}}"""
+{{mentor_practice_2_notice}}
+
+If you haven't done so, please join our facebook group: https://www.facebook.com/groups/{{year}}tfkmentors/."""
 
 
 def display_time_zone():
-    return ZoneInfo(getattr(settings, "TIME_ZONE", "America/Chicago"))
+    return ZoneInfo(getattr(settings, "TIME_ZONE", "America/New_York"))
 
 
 def format_practice_date(practice):

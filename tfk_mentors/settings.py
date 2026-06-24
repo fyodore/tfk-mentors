@@ -206,7 +206,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 
 # Production value set in tfk_mentors/production.py (gitignored).
-TIME_ZONE = os.environ.get("TIME_ZONE", "America/Chicago")
+TIME_ZONE = os.environ.get("TIME_ZONE", "America/New_York")
+USE_I18N = True
 
 USE_I18N = True
 
