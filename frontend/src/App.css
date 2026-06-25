@@ -1377,6 +1377,27 @@
   border-top: 1px solid var(--border);
 }
 
+.mentor-directory-tabs {
+  margin-top: 0;
+}
+
+.mentor-directory-pace-section h2 {
+  font-size: 1.05rem;
+}
+
+.mentor-directory-toggle--no-pace {
+  grid-template-areas:
+    'name chevron'
+    'counts chevron';
+}
+
+@media (min-width: 640px) {
+  .mentor-directory-toggle--no-pace {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'name counts chevron';
+  }
+}
+
 .mentor-directory-section h2 {
   margin: 0 0 1rem;
   font-size: 1.15rem;
