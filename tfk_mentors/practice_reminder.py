@@ -469,6 +469,26 @@ def sync_practice_reminders_for_season(season):
     return {"created": created[0], "updated": updated[0], "season": season.id}
 
 
+def refresh_practice_reminder_templates_for_season(season):
+    """Reset unsent reminder subject/body to the current code defaults."""
+    if isinstance(season, int):
+        season = Season.objects.get(pk=season)
+
+    reminders = PracticeReminderEmail.objects.filter(
+        season=season,
+        task_completed_at__isnull=True,
+    ).select_related("practice_one", "practice_two")
+
+    updated = 0
+    for reminder in reminders:
+        reminder.body_text = DEFAULT_BODY_TEMPLATE
+        reminder.subject = default_subject(reminder.practice_one, reminder.practice_two)
+        reminder.save(update_fields=["body_text", "subject", "updated_at"])
+        updated += 1
+
+    return {"updated": updated, "season": season.id}
+
+
 def due_practice_reminder_emails():
     return (
         PracticeReminderEmail.objects.filter(

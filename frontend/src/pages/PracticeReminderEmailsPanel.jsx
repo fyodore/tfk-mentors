@@ -8,6 +8,7 @@ import {
   fetchPractices,
   fetchSeasons,
   patchPracticeReminderEmail,
+  refreshPracticeReminderEmailTemplates,
   sendPracticeReminderEmailNow,
 } from '../api'
 import { currentSeasonFromList, sortSeasonsByYearDesc } from '../seasonHelpers.js'
@@ -284,6 +285,26 @@ export default function PracticeReminderEmailsPanel() {
     }
   }
 
+  function openRefreshTemplates() {
+    setModalError('')
+    setModal('refresh-templates')
+  }
+
+  async function handleRefreshTemplates() {
+    if (!seasonFilter) return
+    setBusy(true)
+    setModalError('')
+    try {
+      await refreshPracticeReminderEmailTemplates(seasonFilter)
+      await reloadReminders()
+      resetModal()
+    } catch (e) {
+      setModalError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function reminderSummary(row) {
     const first = practiceLabel(row.practice_one)
     const second =
@@ -413,6 +434,14 @@ export default function PracticeReminderEmailsPanel() {
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className="btn btn-text"
+          disabled={loading || busy || !seasonFilter || upcomingReminders.length === 0}
+          onClick={openRefreshTemplates}
+        >
+          Refresh all upcoming reminders
+        </button>
       </div>
 
       {loading && <p className="muted">Loading…</p>}
@@ -578,6 +607,40 @@ export default function PracticeReminderEmailsPanel() {
           </p>
         ) : null}
         <p>Delete this unsent practice reminder?</p>
+      </Modal>
+
+      <Modal
+        open={modal === 'refresh-templates'}
+        title="Refresh all upcoming reminders"
+        onClose={closeModal}
+        footer={
+          <>
+            <button type="button" className="btn btn-text" disabled={busy} onClick={closeModal}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-danger"
+              disabled={busy}
+              onClick={handleRefreshTemplates}
+            >
+              {busy ? 'Refreshing…' : 'Refresh reminders'}
+            </button>
+          </>
+        }
+      >
+        {modalError ? (
+          <p className="error" role="alert">
+            {modalError}
+          </p>
+        ) : null}
+        <p>
+          Reset every upcoming practice reminder for this season to the current
+          template in code.
+        </p>
+        <p className="error" role="alert">
+          All custom template changes will be lost.
+        </p>
       </Modal>
     </>
   )

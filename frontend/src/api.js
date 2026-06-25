@@ -745,6 +745,21 @@ export async function syncPracticeReminderEmails(seasonId) {
   return res.json()
 }
 
+/** @param {number|string} seasonId */
+export async function refreshPracticeReminderEmailTemplates(seasonId) {
+  const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}refresh-templates/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({ season: Number(seasonId) }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {number|string} id @param {Record<string, unknown>} body */
 export async function patchPracticeReminderEmail(id, body) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {

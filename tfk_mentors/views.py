@@ -91,6 +91,7 @@ from .serializers import (
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
 from .practice_reminder import (
+    refresh_practice_reminder_templates_for_season,
     send_practice_reminder,
     sync_practice_reminders_for_season,
 )
@@ -1577,6 +1578,23 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
             )
         try:
             result = sync_practice_reminders_for_season(int(season_id))
+        except Season.DoesNotExist:
+            return Response(
+                {"detail": "Season not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(result)
+
+    @action(detail=False, methods=["post"], url_path="refresh-templates")
+    def refresh_templates(self, request):
+        season_id = request.data.get("season") if isinstance(request.data, dict) else None
+        if season_id is None:
+            return Response(
+                {"detail": "season is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = refresh_practice_reminder_templates_for_season(int(season_id))
         except Season.DoesNotExist:
             return Response(
                 {"detail": "Season not found."},

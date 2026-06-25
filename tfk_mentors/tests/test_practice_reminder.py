@@ -24,8 +24,10 @@ from tfk_mentors.models import (
     TfkStaff,
 )
 from tfk_mentors.practice_reminder import (
+    DEFAULT_BODY_TEMPLATE,
     collect_recipients,
     default_subject,
+    refresh_practice_reminder_templates_for_season,
     render_reminder_for_recipient,
     schedule_for_before_first_practice,
     send_practice_reminder,
@@ -256,6 +258,55 @@ class PracticeReminderTests(TestCase):
             detail_response.data["recipient_count"],
             len(pending),
         )
+
+    def test_refresh_templates_resets_unsent_reminders_only(self):
+        sync_practice_reminders_for_season(self.season)
+        unsent = PracticeReminderEmail.objects.filter(
+            season=self.season,
+            task_completed_at__isnull=True,
+        )
+        unsent.update(subject="Custom subject", body_text="Custom body")
+        sent = unsent.first()
+        sent.task_completed_at = timezone.now()
+        sent.save(update_fields=["task_completed_at"])
+
+        result = refresh_practice_reminder_templates_for_season(self.season)
+        self.assertEqual(result["updated"], unsent.count() - 1)
+
+        for reminder in PracticeReminderEmail.objects.filter(
+            season=self.season,
+            task_completed_at__isnull=True,
+        ):
+            self.assertEqual(reminder.body_text, DEFAULT_BODY_TEMPLATE)
+            self.assertEqual(
+                reminder.subject,
+                default_subject(reminder.practice_one, reminder.practice_two),
+            )
+
+        sent.refresh_from_db()
+        self.assertEqual(sent.subject, "Custom subject")
+        self.assertEqual(sent.body_text, "Custom body")
+
+    def test_api_refresh_templates(self):
+        sync_practice_reminders_for_season(self.season)
+        PracticeReminderEmail.objects.filter(
+            season=self.season,
+            task_completed_at__isnull=True,
+        ).update(subject="Custom subject", body_text="Custom body")
+
+        response = self.client.post(
+            "/api/practice-reminder-email/refresh-templates/",
+            {"season": self.season.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.data["updated"], 0)
+
+        reminder = PracticeReminderEmail.objects.filter(
+            season=self.season,
+            task_completed_at__isnull=True,
+        ).first()
+        self.assertEqual(reminder.body_text, DEFAULT_BODY_TEMPLATE)
 
     @patch("tfk_mentors.practice_reminder._verify_email_delivery")
     def test_api_send_now_marks_complete(self, _mock_verify):
