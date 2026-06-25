@@ -47,6 +47,8 @@ def normalize_pace(raw):
 
 class ScheduledEmailRecipientMode(models.TextChoices):
     ALL_IN_SEASON = "all_in_season", "All mentors in season"
+    ALL_AT_PRACTICE_IN_SEASON = "all_at_practice_in_season", "All At Practice mentors in season"
+    ALL_REMOTE_IN_SEASON = "all_remote_in_season", "All Remote mentors in season"
     SPECIFIC_MENTORS = "specific_mentors", "Specific mentors"
 
 
@@ -1176,11 +1178,15 @@ class ScheduledEmail(TimeStampedModel):
 
     def clean(self):
         super().clean()
-        if self.recipient_mode == ScheduledEmailRecipientMode.ALL_IN_SEASON:
+        if self.recipient_mode in (
+            ScheduledEmailRecipientMode.ALL_IN_SEASON,
+            ScheduledEmailRecipientMode.ALL_AT_PRACTICE_IN_SEASON,
+            ScheduledEmailRecipientMode.ALL_REMOTE_IN_SEASON,
+        ):
             if self.recipient_season_id is None:
                 raise ValidationError(
                     {
-                        "recipient_season": "Select a season when including all mentors in that season."
+                        "recipient_season": "Select a season when including mentors from that season."
                     }
                 )
         elif self.recipient_mode == ScheduledEmailRecipientMode.SPECIFIC_MENTORS:
@@ -1203,11 +1209,12 @@ class ScheduledEmail(TimeStampedModel):
             )
         if not self.recipient_season_id:
             return Mentor.objects.none()
-        return (
-            Mentor.objects.filter(seasons=self.recipient_season)
-            .distinct()
-            .order_by("last_name", "first_name", "id")
-        )
+        mentors = Mentor.objects.filter(seasons=self.recipient_season)
+        if self.recipient_mode == ScheduledEmailRecipientMode.ALL_AT_PRACTICE_IN_SEASON:
+            mentors = mentors.filter(type=MentorTypes.PRACTICE)
+        elif self.recipient_mode == ScheduledEmailRecipientMode.ALL_REMOTE_IN_SEASON:
+            mentors = mentors.filter(type=MentorTypes.REMOTE)
+        return mentors.distinct().order_by("last_name", "first_name", "id")
 
     def sync_mentor_tokens(self):
         """Create/remove per-mentor reply tokens to match current recipient list."""

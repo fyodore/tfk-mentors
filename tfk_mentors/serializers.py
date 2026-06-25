@@ -736,12 +736,16 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
         else:
             mentors_list = list(mentors)
 
-        if mode == ScheduledEmailRecipientMode.ALL_IN_SEASON:
+        if mode in (
+            ScheduledEmailRecipientMode.ALL_IN_SEASON,
+            ScheduledEmailRecipientMode.ALL_AT_PRACTICE_IN_SEASON,
+            ScheduledEmailRecipientMode.ALL_REMOTE_IN_SEASON,
+        ):
             if season is None:
                 raise serializers.ValidationError(
                     {
                         "recipient_season": (
-                            "Select a season when sending to all mentors in that season."
+                            "Select a season when sending to mentors in that season."
                         )
                     }
                 )

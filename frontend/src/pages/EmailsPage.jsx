@@ -35,9 +35,42 @@ Your fastest pace group for these sessions is {{ pace }} min/mile.
 Thanks,
 Your friendly Mentor Coordinator Ted`
 
+const AT_PRACTICE = 'At Practice'
+const REMOTE = 'Remote'
+
+const SEASON_RECIPIENT_MODES = new Set([
+  'all_in_season',
+  'all_at_practice_in_season',
+  'all_remote_in_season',
+])
+
 function isoToSendDateAndTime(iso) {
   const { date, time } = isoToDateAndQuarterTime(iso)
   return { sendDate: date, sendTime: time }
+}
+
+function mentorsInSeason(mentors, seasonId, mentorType = null) {
+  return mentors.filter((m) => {
+    if (!Array.isArray(m.seasons) || !m.seasons.includes(seasonId)) return false
+    if (mentorType && m.type !== mentorType) return false
+    return true
+  })
+}
+
+function mentorTypeForRecipientMode(mode) {
+  if (mode === 'all_at_practice_in_season') return AT_PRACTICE
+  if (mode === 'all_remote_in_season') return REMOTE
+  return null
+}
+
+function seasonRecipientLabel(mode) {
+  if (mode === 'all_at_practice_in_season') {
+    return 'Season (all At Practice mentors linked to this season)'
+  }
+  if (mode === 'all_remote_in_season') {
+    return 'Season (all Remote mentors linked to this season)'
+  }
+  return 'Season (all mentors linked to this season)'
 }
 
 function sortPracticesByDateAsc(list) {
@@ -255,7 +288,7 @@ export default function EmailsPage() {
     const mode =
       emailRow.recipient_mode === 'specific_mentors'
         ? 'specific_mentors'
-        : 'all_in_season'
+        : emailRow.recipient_mode || 'all_in_season'
     const { sendDate, sendTime } = isoToSendDateAndTime(
       emailRow.scheduled_send_at
     )
@@ -300,15 +333,33 @@ export default function EmailsPage() {
 
     /** @type {{ recipient_mode: string, recipient_season: number|null, specific_mentors: number[] }} */
     let recipientsPayload
-    if (form.recipient_mode === 'all_in_season') {
+    if (SEASON_RECIPIENT_MODES.has(form.recipient_mode)) {
       const sid = Number.parseInt(String(form.recipient_season), 10)
       if (Number.isNaN(sid)) {
         return {
-          error: 'Select a season when sending to all mentors in that season.',
+          error: 'Select a season when sending to mentors in that season.',
+        }
+      }
+      const typeLabel =
+        form.recipient_mode === 'all_at_practice_in_season'
+          ? 'At Practice'
+          : form.recipient_mode === 'all_remote_in_season'
+            ? 'Remote'
+            : null
+      const matchingMentors = mentorsInSeason(
+        mentors,
+        sid,
+        mentorTypeForRecipientMode(form.recipient_mode)
+      )
+      if (matchingMentors.length === 0) {
+        return {
+          error: typeLabel
+            ? `No ${typeLabel} mentors are linked to the selected season.`
+            : 'No mentors are linked to the selected season.',
         }
       }
       recipientsPayload = {
-        recipient_mode: 'all_in_season',
+        recipient_mode: form.recipient_mode,
         recipient_season: sid,
         specific_mentors: [],
       }
@@ -497,6 +548,28 @@ export default function EmailsPage() {
           <input
             type="radio"
             name={`${formId}-recipient`}
+            checked={form.recipient_mode === 'all_at_practice_in_season'}
+            onChange={() =>
+              setForm((f) => ({ ...f, recipient_mode: 'all_at_practice_in_season' }))
+            }
+          />
+          All At Practice mentors in a season
+        </label>
+        <label className="radio-row">
+          <input
+            type="radio"
+            name={`${formId}-recipient`}
+            checked={form.recipient_mode === 'all_remote_in_season'}
+            onChange={() =>
+              setForm((f) => ({ ...f, recipient_mode: 'all_remote_in_season' }))
+            }
+          />
+          All Remote mentors in a season
+        </label>
+        <label className="radio-row">
+          <input
+            type="radio"
+            name={`${formId}-recipient`}
             checked={form.recipient_mode === 'specific_mentors'}
             onChange={() =>
               setForm((f) => ({ ...f, recipient_mode: 'specific_mentors' }))
@@ -506,10 +579,10 @@ export default function EmailsPage() {
         </label>
       </fieldset>
 
-      {form.recipient_mode === 'all_in_season' ? (
+      {SEASON_RECIPIENT_MODES.has(form.recipient_mode) ? (
         <>
           <label className="field-label" htmlFor={`${formId}-recipient-season`}>
-            Season (all mentors linked to this season)
+            {seasonRecipientLabel(form.recipient_mode)}
           </label>
           <select
             id={`${formId}-recipient-season`}
@@ -522,8 +595,10 @@ export default function EmailsPage() {
           >
             <option value="">Select season…</option>
             {sortedSeasons.map((s) => {
-              const n = mentors.filter(
-                (m) => Array.isArray(m.seasons) && m.seasons.includes(s.id)
+              const n = mentorsInSeason(
+                mentors,
+                s.id,
+                mentorTypeForRecipientMode(form.recipient_mode)
               ).length
               return (
                 <option key={s.id} value={String(s.id)}>

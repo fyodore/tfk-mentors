@@ -1,25 +1,36 @@
-/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[] }>} mentors */
+const AT_PRACTICE = 'At Practice'
+const REMOTE = 'Remote'
+
+/** @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors @param {number} seasonId @param {string|null} [mentorType] */
+function mentorsInSeason(mentors, seasonId, mentorType = null) {
+  return mentors.filter((m) => {
+    if (!Array.isArray(m.seasons) || !m.seasons.includes(seasonId)) return false
+    if (mentorType && m.type !== mentorType) return false
+    return true
+  })
+}
+
+/** @param {string} mode */
+function mentorTypeForRecipientMode(mode) {
+  if (mode === 'all_at_practice_in_season') return AT_PRACTICE
+  if (mode === 'all_remote_in_season') return REMOTE
+  return null
+}
+
+/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors */
 export function scheduledRecipientCount(row, mentors) {
-  const mode =
-    row.recipient_mode === 'specific_mentors'
-      ? 'specific_mentors'
-      : 'all_in_season'
+  const mode = row.recipient_mode === 'specific_mentors' ? 'specific_mentors' : row.recipient_mode
   if (mode === 'specific_mentors') {
     return (row.specific_mentors || []).length
   }
   const sid = row.recipient_season
   if (sid == null) return 0
-  return mentors.filter(
-    (m) => Array.isArray(m.seasons) && m.seasons.includes(sid)
-  ).length
+  return mentorsInSeason(mentors, sid, mentorTypeForRecipientMode(mode)).length
 }
 
-/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[] }>} mentors */
+/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors */
 export function recipientSummaryText(row, { seasonYearById, mentors }) {
-  const mode =
-    row.recipient_mode === 'specific_mentors'
-      ? 'specific_mentors'
-      : 'all_in_season'
+  const mode = row.recipient_mode === 'specific_mentors' ? 'specific_mentors' : row.recipient_mode
   const stats = row.reply_stats
   const isSent = Boolean(row.task_completed_at)
   const scheduledCount = scheduledRecipientCount(row, mentors)
@@ -69,7 +80,14 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
 
   const sid = row.recipient_season
   const year = sid != null ? seasonYearById.get(sid) ?? sid : null
-  let text = `All mentors in season ${year ?? '—'}`
+  let text
+  if (mode === 'all_at_practice_in_season') {
+    text = `All At Practice mentors in season ${year ?? '—'}`
+  } else if (mode === 'all_remote_in_season') {
+    text = `All Remote mentors in season ${year ?? '—'}`
+  } else {
+    text = `All mentors in season ${year ?? '—'}`
+  }
   if (isSent && count == null) {
     text += ' (sent — recipient count unavailable'
     return text + `${responseSummarySuffix()})`

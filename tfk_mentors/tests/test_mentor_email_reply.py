@@ -814,3 +814,96 @@ class BulkEmailReplyStatsTests(TestCase):
         stats = self.scheduled.reply_stats()
         self.assertEqual(stats["mentors_replied"], 3)
         self.assertGreaterEqual(stats["mentors_emailed"], 3)
+
+
+class ScheduledEmailRecipientModeTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        session = self.client.session
+        session["site_authenticated"] = True
+        session.save()
+
+        self.season = Season.objects.create(year=2026)
+        self.at_practice = Mentor.objects.create(
+            first_name="Pat",
+            last_name="Practice",
+            email="practice@example.com",
+            cell_phone="555-0100",
+            type=MentorTypes.PRACTICE,
+            pace="11-12",
+        )
+        self.remote = Mentor.objects.create(
+            first_name="Rem",
+            last_name="Remote",
+            email="remote@example.com",
+            type=MentorTypes.REMOTE,
+        )
+        self.at_practice.seasons.add(self.season)
+        self.remote.seasons.add(self.season)
+
+    def test_get_target_mentors_filters_by_type(self):
+        from tfk_mentors.models import ScheduledEmailRecipientMode
+
+        at_practice_email = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=1),
+            body_text="Hello",
+            recipient_mode=ScheduledEmailRecipientMode.ALL_AT_PRACTICE_IN_SEASON,
+            recipient_season=self.season,
+        )
+        remote_email = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now() + timedelta(days=1),
+            body_text="Hello",
+            recipient_mode=ScheduledEmailRecipientMode.ALL_REMOTE_IN_SEASON,
+            recipient_season=self.season,
+        )
+
+        self.assertEqual(
+            list(at_practice_email.get_target_mentors()),
+            [self.at_practice],
+        )
+        self.assertEqual(
+            list(remote_email.get_target_mentors()),
+            [self.remote],
+        )
+
+    def test_api_create_scheduled_email_for_at_practice_only(self):
+        response = self.client.post(
+            "/api/scheduled-email/",
+            {
+                "scheduled_send_at": (timezone.now() + timedelta(days=2)).isoformat(),
+                "body_text": "Hello {{ first_name }}",
+                "practices": [],
+                "recipient_mode": "all_at_practice_in_season",
+                "recipient_season": self.season.id,
+                "specific_mentors": [],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        email = ScheduledEmail.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            list(email.get_target_mentors().values_list("email", flat=True)),
+            [self.at_practice.email],
+        )
+        email.sync_mentor_tokens()
+        self.assertEqual(email.mentor_tokens.count(), 1)
+
+    def test_api_create_scheduled_email_for_remote_only(self):
+        response = self.client.post(
+            "/api/scheduled-email/",
+            {
+                "scheduled_send_at": (timezone.now() + timedelta(days=2)).isoformat(),
+                "body_text": "Hello {{ first_name }}",
+                "practices": [],
+                "recipient_mode": "all_remote_in_season",
+                "recipient_season": self.season.id,
+                "specific_mentors": [],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        email = ScheduledEmail.objects.get(pk=response.data["id"])
+        self.assertEqual(
+            list(email.get_target_mentors().values_list("email", flat=True)),
+            [self.remote.email],
+        )
