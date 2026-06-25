@@ -21,7 +21,7 @@ import {
 
 const DEFAULT_BODY = `Dear {{first_name}},
 
-If you haven't done so, please join our facebook group: https://www.facebook.com/groups/{{year}}tfkmentors/.
+To see the most up to date schedule of you mentoring you can use: https://mentors.runsforkids.com/mentor-directory
 
 {{practice_1_section}}
 
@@ -29,7 +29,9 @@ If you haven't done so, please join our facebook group: https://www.facebook.com
 
 {{practice_2_section}}
 
-{{mentor_practice_2_notice}}`
+{{mentor_practice_2_notice}}
+
+If you haven't done so, please join our facebook group: https://www.facebook.com/groups/{{year}}tfkmentors/.`
 
 function isoToSendDateAndTime(iso) {
   const { date, time } = isoToDateAndQuarterTime(iso)
