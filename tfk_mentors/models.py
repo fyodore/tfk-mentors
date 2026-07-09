@@ -608,8 +608,8 @@ class Practice(TimeStampedModel):
             raise ValidationError("Choose a different mentor for the swap.")
         if outgoing.id not in self.assigned_mentor_ids():
             raise ValidationError("Outgoing mentor is not assigned to this practice.")
-        if incoming.id in self.mentor_ids_on_practice():
-            raise ValidationError("Replacement mentor is already on this practice.")
+        if incoming.id in self.assigned_mentor_ids():
+            raise ValidationError("Replacement mentor is already assigned to this practice.")
         if not incoming.seasons.filter(id=self.season_id).exists():
             raise ValidationError(
                 "Replacement mentor must belong to the practice season."

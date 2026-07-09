@@ -125,3 +125,42 @@ class PracticeMentorSwapTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_swap_allows_incoming_mentor_marked_available(self):
+        available = Mentor.objects.create(
+            first_name="Avail",
+            last_name="Able",
+            email="avail@example.com",
+            cell_phone="555-0102",
+            type=MentorTypes.PRACTICE,
+            pace=PaceTypes.NINE.value,
+        )
+        available.seasons.add(self.season)
+        MentorPracticeAssignment.objects.create(
+            mentor=available,
+            practice=self.practice,
+            pace=available.pace,
+            is_available=True,
+        )
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": available.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["incoming_mentor"]["mentor_id"], available.id)
+
+        self.practice.refresh_from_db()
+        self.assertNotIn(self.outgoing, self.practice.mentors.all())
+        self.assertIn(available, self.practice.mentors.all())
+        self.assertFalse(
+            MentorPracticeAssignment.objects.filter(
+                mentor=available,
+                practice=self.practice,
+                is_available=True,
+            ).exists()
+        )

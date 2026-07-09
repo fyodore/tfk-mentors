@@ -158,13 +158,9 @@ export default function PracticeDetailPage() {
     [coachAssignments]
   )
 
-  const assignedMentorIds = useMemo(
-    () =>
-      new Set([
-        ...mentorReplies.map((r) => r.mentor_id),
-        ...availableMentorReplies.map((r) => r.mentor_id),
-      ]),
-    [mentorReplies, availableMentorReplies]
+  const attendingMentorIds = useMemo(
+    () => new Set(mentorReplies.map((r) => r.mentor_id)),
+    [mentorReplies]
   )
 
   const practiceSeasonId = practice?.season
@@ -186,10 +182,10 @@ export default function PracticeDetailPage() {
         (m) =>
           Array.isArray(m.seasons) &&
           m.seasons.includes(practiceSeasonId) &&
-          !assignedMentorIds.has(m.id)
+          !attendingMentorIds.has(m.id)
       )
     )
-  }, [mentors, practiceSeasonId, assignedMentorIds])
+  }, [mentors, practiceSeasonId, attendingMentorIds])
 
   const assignedMentorReplies = useMemo(
     () => sortByPaceThenName(mentorReplies),
@@ -482,6 +478,9 @@ export default function PracticeDetailPage() {
         const without = prev.filter((row) => row.mentor_id !== swapModal.mentorId)
         return sortByPaceThenName([...without, result.incoming_mentor])
       })
+      setAvailableMentorReplies((prev) =>
+        prev.filter((row) => row.mentor_id !== incomingId)
+      )
       setSwapModal(null)
       setSwapIncomingId('')
       setSwapError('')
@@ -696,7 +695,7 @@ export default function PracticeDetailPage() {
             <p className="muted">
               Replace <strong>{swapModal.mentorName}</strong>
               {swapModal.pace ? ` (${swapModal.pace})` : ''} with another mentor
-              not on this practice. The outgoing mentor will be recorded in
+              not assigned to this practice. The outgoing mentor will be recorded in
               attendance as <strong>Found Replacement</strong>.
             </p>
             <label className="field-label" htmlFor="swap-incoming-mentor">
