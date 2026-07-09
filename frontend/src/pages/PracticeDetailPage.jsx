@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import {
   createCoachPracticeAssignment,
@@ -10,6 +10,7 @@ import {
   fetchCoaches,
   fetchMentors,
   fetchPractice,
+  fetchPractices,
   fetchSeasons,
   makePracticeMentorAvailable,
   patchPracticeMentorPace,
@@ -20,6 +21,7 @@ import { MentorPracticeHover } from '../components/MentorPracticeHover.jsx'
 import { Modal } from '../components/Modal.jsx'
 import { formatDateTime } from '../datetime.js'
 import { PACE_GROUPS, sortByPaceThenName } from '../paceHelpers.js'
+import { splitPracticesByUpcoming } from '../seasonHelpers.js'
 
 function byName(a, b) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -27,11 +29,19 @@ function byName(a, b) {
   return (a.first_name || '').localeCompare(b.first_name || '')
 }
 
+function practiceSwitcherLabel(practice) {
+  const dateLabel = practice.date ? formatDateTime(practice.date) : '—'
+  const race = practice.nyrr_race?.trim()
+  return race ? `${dateLabel} · ${race}` : dateLabel
+}
+
 export default function PracticeDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const practiceId = Number.parseInt(String(id), 10)
 
   const [practice, setPractice] = useState(null)
+  const [allPractices, setAllPractices] = useState([])
   const [seasons, setSeasons] = useState([])
   const [coaches, setCoaches] = useState([])
   const [mentors, setMentors] = useState([])
@@ -68,6 +78,23 @@ export default function PracticeDetailPage() {
     for (const mtr of mentors) m.set(mtr.id, mtr)
     return m
   }, [mentors])
+
+  const seasonPractices = useMemo(() => {
+    if (!practice?.season) return []
+    return allPractices.filter((row) => row.season === practice.season)
+  }, [allPractices, practice?.season])
+
+  const { upcoming: upcomingSeasonPractices, past: pastSeasonPractices } =
+    useMemo(
+      () => splitPracticesByUpcoming(seasonPractices),
+      [seasonPractices]
+    )
+
+  function handlePracticeSwitch(event) {
+    const nextId = Number.parseInt(event.target.value, 10)
+    if (Number.isNaN(nextId) || nextId === practiceId) return
+    navigate(`/practices/${nextId}`)
+  }
 
   async function loadAll() {
     if (Number.isNaN(practiceId)) {
@@ -117,15 +144,17 @@ export default function PracticeDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const [p, sList, cList, mList, caList] = await Promise.all([
+        const [p, sList, cList, mList, caList, pList] = await Promise.all([
           fetchPractice(practiceId),
           fetchSeasons(),
           fetchCoaches(),
           fetchMentors(),
           fetchCoachPracticeAssignments(),
+          fetchPractices(),
         ])
         if (!cancelled) {
           setPractice(p)
+          setAllPractices(Array.isArray(pList) ? pList : [])
           setSeasons(sList)
           setCoaches([...cList].sort(byName))
           setMentors([...mList].sort(byName))
@@ -500,11 +529,39 @@ export default function PracticeDetailPage() {
         {error && <p className="error" role="alert">{error}</p>}
         {!loading && practice && (
           <>
-            <p className="muted">
-              {formatDateTime(practice.date)}
-              {' · '}
-              Season {seasonById.get(practice.season)?.year ?? practice.season}
-            </p>
+            <div className="practice-detail-switcher">
+              <label className="field-label" htmlFor="practice-switcher">
+                Practice
+              </label>
+              <select
+                id="practice-switcher"
+                className="field-input field-select"
+                value={String(practiceId)}
+                onChange={handlePracticeSwitch}
+              >
+                {upcomingSeasonPractices.length > 0 ? (
+                  <optgroup label="Upcoming">
+                    {upcomingSeasonPractices.map((row) => (
+                      <option key={row.id} value={String(row.id)}>
+                        {practiceSwitcherLabel(row)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {pastSeasonPractices.length > 0 ? (
+                  <optgroup label="Past">
+                    {pastSeasonPractices.map((row) => (
+                      <option key={row.id} value={String(row.id)}>
+                        {practiceSwitcherLabel(row)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
+              <p className="muted practice-detail-season-note">
+                Season {seasonById.get(practice.season)?.year ?? practice.season}
+              </p>
+            </div>
             {practice.description?.trim() ? (
               <p className="practice-description">{practice.description.trim()}</p>
             ) : null}

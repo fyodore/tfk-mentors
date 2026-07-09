@@ -623,9 +623,15 @@
   }
 }
 
-.practices-filter {
+.practices-filter,
+.practice-detail-switcher {
   margin-bottom: 1.25rem;
-  max-width: 20rem;
+  max-width: 28rem;
+}
+
+.practice-detail-season-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
 }
 
 .practices-filter-note {
