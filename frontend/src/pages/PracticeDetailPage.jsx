@@ -13,9 +13,11 @@ import {
   fetchSeasons,
   makePracticeMentorAvailable,
   patchPracticeMentorPace,
+  swapPracticeMentor,
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { MentorPracticeHover } from '../components/MentorPracticeHover.jsx'
+import { Modal } from '../components/Modal.jsx'
 import { formatDateTime } from '../datetime.js'
 import { PACE_GROUPS, sortByPaceThenName } from '../paceHelpers.js'
 
@@ -45,6 +47,9 @@ export default function PracticeDetailPage() {
   const [mentorPaceToAdd, setMentorPaceToAdd] = useState('8-9')
   const [saving, setSaving] = useState(false)
   const [updatingMentorPaceId, setUpdatingMentorPaceId] = useState(null)
+  const [swapModal, setSwapModal] = useState(null)
+  const [swapIncomingId, setSwapIncomingId] = useState('')
+  const [swapError, setSwapError] = useState('')
 
   const seasonById = useMemo(() => {
     const m = new Map()
@@ -260,14 +265,24 @@ export default function PracticeDetailPage() {
               Add to Practice
             </button>
           ) : (
-            <button
-              type="button"
-              className="btn btn-text"
-              disabled={saving}
-              onClick={() => handleMakeMentorAvailable(r.mentor_id)}
-            >
-              Make available
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-text"
+                disabled={saving}
+                onClick={() => openSwapModal(r)}
+              >
+                Swap
+              </button>
+              <button
+                type="button"
+                className="btn btn-text"
+                disabled={saving}
+                onClick={() => handleMakeMentorAvailable(r.mentor_id)}
+              >
+                Make available
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -423,6 +438,58 @@ export default function PracticeDetailPage() {
     if (Number.isNaN(mentorId)) return
     const mentor = mentorById.get(mentorId)
     if (mentor?.pace) setMentorPaceToAdd(mentor.pace)
+  }
+
+  function openSwapModal(reply) {
+    const m = mentorById.get(reply.mentor_id)
+    const mentorName =
+      reply.first_name && reply.last_name
+        ? `${reply.first_name} ${reply.last_name}`
+        : m
+          ? `${m.first_name} ${m.last_name}`
+          : `Mentor #${reply.mentor_id}`
+    setSwapError('')
+    setSwapIncomingId('')
+    setSwapModal({
+      mentorId: reply.mentor_id,
+      mentorName,
+      pace: reply.pace || m?.pace || '',
+    })
+  }
+
+  function closeSwapModal() {
+    if (saving) return
+    setSwapModal(null)
+    setSwapIncomingId('')
+    setSwapError('')
+  }
+
+  async function handleSwapConfirm() {
+    if (!swapModal) return
+    const incomingId = Number.parseInt(swapIncomingId, 10)
+    if (Number.isNaN(incomingId)) {
+      setSwapError('Select a replacement mentor.')
+      return
+    }
+    setSaving(true)
+    setSwapError('')
+    try {
+      const result = await swapPracticeMentor(practiceId, {
+        outgoing_mentor: swapModal.mentorId,
+        incoming_mentor: incomingId,
+      })
+      setMentorReplies((prev) => {
+        const without = prev.filter((row) => row.mentor_id !== swapModal.mentorId)
+        return sortByPaceThenName([...without, result.incoming_mentor])
+      })
+      setSwapModal(null)
+      setSwapIncomingId('')
+      setSwapError('')
+    } catch (e) {
+      setSwapError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -597,6 +664,71 @@ export default function PracticeDetailPage() {
           </>
         )}
       </main>
+
+      <Modal
+        open={swapModal !== null}
+        title="Swap mentor"
+        onClose={closeSwapModal}
+        closeDisabled={saving}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={saving}
+              onClick={closeSwapModal}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={saving || !swapIncomingId}
+              onClick={handleSwapConfirm}
+            >
+              {saving ? 'Swapping…' : 'Confirm swap'}
+            </button>
+          </>
+        }
+      >
+        {swapModal ? (
+          <div className="modal-form-stack">
+            <p className="muted">
+              Replace <strong>{swapModal.mentorName}</strong>
+              {swapModal.pace ? ` (${swapModal.pace})` : ''} with another mentor
+              not on this practice. The outgoing mentor will be recorded in
+              attendance as <strong>Found Replacement</strong>.
+            </p>
+            <label className="field-label" htmlFor="swap-incoming-mentor">
+              Replacement mentor
+            </label>
+            <select
+              id="swap-incoming-mentor"
+              className="field-input field-select"
+              value={swapIncomingId}
+              onChange={(e) => setSwapIncomingId(e.target.value)}
+              disabled={saving}
+            >
+              <option value="" disabled>
+                Select mentor
+              </option>
+              {availableMentors.map((m) => (
+                <option key={m.id} value={String(m.id)}>
+                  {m.first_name} {m.last_name} ({m.pace})
+                </option>
+              ))}
+            </select>
+            {availableMentors.length === 0 ? (
+              <p className="muted">No mentors available to swap in.</p>
+            ) : null}
+            {swapError ? (
+              <p className="error modal-error" role="alert">
+                {swapError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </>
   )
 }

@@ -90,6 +90,7 @@ from .serializers import (
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
+from .mentor_scheduling import apply_mentor_schedule, compute_mentor_schedule
 from .practice_reminder import (
     refresh_practice_reminder_templates_for_season,
     send_practice_reminder,
@@ -715,6 +716,46 @@ class PracticeViewSet(viewsets.ModelViewSet):
             practice.sync_mentor_assignments_from_replies()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=["post"], url_path="swap-mentor")
+    def swap_mentor(self, request, pk=None):
+        """Swap an assigned mentor for another mentor not on this practice."""
+        practice = self.get_object()
+        outgoing_id = request.data.get("outgoing_mentor")
+        incoming_id = request.data.get("incoming_mentor")
+        try:
+            outgoing_id = int(outgoing_id)
+            incoming_id = int(incoming_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "outgoing_mentor and incoming_mentor are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            outgoing = Mentor.objects.get(pk=outgoing_id)
+            incoming = Mentor.objects.get(pk=incoming_id)
+        except Mentor.DoesNotExist:
+            return Response(
+                {"detail": "Mentor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            with transaction.atomic():
+                result = practice.swap_assigned_mentor(outgoing, incoming)
+        except ValidationError as exc:
+            messages = getattr(exc, "messages", None) or [str(exc)]
+            return Response(
+                {"detail": messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "outgoing_mentor_id": outgoing.id,
+                "incoming_mentor": practice_mentor_result_payload(result),
+                "show_up": ShowUpStatus.FOUND_REPLACEMENT,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class RequestsViewSet(viewsets.ModelViewSet):
     """Full CRUD for Requests at /api/requests/."""
@@ -1155,6 +1196,44 @@ class MentorNonResponseReportView(APIView):
         return Response(
             build_mentor_non_response_report(list(_practice_report_queryset(season_raw)))
         )
+
+
+class MentorScheduleView(APIView):
+    """Preview or apply first-run mentor scheduling for selected practices."""
+
+    def post(self, request):
+        practice_ids_raw = request.data.get("practice_ids")
+        if not isinstance(practice_ids_raw, list) or not practice_ids_raw:
+            return Response(
+                {"detail": "practice_ids must be a non-empty list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            practice_ids = [int(pid) for pid in practice_ids_raw]
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "practice_ids must contain integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        practices = list(
+            Practice.objects.filter(pk__in=practice_ids)
+            .select_related("season")
+            .order_by("date", "id")
+        )
+        found_ids = {practice.id for practice in practices}
+        missing = [pid for pid in practice_ids if pid not in found_ids]
+        if missing:
+            return Response(
+                {"detail": f"Practice not found: {missing[0]}."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        schedule = compute_mentor_schedule(practices)
+        apply_changes = bool(request.data.get("apply"))
+        if apply_changes:
+            schedule["applied"] = apply_mentor_schedule(practices, schedule)
+        return Response(schedule)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -1729,7 +1808,11 @@ class PracticeAttendanceDetailView(APIView):
                     {"detail": "mentors must be a list."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            valid_statuses = {ShowUpStatus.ATTENDED, ShowUpStatus.MISSED}
+            valid_statuses = {
+                ShowUpStatus.ATTENDED,
+                ShowUpStatus.MISSED,
+                ShowUpStatus.FOUND_REPLACEMENT,
+            }
             with transaction.atomic():
                 for row in mentor_rows:
                     if not isinstance(row, dict):
@@ -1746,7 +1829,12 @@ class PracticeAttendanceDetailView(APIView):
                             {"detail": "Invalid mentor id."},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    if mentor_id not in assigned_ids:
+                    on_roster = mentor_id in assigned_ids
+                    has_show_up = MentorPracticeShowUp.objects.filter(
+                        practice=practice,
+                        mentor_id=mentor_id,
+                    ).exists()
+                    if not on_roster and not has_show_up:
                         return Response(
                             {
                                 "detail": (
@@ -1764,9 +1852,25 @@ class PracticeAttendanceDetailView(APIView):
                         continue
                     if show_up not in valid_statuses:
                         return Response(
-                            {"detail": "show_up must be attended or missed."},
+                            {
+                                "detail": (
+                                    "show_up must be attended, missed, or "
+                                    "found_replacement."
+                                )
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+                    if show_up in valid_statuses and not on_roster:
+                        if show_up != ShowUpStatus.FOUND_REPLACEMENT:
+                            return Response(
+                                {
+                                    "detail": (
+                                        "Only found replacement can be recorded "
+                                        "for mentors no longer on this practice."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
                     MentorPracticeShowUp.objects.update_or_create(
                         practice=practice,
                         mentor_id=mentor_id,

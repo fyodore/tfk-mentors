@@ -481,6 +481,7 @@ def practice_attendance_mentor_rows(practice):
     practice.sync_mentor_assignments_from_replies()
     show_up_by_mentor = practice_show_up_by_mentor(practice)
     rows = []
+    seen = set()
     for mentor, pace, reply, assignment in practice.attending_mentor_roster_entries():
         assignment_payload = (
             practice_mentor_reply_payload(reply)
@@ -491,6 +492,29 @@ def practice_attendance_mentor_rows(practice):
             {
                 **assignment_payload,
                 "show_up": show_up_by_mentor.get(mentor.id),
+                "swapped_out": False,
+            }
+        )
+        seen.add(mentor.id)
+
+    for show_up_row in practice.mentor_show_ups.select_related("mentor"):
+        if show_up_row.mentor_id in seen:
+            continue
+        mentor = show_up_row.mentor
+        rows.append(
+            {
+                "id": None,
+                "mentor_id": mentor.id,
+                "first_name": mentor.first_name,
+                "last_name": mentor.last_name,
+                "mentor_type": mentor.type,
+                "attendance": PracticeAttendanceReply.ATTENDING,
+                "pace": normalize_pace(mentor.pace or ""),
+                "responded_at": show_up_row.updated_at.isoformat(),
+                "scheduled_email_id": None,
+                "scheduled_send_at": None,
+                "show_up": show_up_row.show_up,
+                "swapped_out": True,
             }
         )
     return rows
@@ -524,16 +548,20 @@ def build_archived_practice_attendance_row(practice):
     mentors = practice_attendance_mentor_rows(practice)
     attended = sum(1 for row in mentors if row["show_up"] == ShowUpStatus.ATTENDED)
     missed = sum(1 for row in mentors if row["show_up"] == ShowUpStatus.MISSED)
+    found_replacement = sum(
+        1 for row in mentors if row["show_up"] == ShowUpStatus.FOUND_REPLACEMENT
+    )
     return {
         "practice_id": practice.id,
         "date": practice.date.isoformat(),
         "nyrr_race": practice.nyrr_race or "",
         "season_id": practice.season_id,
         "season_year": practice.season.year,
-        "assigned_count": len(mentors),
+        "assigned_count": sum(1 for row in mentors if not row.get("swapped_out")),
         "attended_count": attended,
         "missed_count": missed,
-        "unset_count": len(mentors) - attended - missed,
+        "found_replacement_count": found_replacement,
+        "unset_count": len(mentors) - attended - missed - found_replacement,
         "assigned_mentors": mentors,
     }
 

@@ -385,6 +385,200 @@
   margin: 0;
 }
 
+.practices-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.practices-schedule-btn {
+  font-size: 0.9rem;
+}
+
+.schedule-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schedule-intro {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.schedule-practice-picker {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.schedule-select-all {
+  margin-bottom: 0.5rem;
+}
+
+.schedule-practice-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.schedule-practice-checklist li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-practice-checklist li:last-child {
+  border-bottom: none;
+}
+
+.schedule-summary {
+  margin: 0;
+}
+
+.schedule-summary p {
+  margin: 0.25rem 0;
+}
+
+.schedule-practice-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.schedule-practice-result {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+.schedule-practice-heading {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.schedule-practice-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.schedule-pace-block + .schedule-pace-block {
+  margin-top: 0.65rem;
+}
+
+.schedule-pace-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.schedule-mentor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.schedule-mentor-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+}
+
+.schedule-mentor-list-available li {
+  background: rgba(255, 255, 0, 0.12);
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.schedule-mentor-name {
+  font-weight: 600;
+}
+
+.schedule-mentor-meta {
+  font-size: 0.85rem;
+}
+
+.schedule-remote-section {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.schedule-section-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.schedule-remote-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.schedule-remote-practices {
+  list-style: disc;
+  margin: 0.35rem 0 0 1.25rem;
+  padding: 0;
+  font-size: 0.88rem;
+}
+
+.schedule-practice-result-underfilled {
+  border-color: #c9a227;
+  background: rgba(255, 193, 7, 0.06);
+}
+
+.schedule-underfilled-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: #8a6d00;
+}
+
+.schedule-underfilled-section {
+  border: 1px solid #c9a227;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 193, 7, 0.08);
+}
+
+.schedule-underfilled-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.schedule-underfilled-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.9rem;
+}
+
+.schedule-underfilled-practice {
+  font-weight: 600;
+}
+
+.schedule-underfilled-paces {
+  color: #8a6d00;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-applied-note {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.35rem;
+  background: rgba(0, 128, 0, 0.08);
+  font-size: 0.92rem;
+}
+
 .btn-icon-plus {
   width: 2.5rem;
   height: 2.5rem;
@@ -1323,6 +1517,11 @@
   color: #991b1b;
 }
 
+.attendance-status.found-replacement {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .attendance-status.unset {
   background: #f3f4f6;
   color: #4b5563;
@@ -1350,6 +1549,16 @@
   background: rgba(59, 130, 246, 0.08);
 }
 
+.attendance-mentor-row-swapped {
+  opacity: 0.92;
+  border-left: 3px solid #d97706;
+  padding-left: 0.5rem;
+}
+
+.attendance-swapped-note {
+  font-size: 0.85rem;
+}
+
 @media (prefers-color-scheme: dark) {
   .attendance-status.attended {
     background: rgba(22, 101, 52, 0.35);
@@ -1359,6 +1568,11 @@
   .attendance-status.missed {
     background: rgba(153, 27, 27, 0.35);
     color: #fecaca;
+  }
+
+  .attendance-status.found-replacement {
+    background: rgba(146, 64, 14, 0.35);
+    color: #fde68a;
   }
 
   .attendance-status.unset {

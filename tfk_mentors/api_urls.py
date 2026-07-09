@@ -12,6 +12,7 @@ from .views import (
     PracticeAttendanceDetailView,
     PracticeRosterReportView,
     MentorNonResponseReportView,
+    MentorScheduleView,
     PublicMentorDirectoryView,
     PublicMentorDirectoryPracticesView,
     PublicPracticeMentorRosterView,
@@ -70,6 +71,11 @@ urlpatterns = [
         "reports/mentor-non-responses/",
         MentorNonResponseReportView.as_view(),
         name="mentor-non-response-report",
+    ),
+    path(
+        "practices/schedule-mentors/",
+        MentorScheduleView.as_view(),
+        name="mentor-schedule",
     ),
     path(
         "mentor-email-reply/",

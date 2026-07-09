@@ -468,6 +468,24 @@ export async function makePracticeMentorAvailable(practiceId, mentorId) {
   return res.json()
 }
 
+/**
+ * @param {number|string} practiceId
+ * @param {{ outgoing_mentor: number, incoming_mentor: number }} body
+ */
+export async function swapPracticeMentor(practiceId, body) {
+  const res = await fetch(`${PRACTICE_LIST}${practiceId}/swap-mentor/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {number|string} practiceId @param {number|string} mentorId */
 export async function deletePracticeMentorReply(practiceId, mentorId) {
   const q = new URLSearchParams({ mentor: String(mentorId) })
@@ -966,6 +984,27 @@ export async function fetchPublicMentorDirectoryPractices(mentorId) {
 /** @param {number|string} practiceId */
 export async function fetchPublicPracticeMentorRoster(practiceId) {
   const res = await fetch(apiPath(`/api/public/practice/${practiceId}/mentors/`))
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/**
+ * @param {number[]} practiceIds
+ * @param {{ apply?: boolean }} [options]
+ */
+export async function scheduleMentors(practiceIds, options = {}) {
+  const res = await fetch(apiPath('/api/practices/schedule-mentors/'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify({
+      practice_ids: practiceIds,
+      apply: Boolean(options.apply),
+    }),
+  })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

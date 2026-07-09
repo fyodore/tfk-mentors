@@ -23,6 +23,7 @@ function mentorName(row) {
 function showUpLabel(showUp) {
   if (showUp === 'attended') return 'Attended'
   if (showUp === 'missed') return 'Missed'
+  if (showUp === 'found_replacement') return 'Found Replacement'
   return 'Not recorded'
 }
 
@@ -32,7 +33,9 @@ function AttendanceStatusBadge({ showUp }) {
       ? 'attendance-status attended'
       : showUp === 'missed'
         ? 'attendance-status missed'
-        : 'attendance-status unset'
+        : showUp === 'found_replacement'
+          ? 'attendance-status found-replacement'
+          : 'attendance-status unset'
   return <span className={className}>{showUpLabel(showUp)}</span>
 }
 
@@ -266,48 +269,63 @@ export default function AttendancePage() {
               ) : (
                 <ul className="attendance-mentor-list">
                   {assignedMentors.map((row) => (
-                    <li key={row.mentor_id} className="attendance-mentor-row">
+                    <li
+                      key={row.mentor_id}
+                      className={
+                        row.swapped_out
+                          ? 'attendance-mentor-row attendance-mentor-row-swapped'
+                          : 'attendance-mentor-row'
+                      }
+                    >
                       <div className="attendance-mentor-info">
                         <span className="attendance-mentor-name">
                           {mentorName(row)}
                         </span>
                         <span className="muted">{row.pace || '—'}</span>
                         <AttendanceStatusBadge showUp={showUpByMentor[row.mentor_id]} />
+                        {row.swapped_out ? (
+                          <span className="muted attendance-swapped-note">
+                            Swapped off roster
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="attendance-mentor-actions">
-                        <button
-                          type="button"
-                          className={
-                            showUpByMentor[row.mentor_id] === 'attended'
-                              ? 'btn-primary'
-                              : 'btn-secondary'
-                          }
-                          disabled={saving}
-                          onClick={() => setMentorShowUp(row.mentor_id, 'attended')}
-                        >
-                          Attended
-                        </button>
-                        <button
-                          type="button"
-                          className={
-                            showUpByMentor[row.mentor_id] === 'missed'
-                              ? 'btn-danger'
-                              : 'btn-secondary'
-                          }
-                          disabled={saving}
-                          onClick={() => setMentorShowUp(row.mentor_id, 'missed')}
-                        >
-                          Missed
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-text"
-                          disabled={saving}
-                          onClick={() => setMentorShowUp(row.mentor_id, null)}
-                        >
-                          Clear
-                        </button>
-                      </div>
+                      {row.swapped_out ||
+                      showUpByMentor[row.mentor_id] === 'found_replacement' ? null : (
+                        <div className="attendance-mentor-actions">
+                          <button
+                            type="button"
+                            className={
+                              showUpByMentor[row.mentor_id] === 'attended'
+                                ? 'btn-primary'
+                                : 'btn-secondary'
+                            }
+                            disabled={saving}
+                            onClick={() => setMentorShowUp(row.mentor_id, 'attended')}
+                          >
+                            Attended
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              showUpByMentor[row.mentor_id] === 'missed'
+                                ? 'btn-danger'
+                                : 'btn-secondary'
+                            }
+                            disabled={saving}
+                            onClick={() => setMentorShowUp(row.mentor_id, 'missed')}
+                          >
+                            Missed
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-text"
+                            disabled={saving}
+                            onClick={() => setMentorShowUp(row.mentor_id, null)}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -378,6 +396,7 @@ export default function AttendancePage() {
                     <th>Assigned</th>
                     <th>Attended</th>
                     <th>Missed</th>
+                    <th>Found replacement</th>
                     <th>Not recorded</th>
                     <th>Mentors</th>
                   </tr>
@@ -402,6 +421,7 @@ export default function AttendancePage() {
                         <td>{row.assigned_count}</td>
                         <td>{row.attended_count}</td>
                         <td>{row.missed_count}</td>
+                        <td>{row.found_replacement_count ?? 0}</td>
                         <td>{row.unset_count}</td>
                         <td>
                           <ul className="attendance-archive-mentors">

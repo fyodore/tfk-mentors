@@ -9,6 +9,7 @@ import {
   patchPractice,
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
+import { PracticeMentorSchedulerModal } from '../components/PracticeMentorScheduler.jsx'
 import { AppHeader } from '../components/AppHeader.jsx'
 import {
   buildQuarterTimeOptions,
@@ -84,6 +85,7 @@ export default function PracticesPage() {
   const [seasonFilter, setSeasonFilter] = useState('')
 
   const [modal, setModal] = useState(null)
+  const [schedulerOpen, setSchedulerOpen] = useState(false)
   const [activePractice, setActivePractice] = useState(null)
   const [form, setForm] = useState(() => emptyPracticeForm(''))
   const [modalError, setModalError] = useState('')
@@ -338,16 +340,26 @@ export default function PracticesPage() {
       <main className="panel practices-panel">
         <div className="practices-toolbar">
           <h2>Practices</h2>
-          <button
-            type="button"
-            className="btn-icon-plus"
-            aria-label="Add practice"
-            title="Add practice"
-            disabled={loading || sortedSeasons.length === 0}
-            onClick={openCreate}
-          >
-            +
-          </button>
+          <div className="practices-toolbar-actions">
+            <button
+              type="button"
+              className="btn btn-secondary practices-schedule-btn"
+              disabled={loading || filteredPractices.length === 0}
+              onClick={() => setSchedulerOpen(true)}
+            >
+              Schedule mentors
+            </button>
+            <button
+              type="button"
+              className="btn-icon-plus"
+              aria-label="Add practice"
+              title="Add practice"
+              disabled={loading || sortedSeasons.length === 0}
+              onClick={openCreate}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         <div className="practices-filter">
@@ -794,6 +806,12 @@ export default function PracticesPage() {
           </p>
         ) : null}
       </Modal>
+
+      <PracticeMentorSchedulerModal
+        practices={filteredPractices}
+        open={schedulerOpen}
+        onClose={() => setSchedulerOpen(false)}
+      />
     </>
   )
 }

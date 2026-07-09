@@ -63,6 +63,7 @@ class PracticeAttendanceReply(models.TextChoices):
 class ShowUpStatus(models.TextChoices):
     ATTENDED = "attended", "Attended"
     MISSED = "missed", "Missed"
+    FOUND_REPLACEMENT = "found_replacement", "Found Replacement"
 
 
 class TimeStampedModel(models.Model):
@@ -589,6 +590,49 @@ class Practice(TimeStampedModel):
         ).delete()
         self.mentors.remove(mentor_id)
 
+    def mentor_ids_on_practice(self):
+        """Mentor ids on the attending roster or available list."""
+        ids = set(self.assigned_mentor_ids())
+        for assignment in MentorPracticeAssignment.objects.filter(
+            practice=self,
+            is_available=True,
+        ):
+            ids.add(assignment.mentor_id)
+        for reply in self.latest_available_mentor_replies():
+            ids.add(reply.mentor_id)
+        return ids
+
+    def swap_assigned_mentor(self, outgoing, incoming):
+        """Replace an assigned mentor; record outgoing as found replacement."""
+        if incoming.id == outgoing.id:
+            raise ValidationError("Choose a different mentor for the swap.")
+        if outgoing.id not in self.assigned_mentor_ids():
+            raise ValidationError("Outgoing mentor is not assigned to this practice.")
+        if incoming.id in self.mentor_ids_on_practice():
+            raise ValidationError("Replacement mentor is already on this practice.")
+        if not incoming.seasons.filter(id=self.season_id).exists():
+            raise ValidationError(
+                "Replacement mentor must belong to the practice season."
+            )
+
+        pace = ""
+        for mentor, entry_pace, _reply, _assignment in self.attending_mentor_roster_entries():
+            if mentor.id == outgoing.id:
+                pace = entry_pace
+                break
+        if not pace:
+            pace = normalize_pace(outgoing.pace or "")
+        if not pace or pace not in {choice.value for choice in PaceTypes}:
+            raise ValidationError("Could not determine pace for the outgoing mentor.")
+
+        MentorPracticeShowUp.objects.update_or_create(
+            practice=self,
+            mentor=outgoing,
+            defaults={"show_up": ShowUpStatus.FOUND_REPLACEMENT},
+        )
+        self.remove_mentor(outgoing.id)
+        return self.mark_mentor_attending(incoming, pace)
+
     def attending_mentor_roster_entries(self):
         """All attending mentors from email replies and direct assignments."""
         entries = []
@@ -773,7 +817,7 @@ class MentorPracticeShowUp(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="mentor_show_ups",
     )
-    show_up = models.CharField(max_length=10, choices=ShowUpStatus.choices)
+    show_up = models.CharField(max_length=20, choices=ShowUpStatus.choices)
 
     class Meta:
         constraints = [
@@ -785,6 +829,8 @@ class MentorPracticeShowUp(TimeStampedModel):
 
     def clean(self):
         if self.mentor_id and self.practice_id:
+            if self.show_up == ShowUpStatus.FOUND_REPLACEMENT:
+                return
             if self.mentor_id not in self.practice.assigned_mentor_ids():
                 raise ValidationError(
                     "Show-up can only be recorded for mentors assigned to this practice."
