@@ -1,19 +1,26 @@
 from datetime import timedelta
+from unittest.mock import patch
 
+from django.core import mail
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from tfk_mentors.models import (
+    Coach,
+    CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
     MentorPracticeShowUp,
     MentorTypes,
     PaceTypes,
     Practice,
+    PracticeReminderEmail,
+    PracticeReminderKind,
     Season,
     ShowUpStatus,
 )
+from tfk_mentors.practice_reminder import sync_practice_reminders_for_season
 
 
 class PracticeMentorSwapTests(TestCase):
@@ -67,6 +74,7 @@ class PracticeMentorSwapTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["outgoing_mentor_id"], self.outgoing.id)
         self.assertEqual(response.data["show_up"], ShowUpStatus.FOUND_REPLACEMENT)
+        self.assertIsNone(response.data["coach_notification"])
 
         self.practice.refresh_from_db()
         self.assertNotIn(self.outgoing, self.practice.mentors.all())
@@ -164,3 +172,87 @@ class PracticeMentorSwapTests(TestCase):
                 is_available=True,
             ).exists()
         )
+
+    def _mark_last_reminder_sent(self, practice):
+        Practice.objects.create(
+            date=practice.date - timedelta(days=7),
+            season=self.season,
+            full_practice=True,
+        )
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(
+            practice_one=practice,
+            kind=PracticeReminderKind.AFTER_PRACTICE,
+        )
+        reminder.task_completed_at = timezone.now()
+        reminder.save(update_fields=["task_completed_at"])
+        return reminder
+
+    @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
+    def test_swap_emails_coaches_after_last_reminder_sent(self, _mock_verify):
+        coach = Coach.objects.create(
+            first_name="Casey",
+            last_name="Coach",
+            email="casey@example.com",
+            cell="555-0200",
+        )
+        coach.seasons.add(self.season)
+        CoachPracticeAssignment.objects.create(coach=coach, practice=self.practice)
+
+        other_coach = Coach.objects.create(
+            first_name="Other",
+            last_name="Season",
+            email="other@example.com",
+        )
+        other_coach.seasons.add(self.season)
+
+        self._mark_last_reminder_sent(self.practice)
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["coach_notification"]["sent"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, [coach.email])
+        self.assertIn("Mentor swap", message.subject)
+        self.assertIn("In Coming is replacing Out Going", message.body)
+        self.assertIn(PaceTypes.TEN.value, message.body)
+        self.assertIn("555-0101", message.body)
+
+    @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
+    def test_swap_skips_coach_email_when_reminder_not_sent(self, _mock_verify):
+        coach = Coach.objects.create(
+            first_name="Casey",
+            last_name="Coach",
+            email="casey@example.com",
+        )
+        coach.seasons.add(self.season)
+        CoachPracticeAssignment.objects.create(coach=coach, practice=self.practice)
+
+        Practice.objects.create(
+            date=self.practice.date - timedelta(days=7),
+            season=self.season,
+            full_practice=True,
+        )
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(practice_one=self.practice)
+        self.assertIsNone(reminder.task_completed_at)
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["coach_notification"])
+        self.assertEqual(len(mail.outbox), 0)

@@ -40,6 +40,10 @@ from .models import (
     TfkStaff,
     normalize_pace,
 )
+from .practice_swap_notification import (
+    practice_last_reminder_already_sent,
+    send_mentor_swap_coach_notification,
+)
 
 ATTENDING_REPLY_VALUES = frozenset(
     {
@@ -747,11 +751,23 @@ class PracticeViewSet(viewsets.ModelViewSet):
                 {"detail": messages[0]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        pace = normalize_pace(getattr(result, "pace", "") or incoming.pace or "")
+        coach_notification = None
+        if practice_last_reminder_already_sent(practice):
+            coach_notification = send_mentor_swap_coach_notification(
+                practice,
+                outgoing,
+                incoming,
+                pace,
+            )
+
         return Response(
             {
                 "outgoing_mentor_id": outgoing.id,
                 "incoming_mentor": practice_mentor_result_payload(result),
                 "show_up": ShowUpStatus.FOUND_REPLACEMENT,
+                "coach_notification": coach_notification,
             },
             status=status.HTTP_200_OK,
         )
@@ -784,6 +800,13 @@ def mentor_reply_payload(mentor):
             mentor.seasons.order_by("-year").values_list("year", flat=True)
         ),
     }
+
+
+def at_practice_selection_closed(mentor, practices):
+    """True when At Practice replies are locked after schedule apply."""
+    if mentor.type != MentorTypes.PRACTICE:
+        return False
+    return any(practice.mentor_selection_closed_at for practice in practices)
 
 
 def season_year_for_scheduled_email(scheduled):
@@ -1321,7 +1344,8 @@ class MentorScheduledEmailReplyView(APIView):
             r.practice_id: r for r in mt.practice_replies.all()
         }
         practice_payload = []
-        for p in practices:
+        practice_list = list(practices)
+        for p in practice_list:
             saved = reply_map.get(p.id)
             practice_payload.append(
                 {
@@ -1336,7 +1360,11 @@ class MentorScheduledEmailReplyView(APIView):
             )
         season_year = season_year_for_scheduled_email(scheduled)
         assigned_pace = scheduled.resolve_pace_for_mentor(mentor)
-        practice_list = list(practices)
+        selection_closed = at_practice_selection_closed(mentor, practice_list)
+        has_practice_selection = any(
+            saved is not None and saved.attendance in ATTENDING_REPLY_VALUES
+            for saved in (reply_map.get(p.id) for p in practice_list)
+        )
         return Response(
             {
                 "mentor": mentor_reply_payload(mentor),
@@ -1347,6 +1375,8 @@ class MentorScheduledEmailReplyView(APIView):
                 "pace_choices": [c.value for c in PaceTypes],
                 "email_received_confirmed": mt.email_received_confirmed,
                 "shows_partial_month": email_shows_partial_month(practice_list),
+                "selection_closed": selection_closed,
+                "has_practice_selection": has_practice_selection,
             }
         )
 
@@ -1355,6 +1385,17 @@ class MentorScheduledEmailReplyView(APIView):
         if err is not None:
             return err
         mentor = mt.mentor
+        practice_list = list(mt.scheduled_email.practices.all())
+        if at_practice_selection_closed(mentor, practice_list):
+            return Response(
+                {
+                    "detail": (
+                        "The time to select practices is over. In order to get "
+                        "schedule please reach out to Ted."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         replies_in = request.data.get("replies")
         if not isinstance(replies_in, list):
             return Response(
@@ -1370,12 +1411,8 @@ class MentorScheduledEmailReplyView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-        practice_ids = set(
-            mt.scheduled_email.practices.values_list("pk", flat=True)
-        )
-        practices_by_id = {
-            p.id: p for p in mt.scheduled_email.practices.all()
-        }
+        practice_ids = {p.id for p in practice_list}
+        practices_by_id = {p.id: p for p in practice_list}
         incoming_attendance = {}
         incoming_pace = {}
         for item in replies_in:
@@ -1422,11 +1459,10 @@ class MentorScheduledEmailReplyView(APIView):
             if mentor_pace_raw is not None and str(mentor_pace_raw).strip()
             else ""
         )
+        attending_any = any(
+            att in ATTENDING_REPLY_VALUES for att in incoming_attendance.values()
+        )
         if mentor.type == MentorTypes.REMOTE:
-            attending_any = any(
-                att in ATTENDING_REPLY_VALUES
-                for att in incoming_attendance.values()
-            )
             if attending_any:
                 if not mentor_pace:
                     return Response(
@@ -1446,6 +1482,24 @@ class MentorScheduledEmailReplyView(APIView):
                 for pid, att in incoming_attendance.items():
                     if att in ATTENDING_REPLY_VALUES:
                         incoming_pace[pid] = mentor_pace
+
+        cell_phone_raw = request.data.get("cell_phone")
+        cell_phone = (
+            str(cell_phone_raw).strip()
+            if cell_phone_raw is not None
+            else ""
+        )
+        needs_cell_phone = attending_any and not (mentor.cell_phone or "").strip()
+        if needs_cell_phone and not cell_phone:
+            return Response(
+                {
+                    "detail": (
+                        "Please enter your cell phone number so coaches can "
+                        "reach you for practices you select."
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         rows = []
         for pid, att in incoming_attendance.items():
@@ -1474,9 +1528,16 @@ class MentorScheduledEmailReplyView(APIView):
             mt.save(update_fields=["email_received_confirmed", "updated_at"])
             mt.practice_replies.all().delete()
             ScheduledEmailMentorPracticeReply.objects.bulk_create(rows)
+            mentor_update_fields = []
             if mentor.type == MentorTypes.REMOTE and mentor_pace:
                 mentor.pace = mentor_pace
-                mentor.save(update_fields=["pace", "updated_at"])
+                mentor_update_fields.append("pace")
+            if needs_cell_phone and cell_phone:
+                mentor.cell_phone = cell_phone
+                mentor_update_fields.append("cell_phone")
+            if mentor_update_fields:
+                mentor_update_fields.append("updated_at")
+                mentor.save(update_fields=mentor_update_fields)
             for pid in practice_ids:
                 Practice.objects.get(pk=pid).sync_mentor_assignments_from_replies()
         saved_replies = (

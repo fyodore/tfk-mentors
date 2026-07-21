@@ -328,6 +328,14 @@ class Practice(TimeStampedModel):
         default=False,
         help_text="When true, this practice appears on the public mentor directory.",
     )
+    mentor_selection_closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When set, At Practice mentors can no longer change replies for this "
+            "practice via their email link (set when the schedule is applied)."
+        ),
+    )
     season = models.ForeignKey(Season, on_delete=models.CASCADE)
     attendance_comments = models.TextField(
         blank=True,

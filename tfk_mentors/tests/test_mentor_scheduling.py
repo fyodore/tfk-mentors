@@ -254,3 +254,5 @@ class MentorSchedulingTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         mentor_ids = {row["mentor_id"] for row in detail.data["mentor_replies"]}
         self.assertIn(mentor.id, mentor_ids)
+        self.practice_one.refresh_from_db()
+        self.assertIsNotNone(self.practice_one.mentor_selection_closed_at)

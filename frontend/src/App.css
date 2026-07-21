@@ -1084,6 +1084,12 @@
   font-size: 1.05rem;
 }
 
+.mentor-reply-closed {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
 .mentor-reply-email-confirm {
   display: block;
   margin: 1rem 0;
@@ -1106,6 +1112,11 @@
 }
 
 .mentor-reply-remote-pace {
+  max-width: 16rem;
+  margin-top: 1rem;
+}
+
+.mentor-reply-cell-phone {
   max-width: 16rem;
   margin-top: 1rem;
 }

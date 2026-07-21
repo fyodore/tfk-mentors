@@ -180,6 +180,107 @@ class MentorEmailReplySubmitTests(TestCase):
         )
         self.assertEqual(assignment.pace, "10-11")
 
+    def test_put_requires_cell_phone_when_selecting_without_one(self):
+        self.mentor.type = MentorTypes.REMOTE
+        self.mentor.cell_phone = ""
+        self.mentor.pace = ""
+        self.mentor.save(update_fields=["type", "cell_phone", "pace"])
+        url = f"/api/mentor-email-reply/{self.token_row.token}/"
+        payload = {
+            "email_received_confirmed": True,
+            "mentor_pace": "10-11",
+            "replies": [
+                {
+                    "practice": self.practices[0].id,
+                    "attendance": PracticeAttendanceReply.ATTENDING,
+                    "pace": "",
+                },
+                *[
+                    {
+                        "practice": p.id,
+                        "attendance": PracticeAttendanceReply.NOT_ATTENDING,
+                        "pace": "",
+                    }
+                    for p in self.practices[1:]
+                ],
+            ],
+        }
+        response = self.client.put(url, payload, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cell phone", response.data["detail"].lower())
+
+        payload["cell_phone"] = "555-9999"
+        response = self.client.put(url, payload, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.mentor.refresh_from_db()
+        self.assertEqual(self.mentor.cell_phone, "555-9999")
+
+    def test_at_practice_selection_closed_after_schedule_apply(self):
+        for practice in self.practices:
+            practice.mentor_selection_closed_at = timezone.now()
+            practice.save(update_fields=["mentor_selection_closed_at"])
+
+        url = f"/api/mentor-email-reply/{self.token_row.token}/"
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 200)
+        self.assertTrue(get_response.data["selection_closed"])
+        self.assertFalse(get_response.data["has_practice_selection"])
+
+        put_response = self.client.put(
+            url,
+            {
+                "replies": [
+                    {
+                        "practice": p.id,
+                        "attendance": PracticeAttendanceReply.ATTENDING,
+                        "pace": "",
+                    }
+                    for p in self.practices
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(put_response.status_code, 400)
+        self.assertIn("time to select practices is over", put_response.data["detail"])
+
+    def test_remote_selection_stays_open_after_schedule_apply(self):
+        self.mentor.type = MentorTypes.REMOTE
+        self.mentor.pace = "9-10"
+        self.mentor.save(update_fields=["type", "pace"])
+        for practice in self.practices:
+            practice.mentor_selection_closed_at = timezone.now()
+            practice.save(update_fields=["mentor_selection_closed_at"])
+
+        url = f"/api/mentor-email-reply/{self.token_row.token}/"
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 200)
+        self.assertFalse(get_response.data["selection_closed"])
+
+        put_response = self.client.put(
+            url,
+            {
+                "email_received_confirmed": True,
+                "mentor_pace": "9-10",
+                "replies": [
+                    {
+                        "practice": self.practices[0].id,
+                        "attendance": PracticeAttendanceReply.ATTENDING,
+                        "pace": "",
+                    },
+                    *[
+                        {
+                            "practice": p.id,
+                            "attendance": PracticeAttendanceReply.NOT_ATTENDING,
+                            "pace": "",
+                        }
+                        for p in self.practices[1:]
+                    ],
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(put_response.status_code, 200)
+
     def test_practice_mentor_replies_uses_latest_per_mentor(self):
         other_email = ScheduledEmail.objects.create(
             scheduled_send_at=timezone.now() + timedelta(days=14),

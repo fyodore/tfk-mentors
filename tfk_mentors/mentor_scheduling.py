@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from .models import (
     Mentor,
@@ -318,6 +319,7 @@ def apply_mentor_schedule(practices, schedule):
     """Apply computed assignments and available lists to practices."""
     practice_by_id = {practice.id: practice for practice in practices}
     applied = {"assigned": 0, "available": 0, "errors": []}
+    closed_at = timezone.now()
 
     with transaction.atomic():
         for practice_row in schedule["practices"]:
@@ -354,5 +356,9 @@ def apply_mentor_schedule(practices, schedule):
                                 "detail": str(exc),
                             }
                         )
+
+        Practice.objects.filter(pk__in=practice_by_id.keys()).update(
+            mentor_selection_closed_at=closed_at
+        )
 
     return applied

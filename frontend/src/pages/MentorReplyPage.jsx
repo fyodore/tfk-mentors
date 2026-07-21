@@ -15,6 +15,12 @@ const SUBMIT_SUCCESS_REMOTE =
 const PARTIAL_MONTH_NOTE =
   'This email may not include a full month of practices. Please remember what ' +
   'you selected when you receive the next reply request.'
+const SELECTION_CLOSED_NO_PICK =
+  'The time to select practices is over. In order to get schedule please reach out to Ted.'
+const REMOTE_SELECT_WARNING =
+  'Any practice you select, you must be confident that you will attend.'
+const REMOTE_ASSIGN_CONFIRM =
+  'You will be assigned to the practice selected. If you can not attend any practice selected you will be responsible to find a replacement.'
 
 /** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null, pace?: string }} PracticeReplyRow */
 
@@ -78,15 +84,21 @@ export default function MentorReplyPage() {
   /** @type {string[]} */
   const [paceChoices, setPaceChoices] = useState([])
   const [showsPartialMonth, setShowsPartialMonth] = useState(false)
+  const [selectionClosed, setSelectionClosed] = useState(false)
+  const [hasPracticeSelection, setHasPracticeSelection] = useState(false)
   const [emailReceivedConfirmed, setEmailReceivedConfirmed] = useState(false)
   /** @type {Record<number, string>} */
   const [attendanceByPractice, setAttendanceByPractice] = useState({})
   /** @type {Record<number, string>} */
   const [paceByPractice, setPaceByPractice] = useState({})
   const [remotePace, setRemotePace] = useState('')
+  const [cellPhone, setCellPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [remoteSelectWarningOpen, setRemoteSelectWarningOpen] = useState(false)
+  const [remotePracticesVisible, setRemotePracticesVisible] = useState(false)
+  const [remoteAssignConfirmOpen, setRemoteAssignConfirmOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -103,6 +115,9 @@ export default function MentorReplyPage() {
       setError(null)
       setSubmitted(false)
       setConfirmOpen(false)
+      setRemoteSelectWarningOpen(false)
+      setRemoteAssignConfirmOpen(false)
+      setRemotePracticesVisible(false)
       try {
         const data = await fetchMentorEmailReply(rawToken)
         if (cancelled) return
@@ -116,12 +131,22 @@ export default function MentorReplyPage() {
           Array.isArray(data.pace_choices) ? data.pace_choices : []
         )
         setShowsPartialMonth(Boolean(data.shows_partial_month))
+        setSelectionClosed(Boolean(data.selection_closed))
+        setHasPracticeSelection(Boolean(data.has_practice_selection))
         setEmailReceivedConfirmed(Boolean(data.email_received_confirmed))
+        setCellPhone((m?.cell_phone ?? '').trim())
         const defaultPace = m?.pace ?? ''
         setAttendanceByPractice(initialAttendanceMap(plist))
         setPaceByPractice(initialPaceMap(plist, defaultPace))
         setRemotePace(initialRemotePace(plist, defaultPace))
-        setSubmitted(plist.some((p) => p.attendance != null))
+        const alreadySubmitted = plist.some((p) => p.attendance != null)
+        setSubmitted(alreadySubmitted)
+        if (
+          m?.type === REMOTE &&
+          plist.some((p) => isAttending(p.attendance))
+        ) {
+          setRemotePracticesVisible(true)
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
@@ -140,6 +165,7 @@ export default function MentorReplyPage() {
 
   const isAtPractice = mentor?.type === AT_PRACTICE
   const isRemote = mentor?.type === REMOTE
+  const formLocked = Boolean(selectionClosed && isAtPractice)
 
   const remoteAttendingAny = useMemo(() => {
     if (!isRemote) return false
@@ -147,6 +173,20 @@ export default function MentorReplyPage() {
       isAttending(attendanceByPractice[p.id] ?? 'not_attending')
     )
   }, [isRemote, practices, attendanceByPractice])
+
+  const attendingAny = useMemo(() => {
+    return practices.some((p) =>
+      isAttending(attendanceByPractice[p.id] ?? 'not_attending')
+    )
+  }, [practices, attendanceByPractice])
+
+  const needsCellPhone = useMemo(() => {
+    if (!attendingAny) return false
+    const existing = (mentor?.cell_phone ?? '').trim()
+    return !existing
+  }, [attendingAny, mentor])
+
+  const showPracticeList = isAtPractice || remotePracticesVisible
 
   const introMessage = useMemo(() => {
     if (!mentor) return ''
@@ -156,7 +196,7 @@ export default function MentorReplyPage() {
     if (isRemote) {
       return (
         'As a non practice mentor please confirm that you received the email. ' +
-        'If you would like to attend a practice please select which practices below.'
+        'If you would like to attend a practice, use the button below.'
       )
     }
     return ''
@@ -175,6 +215,9 @@ export default function MentorReplyPage() {
     }
     if (isRemote && remoteAttendingAny && !remotePace.trim()) {
       return 'Select your pace group for the practices you plan to attend.'
+    }
+    if (needsCellPhone && !cellPhone.trim()) {
+      return 'Please enter your cell phone number.'
     }
     return null
   }
@@ -197,6 +240,7 @@ export default function MentorReplyPage() {
       })
       await putMentorEmailReply(rawToken, {
         replies,
+        ...(needsCellPhone ? { cell_phone: cellPhone.trim() } : {}),
         ...(isRemote
           ? {
               email_received_confirmed: true,
@@ -212,8 +256,15 @@ export default function MentorReplyPage() {
         )
         setAssignedPace(selectedRemotePace)
       }
+      if (needsCellPhone && cellPhone.trim()) {
+        setMentor((prev) =>
+          prev ? { ...prev, cell_phone: cellPhone.trim() } : prev
+        )
+      }
+      setHasPracticeSelection(attendingAny)
       setSubmitted(true)
       setConfirmOpen(false)
+      setRemoteAssignConfirmOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -223,19 +274,28 @@ export default function MentorReplyPage() {
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!rawToken || submitted) return
+    if (!rawToken || submitted || formLocked) return
     const validationError = validateBeforeSubmit()
     if (validationError) {
       setError(validationError)
       return
     }
     setError(null)
+    if (isRemote && remoteAttendingAny) {
+      setRemoteAssignConfirmOpen(true)
+      return
+    }
     setConfirmOpen(true)
   }
 
   function handleConfirmSubmit() {
     if (busy) return
     submitReply()
+  }
+
+  function handleRemoteAssignCancel() {
+    if (busy) return
+    setRemoteAssignConfirmOpen(false)
   }
 
   if (loading) {
@@ -253,6 +313,21 @@ export default function MentorReplyPage() {
           {error || 'This link is invalid or has expired.'}
         </p>
       </main>
+    )
+  }
+
+  if (formLocked && !hasPracticeSelection && !submitted) {
+    return (
+      <>
+        <header className="app-header">
+          <h1>Mentor confirmation</h1>
+        </header>
+        <main className="panel mentor-reply-panel">
+          <p className="mentor-reply-closed" role="status">
+            {SELECTION_CLOSED_NO_PICK}
+          </p>
+        </main>
+      </>
     )
   }
 
@@ -291,7 +366,7 @@ export default function MentorReplyPage() {
 
         {practices.length === 0 ? (
           <p className="muted">No practices were attached to this message.</p>
-        ) : submitted ? null : (
+        ) : submitted || formLocked ? null : (
           <form className="mentor-reply-form" onSubmit={handleSubmit}>
             {introMessage ? (
               <p className="mentor-reply-intro">{introMessage}</p>
@@ -315,86 +390,107 @@ export default function MentorReplyPage() {
               </p>
             ) : null}
 
-            <ul className="practice-list mentor-reply-list">
-              {practices.map((p) => {
-                const attendance =
-                  attendanceByPractice[p.id] ?? 'not_attending'
-                const attending = isAttending(attendance)
-                const showSplit =
-                  isAtPractice && !p.full_practice && mentor.split_practice
+            {isRemote && !remotePracticesVisible ? (
+              <div className="mentor-reply-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy}
+                  onClick={() => setRemoteSelectWarningOpen(true)}
+                >
+                  Select a practice
+                </button>
+              </div>
+            ) : null}
 
-                return (
-                  <li key={p.id} className="practice-row mentor-reply-row">
-                    <div className="practice-row-main">
-                      <span className="practice-date">
-                        {formatPracticeWhen(p.date, p.nyrr_race)}
-                      </span>
-                      {!p.full_practice && isAtPractice ? (
-                        <span className="muted">Split practice session</span>
-                      ) : null}
+            {showPracticeList ? (
+              <ul className="practice-list mentor-reply-list">
+                {practices.map((p) => {
+                  const attendance =
+                    attendanceByPractice[p.id] ?? 'not_attending'
+                  const attending = isAttending(attendance)
+                  const showSplit =
+                    isAtPractice && !p.full_practice && mentor.split_practice
 
-                      {showSplit ? (
-                        <fieldset className="mentor-reply-split-fieldset">
-                          <legend className="muted">
-                            Which half can you cover?
-                          </legend>
-                          <label className="radio-row">
+                  return (
+                    <li key={p.id} className="practice-row mentor-reply-row">
+                      <div className="practice-row-main">
+                        <span className="practice-date">
+                          {formatPracticeWhen(p.date, p.nyrr_race)}
+                        </span>
+                        {!p.full_practice && isAtPractice ? (
+                          <span className="muted">Split practice session</span>
+                        ) : null}
+
+                        {showSplit ? (
+                          <fieldset className="mentor-reply-split-fieldset">
+                            <legend className="muted">
+                              Which half can you cover?
+                            </legend>
+                            <label className="radio-row">
+                              <input
+                                type="radio"
+                                name={`half-${p.id}`}
+                                value="first_half"
+                                checked={attendance === 'first_half'}
+                                disabled={busy}
+                                onChange={() =>
+                                  setAttendance(p.id, 'first_half')
+                                }
+                              />
+                              First half
+                            </label>
+                            <label className="radio-row">
+                              <input
+                                type="radio"
+                                name={`half-${p.id}`}
+                                value="second_half"
+                                checked={attendance === 'second_half'}
+                                disabled={busy}
+                                onChange={() =>
+                                  setAttendance(p.id, 'second_half')
+                                }
+                              />
+                              Second half
+                            </label>
+                            <label className="radio-row">
+                              <input
+                                type="radio"
+                                name={`half-${p.id}`}
+                                value="not_attending"
+                                checked={attendance === 'not_attending'}
+                                disabled={busy}
+                                onChange={() =>
+                                  setAttendance(p.id, 'not_attending')
+                                }
+                              />
+                              Not attending
+                            </label>
+                          </fieldset>
+                        ) : (
+                          <label className="checkbox-label mentor-reply-checkbox">
                             <input
-                              type="radio"
-                              name={`half-${p.id}`}
-                              value="first_half"
-                              checked={attendance === 'first_half'}
+                              type="checkbox"
+                              checked={attending}
                               disabled={busy}
-                              onChange={() => setAttendance(p.id, 'first_half')}
-                            />
-                            First half
-                          </label>
-                          <label className="radio-row">
-                            <input
-                              type="radio"
-                              name={`half-${p.id}`}
-                              value="second_half"
-                              checked={attendance === 'second_half'}
-                              disabled={busy}
-                              onChange={() => setAttendance(p.id, 'second_half')}
-                            />
-                            Second half
-                          </label>
-                          <label className="radio-row">
-                            <input
-                              type="radio"
-                              name={`half-${p.id}`}
-                              value="not_attending"
-                              checked={attendance === 'not_attending'}
-                              disabled={busy}
-                              onChange={() =>
-                                setAttendance(p.id, 'not_attending')
+                              onChange={(ev) =>
+                                setAttendance(
+                                  p.id,
+                                  ev.target.checked
+                                    ? 'attending'
+                                    : 'not_attending'
+                                )
                               }
                             />
-                            Not attending
+                            I can attend this practice
                           </label>
-                        </fieldset>
-                      ) : (
-                        <label className="checkbox-label mentor-reply-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={attending}
-                            disabled={busy}
-                            onChange={(ev) =>
-                              setAttendance(
-                                p.id,
-                                ev.target.checked ? 'attending' : 'not_attending'
-                              )
-                            }
-                          />
-                          I can attend this practice
-                        </label>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
 
             {isRemote && remoteAttendingAny ? (
               <label className="mentor-reply-pace-label mentor-reply-remote-pace">
@@ -416,6 +512,25 @@ export default function MentorReplyPage() {
                 <span className="muted mentor-reply-remote-pace-note">
                   This pace will be saved to your mentor profile and applied to
                   each practice you selected.
+                </span>
+              </label>
+            ) : null}
+
+            {needsCellPhone ? (
+              <label className="mentor-reply-pace-label mentor-reply-cell-phone">
+                <span className="field-label">Cell phone</span>
+                <input
+                  type="tel"
+                  className="field-input"
+                  value={cellPhone}
+                  disabled={busy}
+                  required
+                  autoComplete="tel"
+                  placeholder="Your cell phone number"
+                  onChange={(ev) => setCellPhone(ev.target.value)}
+                />
+                <span className="muted mentor-reply-remote-pace-note">
+                  Required when you select one or more practices.
                 </span>
               </label>
             ) : null}
@@ -464,6 +579,69 @@ export default function MentorReplyPage() {
             Once you submit, any updates to your availability will need to be
             sent to Ted.
           </p>
+        </Modal>
+
+        <Modal
+          open={remoteSelectWarningOpen}
+          title="Before you select a practice"
+          closeDisabled={busy}
+          onClose={() => {
+            if (!busy) setRemoteSelectWarningOpen(false)
+          }}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={() => setRemoteSelectWarningOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={() => {
+                  setRemoteSelectWarningOpen(false)
+                  setRemotePracticesVisible(true)
+                }}
+              >
+                Continue
+              </button>
+            </>
+          }
+        >
+          <p>{REMOTE_SELECT_WARNING}</p>
+        </Modal>
+
+        <Modal
+          open={remoteAssignConfirmOpen}
+          title="Confirm practice selection"
+          closeDisabled={busy}
+          onClose={handleRemoteAssignCancel}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={busy}
+                onClick={handleRemoteAssignCancel}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={handleConfirmSubmit}
+              >
+                {busy ? 'Submitting…' : 'Confirm'}
+              </button>
+            </>
+          }
+        >
+          <p>{REMOTE_ASSIGN_CONFIRM}</p>
         </Modal>
       </main>
     </>
