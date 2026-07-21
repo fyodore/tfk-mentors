@@ -199,6 +199,15 @@ class PracticeMentorSwapTests(TestCase):
         coach.seasons.add(self.season)
         CoachPracticeAssignment.objects.create(coach=coach, practice=self.practice)
 
+        head_coach = Coach.objects.create(
+            first_name="Head",
+            last_name="Coach",
+            email="head@example.com",
+        )
+        head_coach.seasons.add(self.season)
+        self.season.head_coach = head_coach
+        self.season.save(update_fields=["head_coach"])
+
         other_coach = Coach.objects.create(
             first_name="Other",
             last_name="Season",
@@ -217,14 +226,43 @@ class PracticeMentorSwapTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["coach_notification"]["sent"], 1)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(response.data["coach_notification"]["sent"], 2)
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = {tuple(message.to) for message in mail.outbox}
+        self.assertEqual(recipients, {(coach.email,), (head_coach.email,)})
         message = mail.outbox[0]
-        self.assertEqual(message.to, [coach.email])
         self.assertIn("Mentor swap", message.subject)
         self.assertIn("In Coming is replacing Out Going", message.body)
         self.assertIn(PaceTypes.TEN.value, message.body)
         self.assertIn("555-0101", message.body)
+
+    @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
+    def test_swap_does_not_duplicate_head_coach_also_on_practice(self, _mock_verify):
+        head_coach = Coach.objects.create(
+            first_name="Head",
+            last_name="Coach",
+            email="head@example.com",
+        )
+        head_coach.seasons.add(self.season)
+        self.season.head_coach = head_coach
+        self.season.save(update_fields=["head_coach"])
+        CoachPracticeAssignment.objects.create(
+            coach=head_coach, practice=self.practice
+        )
+        self._mark_last_reminder_sent(self.practice)
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["coach_notification"]["sent"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [head_coach.email])
 
     @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
     def test_swap_skips_coach_email_when_reminder_not_sent(self, _mock_verify):

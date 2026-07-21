@@ -28,17 +28,40 @@ def practice_last_reminder_already_sent(practice):
     return reminder is not None and reminder.task_completed_at is not None
 
 
-def coaches_assigned_to_practice(practice):
-    """Coaches going to this practice who have an email address."""
+def coaches_for_swap_notification(practice):
+    """
+    Coaches assigned to this practice, plus the season head coach.
+
+    Dedupes by coach id so the head coach is not emailed twice when also assigned.
+    """
+    from .models import Season
+
     coaches = []
+    seen_ids = set()
+
+    def add(coach):
+        if coach is None or coach.id in seen_ids:
+            return
+        if not (coach.email or "").strip():
+            return
+        seen_ids.add(coach.id)
+        coaches.append(coach)
+
     for assignment in (
         CoachPracticeAssignment.objects.filter(practice=practice)
         .select_related("coach")
         .order_by("coach__last_name", "coach__first_name", "coach__id")
     ):
-        coach = assignment.coach
-        if (coach.email or "").strip():
-            coaches.append(coach)
+        add(assignment.coach)
+
+    season = (
+        Season.objects.select_related("head_coach")
+        .filter(pk=practice.season_id)
+        .first()
+    )
+    if season is not None:
+        add(season.head_coach)
+
     return coaches
 
 
@@ -72,11 +95,11 @@ def send_mentor_swap_coach_notification(
     dry_run=False,
 ):
     """
-    Email coaches assigned to the practice about a mentor swap.
+    Email practice coaches and the season head coach about a mentor swap.
 
     Only call when the last reminder for the practice has already been sent.
     """
-    coaches = coaches_assigned_to_practice(practice)
+    coaches = coaches_for_swap_notification(practice)
     subject = swap_notification_subject(practice)
     body = swap_notification_body(practice, outgoing, incoming, pace)
 
