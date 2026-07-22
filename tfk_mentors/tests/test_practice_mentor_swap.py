@@ -356,3 +356,30 @@ class PracticeMentorSwapTests(TestCase):
                 for message in mail.outbox
             )
         )
+
+    def test_swap_skips_all_emails_after_practice_has_started(self):
+        coach = Coach.objects.create(
+            first_name="Casey",
+            last_name="Coach",
+            email="casey@example.com",
+        )
+        coach.seasons.add(self.season)
+        self.season.head_coach = coach
+        self.season.save(update_fields=["head_coach"])
+
+        self._mark_last_reminder_sent(self.practice)
+        self.practice.date = timezone.now() - timedelta(minutes=5)
+        self.practice.save(update_fields=["date", "updated_at"])
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["mentor_confirmations"])
+        self.assertIsNone(response.data["coach_notification"])
+        self.assertEqual(len(mail.outbox), 0)

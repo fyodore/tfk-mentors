@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils import timezone
 
 from .email_sending import _verify_email_delivery
 from .models import Coach, PracticeReminderEmail, Season
-from .practice_reminder import format_practice_date
+from .practice_reminder import display_time_zone, format_practice_date
 
 
 def last_reminder_for_practice(practice):
@@ -26,6 +27,14 @@ def last_reminder_for_practice(practice):
 def practice_last_reminder_already_sent(practice):
     reminder = last_reminder_for_practice(practice)
     return reminder is not None and reminder.task_completed_at is not None
+
+
+def practice_has_started(practice):
+    """True once the practice start time has been reached."""
+    when = practice.date
+    if timezone.is_naive(when):
+        when = timezone.make_aware(when, display_time_zone())
+    return when <= timezone.now()
 
 
 def coaches_for_swap_notification(practice):

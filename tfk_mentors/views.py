@@ -41,6 +41,7 @@ from .models import (
     normalize_pace,
 )
 from .practice_swap_notification import (
+    practice_has_started,
     practice_last_reminder_already_sent,
     send_mentor_swap_coach_notification,
     send_mentor_swap_confirmations,
@@ -754,19 +755,21 @@ class PracticeViewSet(viewsets.ModelViewSet):
             )
 
         pace = normalize_pace(getattr(result, "pace", "") or incoming.pace or "")
-        mentor_confirmations = send_mentor_swap_confirmations(
-            practice,
-            outgoing,
-            incoming,
-        )
+        mentor_confirmations = None
         coach_notification = None
-        if practice_last_reminder_already_sent(practice):
-            coach_notification = send_mentor_swap_coach_notification(
+        if not practice_has_started(practice):
+            mentor_confirmations = send_mentor_swap_confirmations(
                 practice,
                 outgoing,
                 incoming,
-                pace,
             )
+            if practice_last_reminder_already_sent(practice):
+                coach_notification = send_mentor_swap_coach_notification(
+                    practice,
+                    outgoing,
+                    incoming,
+                    pace,
+                )
 
         return Response(
             {
