@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 
 from tfk_mentors.models import (
     Coach,
-    CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
     MentorPracticeShowUp,
@@ -197,7 +196,6 @@ class PracticeMentorSwapTests(TestCase):
             cell="555-0200",
         )
         coach.seasons.add(self.season)
-        CoachPracticeAssignment.objects.create(coach=coach, practice=self.practice)
 
         head_coach = Coach.objects.create(
             first_name="Head",
@@ -215,40 +213,14 @@ class PracticeMentorSwapTests(TestCase):
         )
         other_coach.seasons.add(self.season)
 
-        self._mark_last_reminder_sent(self.practice)
+        outside = Coach.objects.create(
+            first_name="Out",
+            last_name="Side",
+            email="outside@example.com",
+        )
+        outside_season = Season.objects.create(year=2025)
+        outside.seasons.add(outside_season)
 
-        response = self.client.post(
-            f"/api/practice/{self.practice.id}/swap-mentor/",
-            {
-                "outgoing_mentor": self.outgoing.id,
-                "incoming_mentor": self.incoming.id,
-            },
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["coach_notification"]["sent"], 2)
-        self.assertEqual(len(mail.outbox), 2)
-        recipients = {tuple(message.to) for message in mail.outbox}
-        self.assertEqual(recipients, {(coach.email,), (head_coach.email,)})
-        message = mail.outbox[0]
-        self.assertIn("Mentor swap", message.subject)
-        self.assertIn("In Coming is replacing Out Going", message.body)
-        self.assertIn(PaceTypes.TEN.value, message.body)
-        self.assertIn("555-0101", message.body)
-
-    @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
-    def test_swap_does_not_duplicate_head_coach_also_on_practice(self, _mock_verify):
-        head_coach = Coach.objects.create(
-            first_name="Head",
-            last_name="Coach",
-            email="head@example.com",
-        )
-        head_coach.seasons.add(self.season)
-        self.season.head_coach = head_coach
-        self.season.save(update_fields=["head_coach"])
-        CoachPracticeAssignment.objects.create(
-            coach=head_coach, practice=self.practice
-        )
         self._mark_last_reminder_sent(self.practice)
 
         response = self.client.post(
@@ -261,6 +233,42 @@ class PracticeMentorSwapTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["coach_notification"]["sent"], 1)
+        self.assertEqual(response.data["coach_notification"]["recipients"], 3)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertCountEqual(
+            message.to,
+            [coach.email, head_coach.email, other_coach.email],
+        )
+        self.assertNotIn(outside.email, message.to)
+        self.assertIn("Mentor swap", message.subject)
+        self.assertIn("In Coming is replacing Out Going", message.body)
+        self.assertIn(PaceTypes.TEN.value, message.body)
+        self.assertIn("555-0101", message.body)
+
+    @patch("tfk_mentors.practice_swap_notification._verify_email_delivery")
+    def test_swap_does_not_duplicate_head_coach_also_in_season(self, _mock_verify):
+        head_coach = Coach.objects.create(
+            first_name="Head",
+            last_name="Coach",
+            email="head@example.com",
+        )
+        head_coach.seasons.add(self.season)
+        self.season.head_coach = head_coach
+        self.season.save(update_fields=["head_coach"])
+        self._mark_last_reminder_sent(self.practice)
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["coach_notification"]["sent"], 1)
+        self.assertEqual(response.data["coach_notification"]["recipients"], 1)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [head_coach.email])
 
@@ -272,7 +280,6 @@ class PracticeMentorSwapTests(TestCase):
             email="casey@example.com",
         )
         coach.seasons.add(self.season)
-        CoachPracticeAssignment.objects.create(coach=coach, practice=self.practice)
 
         Practice.objects.create(
             date=self.practice.date - timedelta(days=7),

@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from .email_sending import _verify_email_delivery
-from .models import CoachPracticeAssignment, PracticeReminderEmail
+from .models import Coach, PracticeReminderEmail, Season
 from .practice_reminder import format_practice_date
 
 
@@ -30,12 +30,10 @@ def practice_last_reminder_already_sent(practice):
 
 def coaches_for_swap_notification(practice):
     """
-    Coaches assigned to this practice, plus the season head coach.
+    All coaches for the practice season, plus the season head coach.
 
-    Dedupes by coach id so the head coach is not emailed twice when also assigned.
+    Dedupes by coach id so the head coach is not listed twice when also in season.
     """
-    from .models import Season
-
     coaches = []
     seen_ids = set()
 
@@ -47,12 +45,10 @@ def coaches_for_swap_notification(practice):
         seen_ids.add(coach.id)
         coaches.append(coach)
 
-    for assignment in (
-        CoachPracticeAssignment.objects.filter(practice=practice)
-        .select_related("coach")
-        .order_by("coach__last_name", "coach__first_name", "coach__id")
+    for coach in Coach.objects.filter(seasons=practice.season_id).order_by(
+        "last_name", "first_name", "id"
     ):
-        add(assignment.coach)
+        add(coach)
 
     season = (
         Season.objects.select_related("head_coach")
@@ -95,36 +91,36 @@ def send_mentor_swap_coach_notification(
     dry_run=False,
 ):
     """
-    Email practice coaches and the season head coach about a mentor swap.
+    Email all season coaches and the head coach about a mentor swap in one message.
 
     Only call when the last reminder for the practice has already been sent.
     """
     coaches = coaches_for_swap_notification(practice)
+    recipient_list = [coach.email.strip() for coach in coaches]
     subject = swap_notification_subject(practice)
     body = swap_notification_body(practice, outgoing, incoming, pace)
 
-    if dry_run or not coaches:
+    if dry_run or not recipient_list:
         return {
             "sent": 0,
-            "recipients": len(coaches),
+            "recipients": len(recipient_list),
             "subject": subject,
-            "skipped": not coaches,
+            "skipped": not recipient_list,
         }
 
     _verify_email_delivery()
 
-    for coach in coaches:
-        send_mail(
-            subject=subject,
-            message=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[coach.email],
-            fail_silently=False,
-        )
+    send_mail(
+        subject=subject,
+        message=body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=recipient_list,
+        fail_silently=False,
+    )
 
     return {
-        "sent": len(coaches),
-        "recipients": len(coaches),
+        "sent": 1,
+        "recipients": len(recipient_list),
         "subject": subject,
         "skipped": False,
     }
