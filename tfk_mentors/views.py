@@ -43,6 +43,7 @@ from .models import (
 from .practice_swap_notification import (
     practice_last_reminder_already_sent,
     send_mentor_swap_coach_notification,
+    send_mentor_swap_confirmations,
 )
 
 ATTENDING_REPLY_VALUES = frozenset(
@@ -753,6 +754,11 @@ class PracticeViewSet(viewsets.ModelViewSet):
             )
 
         pace = normalize_pace(getattr(result, "pace", "") or incoming.pace or "")
+        mentor_confirmations = send_mentor_swap_confirmations(
+            practice,
+            outgoing,
+            incoming,
+        )
         coach_notification = None
         if practice_last_reminder_already_sent(practice):
             coach_notification = send_mentor_swap_coach_notification(
@@ -767,6 +773,7 @@ class PracticeViewSet(viewsets.ModelViewSet):
                 "outgoing_mentor_id": outgoing.id,
                 "incoming_mentor": practice_mentor_result_payload(result),
                 "show_up": ShowUpStatus.FOUND_REPLACEMENT,
+                "mentor_confirmations": mentor_confirmations,
                 "coach_notification": coach_notification,
             },
             status=status.HTTP_200_OK,

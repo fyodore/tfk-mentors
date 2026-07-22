@@ -82,6 +82,62 @@ def swap_notification_body(practice, outgoing, incoming, pace):
     )
 
 
+def swap_confirmation_subject():
+    return "TFK Mentor Swap Confirmation"
+
+
+def swap_confirmation_body(practice, outgoing, incoming):
+    practice_when = format_practice_date(practice)
+    return (
+        f"This is your confirmation that {mentor_display_name(outgoing)} has been "
+        f"replaced with {mentor_display_name(incoming)} for the {practice_when}.  "
+        f"If this was made in error please reply to this email."
+    )
+
+
+def send_mentor_swap_confirmations(
+    practice,
+    outgoing,
+    incoming,
+    *,
+    dry_run=False,
+):
+    """Send separate swap confirmation emails to the outgoing and incoming mentors."""
+    subject = swap_confirmation_subject()
+    body = swap_confirmation_body(practice, outgoing, incoming)
+    recipients = []
+    for mentor in (outgoing, incoming):
+        email = (mentor.email or "").strip()
+        if email:
+            recipients.append(email)
+
+    if dry_run or not recipients:
+        return {
+            "sent": 0,
+            "recipients": len(recipients),
+            "subject": subject,
+            "skipped": not recipients,
+        }
+
+    _verify_email_delivery()
+
+    for email in recipients:
+        send_mail(
+            subject=subject,
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+
+    return {
+        "sent": len(recipients),
+        "recipients": len(recipients),
+        "subject": subject,
+        "skipped": False,
+    }
+
+
 def send_mentor_swap_coach_notification(
     practice,
     outgoing,
