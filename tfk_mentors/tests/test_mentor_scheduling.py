@@ -145,8 +145,14 @@ class MentorSchedulingTests(TestCase):
         result = compute_mentor_schedule([self.practice_one])
         practice_row = result["practices"][0]
         assigned = practice_row["assignments_by_pace"].get("8-9", [])
+        available = practice_row["available_by_pace"].get("8-9", [])
         self.assertEqual(len(assigned), 4)
+        self.assertEqual(len(available), 2)
         self.assertEqual(practice_row["underfilled_pace_groups"], [])
+        assigned_ids = {row["mentor_id"] for row in assigned}
+        available_ids = {row["mentor_id"] for row in available}
+        self.assertTrue(assigned_ids.isdisjoint(available_ids))
+        self.assertEqual(assigned_ids | available_ids, {m.id for m in mentors})
 
     def test_reports_underfilled_pace_groups(self):
         self._create_practice_mentor(
@@ -168,7 +174,7 @@ class MentorSchedulingTests(TestCase):
             "10-11",
         )
 
-    def test_moves_unassigned_selections_to_available_when_room(self):
+    def test_moves_unassigned_selections_to_available(self):
         mentor = self._create_practice_mentor(
             first_name="Extra",
             last_name="Backup",
@@ -195,6 +201,7 @@ class MentorSchedulingTests(TestCase):
         }
         self.assertEqual(len(assigned_practices), 2)
         self.assertEqual(len(available_practices), 1)
+        self.assertTrue(assigned_practices.isdisjoint(available_practices))
 
     def test_lists_remote_mentors_separately(self):
         remote = Mentor.objects.create(

@@ -344,8 +344,9 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
           Select practices that mentors replied to. The algorithm uses their
           responses, groups by pace, assigns mentors who picked the fewest
           practices first, limits each mentor to two practices per month, and
-          caps each pace group at four assigned mentors per practice. Unassigned
-          selections move to available when a pace group still has room.
+          caps each pace group at four assigned mentors per practice. Mentors who
+          selected a practice but were not assigned are listed as available for
+          that practice.
         </p>
 
         {sortedPractices.length === 0 ? (

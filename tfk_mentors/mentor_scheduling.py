@@ -93,7 +93,8 @@ def compute_mentor_schedule(practices):
     - Mentors with fewer practice selections are processed first.
     - Each mentor receives up to two assigned practices per calendar month.
     - Each practice allows at most four assigned mentors per pace group.
-    - Unassigned selections move to available when the pace group still has room.
+    - Unassigned selections (pace full, monthly limit, or lower priority) move to
+      available for that practice.
     """
     practices = sorted(practices, key=lambda p: (p.date, p.id))
     practice_by_id = {practice.id: practice for practice in practices}
@@ -203,9 +204,6 @@ def compute_mentor_schedule(practices):
                 continue
             avail_key = (mentor_id, selection["practice_id"])
             if avail_key in seen_available:
-                continue
-            pace_key = (selection["practice_id"], selection["pace"])
-            if assigned_by_practice_pace[pace_key] >= MAX_MENTORS_PER_PACE:
                 continue
             seen_available.add(avail_key)
             available[selection["practice_id"]].append(
