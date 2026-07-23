@@ -693,12 +693,84 @@
 
 .practice-available-mentors-section {
   margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border, #ddd);
+  padding: 1rem 1.1rem 1.15rem;
+  border-radius: 10px;
+  border: 1px solid rgba(146, 104, 0, 0.4);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 236, 179, 0.45) 0%,
+    rgba(255, 248, 225, 0.9) 45%,
+    #fffdf6 100%
+  );
+  box-shadow: inset 3px 0 0 #c49200;
 }
 
-.practice-available-mentors-section .practices-section-heading {
-  margin-bottom: 0.75rem;
+.practice-available-mentors-header {
+  margin-bottom: 0.85rem;
+}
+
+.practice-available-mentors-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin: 0 0 0.35rem;
+  color: #7a5a00;
+  letter-spacing: 0.01em;
+}
+
+.practice-available-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(146, 104, 0, 0.45);
+  background: rgba(255, 255, 255, 0.75);
+  color: #7a5a00;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.practice-available-mentors-note {
+  margin: 0;
+  max-width: 40rem;
+  font-size: 0.9rem;
+  color: #6b5200;
+  line-height: 1.4;
+}
+
+.practice-available-list {
+  gap: 0.55rem;
+}
+
+.practice-row-available {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px dashed rgba(146, 104, 0, 0.55);
+  border-left: 3px solid #c49200;
+}
+
+.practice-row-available .practice-date {
+  color: #6b5200;
+}
+
+.practice-row-available .muted {
+  font-style: italic;
+  color: #8a6d00;
+  opacity: 1;
+}
+
+.practice-available-add-btn {
+  border-color: rgba(146, 104, 0, 0.45);
+  color: #7a5a00;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.practice-available-add-btn:hover:not(:disabled) {
+  border-color: #c49200;
+  background: #fff8e1;
 }
 
 .field-select {
@@ -760,10 +832,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-}
-
-.practice-row-available .muted {
-  font-style: italic;
 }
 
 .practice-mentor-pace-label {

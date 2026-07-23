@@ -283,7 +283,7 @@ export default function PracticeDetailPage() {
           {isAvailable ? (
             <button
               type="button"
-              className="btn btn-text"
+              className="btn btn-secondary practice-available-add-btn"
               disabled={saving}
               onClick={() => handleAddMentorToPractice(r.mentor_id, r.pace)}
             >
@@ -668,13 +668,22 @@ export default function PracticeDetailPage() {
                 className="practices-section practice-available-mentors-section"
                 aria-labelledby="available-mentors-heading"
               >
-                <h3
-                  id="available-mentors-heading"
-                  className="practices-section-heading"
-                >
-                  Available Mentors
-                </h3>
-                <ul className="practice-list">
+                <div className="practice-available-mentors-header">
+                  <h3
+                    id="available-mentors-heading"
+                    className="practices-section-heading practice-available-mentors-heading"
+                  >
+                    Available Mentors
+                    <span className="practice-available-count">
+                      {sortedAvailableMentorReplies.length}
+                    </span>
+                  </h3>
+                  <p className="practice-available-mentors-note">
+                    Signed up but not on the assigned roster — add them to the
+                    practice if you need coverage.
+                  </p>
+                </div>
+                <ul className="practice-list practice-available-list">
                   {sortedAvailableMentorReplies.map((r) =>
                     renderMentorReplyRow(r, true)
                   )}
