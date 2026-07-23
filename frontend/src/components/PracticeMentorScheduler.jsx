@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { scheduleMentors } from '../api'
 import { Modal } from '../components/Modal.jsx'
 import { formatDateTime } from '../datetime.js'
 import { PACE_GROUPS } from '../paceHelpers.js'
+import { downloadSchedulePreviewExcel } from '../scheduleExcel.js'
 
 function mentorName(row) {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() || '—'
@@ -106,9 +107,10 @@ function SchedulePracticeResult({ practice, maxPerPace = 4 }) {
  *   practices: Array<{ id: number, date?: string, nyrr_race?: string }>,
  *   open: boolean,
  *   onClose: () => void,
+ *   onApplied?: () => void | Promise<void>,
  * }} props
  */
-export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
+export function PracticeMentorSchedulerModal({ practices, open, onClose, onApplied }) {
   const sortedPractices = useMemo(
     () =>
       [...practices].sort((a, b) => {
@@ -123,7 +125,20 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState(null) // 'preview' | 'apply' | null
   const [applied, setApplied] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setSelectedIds(new Set())
+    setResult(null)
+    setError('')
+    setBusy(false)
+    setPhase(null)
+    setApplied(false)
+    setExporting(false)
+  }, [open])
 
   const allSelected =
     sortedPractices.length > 0 &&
@@ -159,6 +174,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
       return
     }
     setBusy(true)
+    setPhase('preview')
     setError('')
     setApplied(false)
     try {
@@ -169,6 +185,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+      setPhase(null)
     }
   }
 
@@ -183,21 +200,53 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
     )
     if (!confirmed) return
     setBusy(true)
+    setPhase('apply')
     setError('')
     try {
       const data = await scheduleMentors(practiceIds, { apply: true })
       setResult(data)
       setApplied(true)
+      const assigned = data.applied?.assigned ?? 0
+      const available = data.applied?.available ?? 0
+      const issueCount = data.applied?.errors?.length ?? 0
+      window.alert(
+        `Schedule applied: ${assigned} assignment${assigned === 1 ? '' : 's'} and ${available} available move${available === 1 ? '' : 's'}.` +
+          (issueCount
+            ? ` ${issueCount} issue(s) — check practice pages.`
+            : '')
+      )
+      if (onApplied) {
+        await onApplied(data)
+      }
+      onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+      setPhase(null)
     }
   }
 
   function handleClose() {
-    if (busy) return
+    if (busy || exporting) return
     onClose()
+  }
+
+  async function handleDownloadExcel() {
+    if (!result) return
+    const stamp = new Date().toISOString().slice(0, 10)
+    setExporting(true)
+    setError('')
+    try {
+      await downloadSchedulePreviewExcel(
+        `mentor-schedule-preview-${stamp}.xlsx`,
+        result
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -205,13 +254,13 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
       open={open}
       title="Schedule mentors (first run)"
       onClose={handleClose}
-      closeDisabled={busy}
+      closeDisabled={busy || exporting}
       footer={
         <>
           <button
             type="button"
             className="btn btn-secondary"
-            disabled={busy}
+            disabled={busy || exporting}
             onClick={handleClose}
           >
             Close
@@ -219,18 +268,26 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
           <button
             type="button"
             className="btn btn-secondary"
-            disabled={busy || selectedIds.size === 0}
+            disabled={busy || exporting || !result}
+            onClick={handleDownloadExcel}
+          >
+            {exporting ? 'Preparing…' : 'Download Excel'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={busy || exporting || selectedIds.size === 0}
             onClick={runPreview}
           >
-            {busy && !applied ? 'Running…' : 'Preview schedule'}
+            {phase === 'preview' ? 'Running…' : 'Preview schedule'}
           </button>
           <button
             type="button"
             className="btn btn-primary"
-            disabled={busy || selectedIds.size === 0 || !result}
+            disabled={busy || exporting || selectedIds.size === 0 || !result}
             onClick={runApply}
           >
-            {busy && applied ? 'Applying…' : 'Apply schedule'}
+            {phase === 'apply' ? 'Applying…' : 'Apply schedule'}
           </button>
         </>
       }
@@ -289,18 +346,34 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose }) {
         {result ? (
           <section className="schedule-results" aria-label="Schedule preview">
             <div className="schedule-summary">
-              <p>
-                <strong>{result.summary?.mentors_assigned ?? 0}</strong> mentors
-                assigned across{' '}
-                <strong>{result.summary?.assignment_rows ?? 0}</strong> slots
-                {result.summary?.available_rows
-                  ? ` · ${result.summary.available_rows} available`
-                  : ''}
-              </p>
-              <p className="muted">
-                Max {result.summary?.max_per_pace ?? 4} mentors per pace · max{' '}
-                {result.summary?.max_per_month ?? 2} practices per mentor per
-                month
+              <div className="schedule-summary-toolbar">
+                <div>
+                  <p>
+                    <strong>{result.summary?.mentors_assigned ?? 0}</strong>{' '}
+                    mentors assigned across{' '}
+                    <strong>{result.summary?.assignment_rows ?? 0}</strong> slots
+                    {result.summary?.available_rows
+                      ? ` · ${result.summary.available_rows} available`
+                      : ''}
+                  </p>
+                  <p className="muted">
+                    Max {result.summary?.max_per_pace ?? 4} mentors per pace · max{' '}
+                    {result.summary?.max_per_month ?? 2} practices per mentor per
+                    month
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy || exporting}
+                  onClick={handleDownloadExcel}
+                >
+                  {exporting ? 'Preparing…' : 'Download Excel'}
+                </button>
+              </div>
+              <p className="muted schedule-excel-hint">
+                Excel includes filled/free slots by pace and remote mentor
+                practice signups.
               </p>
             </div>
 

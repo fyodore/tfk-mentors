@@ -174,9 +174,11 @@ class MentorSchedulingTests(TestCase):
             last_name="Backup",
             email="extra@example.com",
             pace="11-12",
-            selections=[self.practice_one, self.practice_two],
+            selections=[self.practice_one, self.practice_two, self.practice_three],
         )
-        result = compute_mentor_schedule([self.practice_one, self.practice_two])
+        result = compute_mentor_schedule(
+            [self.practice_one, self.practice_two, self.practice_three]
+        )
         assigned_practices = {
             practice_row["practice_id"]
             for practice_row in result["practices"]
@@ -191,7 +193,7 @@ class MentorSchedulingTests(TestCase):
             for row in rows
             if row["mentor_id"] == mentor.id
         }
-        self.assertEqual(len(assigned_practices), 1)
+        self.assertEqual(len(assigned_practices), 2)
         self.assertEqual(len(available_practices), 1)
 
     def test_lists_remote_mentors_separately(self):
@@ -250,9 +252,52 @@ class MentorSchedulingTests(TestCase):
         )
         self.assertEqual(apply_response.status_code, 200)
         self.assertEqual(apply_response.data["applied"]["assigned"], 1)
+        self.assertEqual(apply_response.data["applied"]["errors"], [])
         detail = self.client.get(f"/api/practice/{self.practice_one.id}/")
         self.assertEqual(detail.status_code, 200)
         mentor_ids = {row["mentor_id"] for row in detail.data["mentor_replies"]}
         self.assertIn(mentor.id, mentor_ids)
         self.practice_one.refresh_from_db()
         self.assertIsNotNone(self.practice_one.mentor_selection_closed_at)
+
+    def test_apply_moves_overflow_to_available(self):
+        mentor = self._create_practice_mentor(
+            first_name="Busy",
+            last_name="Mentor",
+            email="busy@example.com",
+            pace="9-10",
+            selections=[self.practice_one, self.practice_two, self.practice_three],
+        )
+        schedule = compute_mentor_schedule(
+            [self.practice_one, self.practice_two, self.practice_three]
+        )
+        self.assertEqual(schedule["summary"]["assignment_rows"], 2)
+        self.assertEqual(schedule["summary"]["available_rows"], 1)
+
+        from tfk_mentors.mentor_scheduling import apply_mentor_schedule
+
+        applied = apply_mentor_schedule(
+            [self.practice_one, self.practice_two, self.practice_three],
+            schedule,
+        )
+        self.assertEqual(applied["assigned"], 2)
+        self.assertEqual(applied["available"], 1)
+        self.assertEqual(applied["errors"], [])
+
+        attending_ids = set()
+        available_ids = set()
+        for practice in (self.practice_one, self.practice_two, self.practice_three):
+            detail = self.client.get(f"/api/practice/{practice.id}/")
+            self.assertEqual(detail.status_code, 200)
+            attending_ids.update(
+                row["mentor_id"] for row in detail.data["mentor_replies"]
+            )
+            available_ids.update(
+                row["mentor_id"]
+                for row in detail.data.get("available_mentor_replies", [])
+            )
+        self.assertIn(mentor.id, attending_ids)
+        self.assertIn(mentor.id, available_ids)
+        for practice in (self.practice_one, self.practice_two, self.practice_three):
+            practice.refresh_from_db()
+            self.assertIsNotNone(practice.mentor_selection_closed_at)

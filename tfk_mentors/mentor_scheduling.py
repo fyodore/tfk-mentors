@@ -14,6 +14,7 @@ from .models import (
     Practice,
     PracticeAttendanceReply,
     ScheduledEmailMentorPracticeReply,
+    ScheduledEmailMentorToken,
     normalize_pace,
 )
 
@@ -315,6 +316,40 @@ def compute_mentor_schedule(practices):
     }
 
 
+def _apply_schedule_row(practice, row, *, attendance, action, scheduled):
+    """Apply one schedule row; return None on success or an error dict."""
+    try:
+        with transaction.atomic():
+            mentor = Mentor.objects.get(pk=row["mentor_id"])
+            pace = normalize_pace(row.get("pace") or mentor.pace or "")
+            if scheduled is not None:
+                token, _ = ScheduledEmailMentorToken.objects.get_or_create(
+                    scheduled_email=scheduled,
+                    mentor=mentor,
+                )
+                ScheduledEmailMentorPracticeReply.objects.update_or_create(
+                    mentor_token=token,
+                    practice=practice,
+                    defaults={
+                        "mentor": mentor,
+                        "attendance": attendance,
+                        "pace": pace,
+                    },
+                )
+            elif attendance == PracticeAttendanceReply.AVAILABLE:
+                practice.mark_mentor_available(mentor, pace=pace, sync=False)
+            else:
+                practice.mark_mentor_attending(mentor, pace, sync=False)
+    except Exception as exc:
+        return {
+            "mentor_id": row["mentor_id"],
+            "practice_id": practice.id,
+            "action": action,
+            "detail": str(exc),
+        }
+    return None
+
+
 def apply_mentor_schedule(practices, schedule):
     """Apply computed assignments and available lists to practices."""
     practice_by_id = {practice.id: practice for practice in practices}
@@ -326,36 +361,39 @@ def apply_mentor_schedule(practices, schedule):
             practice = practice_by_id.get(practice_row["practice_id"])
             if practice is None:
                 continue
+            scheduled = practice.scheduled_email_for_mentor_replies()
+            touched = False
             for pace_rows in practice_row["assignments_by_pace"].values():
                 for row in pace_rows:
-                    mentor = Mentor.objects.get(pk=row["mentor_id"])
-                    try:
-                        practice.mark_mentor_attending(mentor, row["pace"])
+                    error = _apply_schedule_row(
+                        practice,
+                        row,
+                        attendance=PracticeAttendanceReply.ATTENDING,
+                        action="assign",
+                        scheduled=scheduled,
+                    )
+                    if error:
+                        applied["errors"].append(error)
+                    else:
                         applied["assigned"] += 1
-                    except Exception as exc:
-                        applied["errors"].append(
-                            {
-                                "mentor_id": row["mentor_id"],
-                                "practice_id": practice.id,
-                                "action": "assign",
-                                "detail": str(exc),
-                            }
-                        )
+                        touched = True
             for pace_rows in practice_row["available_by_pace"].values():
                 for row in pace_rows:
-                    mentor = Mentor.objects.get(pk=row["mentor_id"])
-                    try:
-                        practice.mark_mentor_available(mentor, pace=row["pace"])
+                    error = _apply_schedule_row(
+                        practice,
+                        row,
+                        attendance=PracticeAttendanceReply.AVAILABLE,
+                        action="available",
+                        scheduled=scheduled,
+                    )
+                    if error:
+                        applied["errors"].append(error)
+                    else:
                         applied["available"] += 1
-                    except Exception as exc:
-                        applied["errors"].append(
-                            {
-                                "mentor_id": row["mentor_id"],
-                                "practice_id": practice.id,
-                                "action": "available",
-                                "detail": str(exc),
-                            }
-                        )
+                        touched = True
+            # Sync roster once per practice instead of after every mentor.
+            if touched:
+                practice.sync_mentor_assignments_from_replies()
 
         Practice.objects.filter(pk__in=practice_by_id.keys()).update(
             mentor_selection_closed_at=closed_at

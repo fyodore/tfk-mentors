@@ -811,6 +811,14 @@ export default function PracticesPage() {
         practices={filteredPractices}
         open={schedulerOpen}
         onClose={() => setSchedulerOpen(false)}
+        onApplied={async () => {
+          try {
+            const pList = await fetchPractices()
+            setPractices(pList)
+          } catch (e) {
+            setLoadError(e instanceof Error ? e.message : String(e))
+          }
+        }}
       />
     </>
   )

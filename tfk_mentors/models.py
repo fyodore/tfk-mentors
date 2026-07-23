@@ -469,7 +469,7 @@ class Practice(TimeStampedModel):
         self.mentors.add(mentor)
         return assignment
 
-    def mark_mentor_available(self, mentor, *, pace=None):
+    def mark_mentor_available(self, mentor, *, pace=None, sync=True):
         """Move a mentor on this roster to the available list."""
         pace = normalize_pace(pace or mentor.pace or "")
         scheduled = self.scheduled_email_for_mentor_replies()
@@ -487,7 +487,8 @@ class Practice(TimeStampedModel):
                     "pace": pace,
                 },
             )
-            self.sync_mentor_assignments_from_replies()
+            if sync:
+                self.sync_mentor_assignments_from_replies()
             return reply
 
         assignment, _ = MentorPracticeAssignment.objects.update_or_create(
@@ -528,7 +529,7 @@ class Practice(TimeStampedModel):
 
         raise ValidationError("Mentor is not assigned to this practice.")
 
-    def mark_mentor_attending(self, mentor, pace):
+    def mark_mentor_attending(self, mentor, pace, *, sync=True):
         """Move a mentor back onto this practice roster from available or unassigned."""
         pace = normalize_pace(pace or mentor.pace or "")
         if not pace or pace not in {choice.value for choice in PaceTypes}:
@@ -539,7 +540,8 @@ class Practice(TimeStampedModel):
             latest.attendance = PracticeAttendanceReply.ATTENDING
             latest.pace = pace
             latest.save(update_fields=["attendance", "pace", "updated_at"])
-            self.sync_mentor_assignments_from_replies()
+            if sync:
+                self.sync_mentor_assignments_from_replies()
             return latest
 
         available_assignment = MentorPracticeAssignment.objects.filter(
@@ -560,7 +562,8 @@ class Practice(TimeStampedModel):
             latest.attendance = PracticeAttendanceReply.ATTENDING
             latest.pace = pace
             latest.save(update_fields=["attendance", "pace", "updated_at"])
-            self.sync_mentor_assignments_from_replies()
+            if sync:
+                self.sync_mentor_assignments_from_replies()
             return latest
 
         scheduled = self.scheduled_email_for_mentor_replies()
@@ -578,7 +581,8 @@ class Practice(TimeStampedModel):
                     "pace": pace,
                 },
             )
-            self.sync_mentor_assignments_from_replies()
+            if sync:
+                self.sync_mentor_assignments_from_replies()
             return reply
 
         return self.assign_mentor(mentor, pace)
