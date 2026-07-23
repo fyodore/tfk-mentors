@@ -521,3 +521,52 @@ class MentorSchedulingTests(TestCase):
         for practice in (self.practice_one, self.practice_two, self.practice_three):
             practice.refresh_from_db()
             self.assertIsNotNone(practice.mentor_selection_closed_at)
+
+    def test_backfill_schedule_available_command(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        mentors = []
+        for index in range(5):
+            mentors.append(
+                self._create_practice_mentor(
+                    first_name=f"B{index}",
+                    last_name="Fill",
+                    email=f"bfill{index}@example.com",
+                    pace="8-9",
+                    selections=[self.practice_one],
+                )
+            )
+        # Simulate old apply: assign only the first four; leave the fifth attending.
+        for mentor in mentors[:4]:
+            self.practice_one.mark_mentor_attending(mentor, "8-9")
+        self.practice_one.mentor_selection_closed_at = timezone.now()
+        self.practice_one.save(update_fields=["mentor_selection_closed_at"])
+
+        overflow = mentors[4]
+        self.assertEqual(
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                mentor=overflow,
+                practice=self.practice_one,
+            )
+            .latest("updated_at")
+            .attendance,
+            PracticeAttendanceReply.ATTENDING,
+        )
+
+        out = StringIO()
+        call_command(
+            "backfill_schedule_available",
+            "--practice-id",
+            str(self.practice_one.id),
+            stdout=out,
+        )
+        detail = self.client.get(f"/api/practice/{self.practice_one.id}/")
+        available_ids = {
+            row["mentor_id"] for row in detail.data.get("available_mentor_replies", [])
+        }
+        attending_ids = {row["mentor_id"] for row in detail.data["mentor_replies"]}
+        self.assertIn(overflow.id, available_ids)
+        self.assertNotIn(overflow.id, attending_ids)
+        self.assertEqual(len(attending_ids), 4)
