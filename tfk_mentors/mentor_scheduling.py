@@ -11,6 +11,7 @@ from .models import (
     Mentor,
     MentorTypes,
     PACE_SORT,
+    PaceTypes,
     Practice,
     PracticeAttendanceReply,
     ScheduledEmailMentorPracticeReply,
@@ -316,12 +317,25 @@ def compute_mentor_schedule(practices):
     }
 
 
+VALID_PACES = frozenset(choice.value for choice in PaceTypes)
+
+
+def _assignment_attendance(row):
+    """Keep half-practice replies when present; otherwise attending."""
+    attendance = row.get("attendance") or PracticeAttendanceReply.ATTENDING
+    if attendance in ATTENDING_VALUES:
+        return attendance
+    return PracticeAttendanceReply.ATTENDING
+
+
 def _apply_schedule_row(practice, row, *, attendance, action, scheduled):
     """Apply one schedule row; return None on success or an error dict."""
     try:
         with transaction.atomic():
             mentor = Mentor.objects.get(pk=row["mentor_id"])
             pace = normalize_pace(row.get("pace") or mentor.pace or "")
+            if not pace or pace not in VALID_PACES:
+                raise ValueError("Invalid pace choice.")
             if scheduled is not None:
                 token, _ = ScheduledEmailMentorToken.objects.get_or_create(
                     scheduled_email=scheduled,
@@ -342,7 +356,7 @@ def _apply_schedule_row(practice, row, *, attendance, action, scheduled):
                 practice.mark_mentor_attending(mentor, pace, sync=False)
     except Exception as exc:
         return {
-            "mentor_id": row["mentor_id"],
+            "mentor_id": row.get("mentor_id"),
             "practice_id": practice.id,
             "action": action,
             "detail": str(exc),
@@ -351,33 +365,49 @@ def _apply_schedule_row(practice, row, *, attendance, action, scheduled):
 
 
 def apply_mentor_schedule(practices, schedule):
-    """Apply computed assignments and available lists to practices."""
+    """Apply computed assignments and available lists to practices.
+
+    Only practices with at least one successful change and no row errors get
+    mentor_selection_closed_at set.
+    """
     practice_by_id = {practice.id: practice for practice in practices}
-    applied = {"assigned": 0, "available": 0, "errors": []}
+    applied = {
+        "assigned": 0,
+        "available": 0,
+        "errors": [],
+        "closed_practice_ids": [],
+    }
     closed_at = timezone.now()
+    practices_to_close = set()
 
     with transaction.atomic():
-        for practice_row in schedule["practices"]:
-            practice = practice_by_id.get(practice_row["practice_id"])
+        for practice_row in schedule.get("practices") or []:
+            try:
+                practice_id = int(practice_row.get("practice_id"))
+            except (TypeError, ValueError):
+                continue
+            practice = practice_by_id.get(practice_id)
             if practice is None:
                 continue
             scheduled = practice.scheduled_email_for_mentor_replies()
             touched = False
-            for pace_rows in practice_row["assignments_by_pace"].values():
+            practice_had_error = False
+            for pace_rows in (practice_row.get("assignments_by_pace") or {}).values():
                 for row in pace_rows:
                     error = _apply_schedule_row(
                         practice,
                         row,
-                        attendance=PracticeAttendanceReply.ATTENDING,
+                        attendance=_assignment_attendance(row),
                         action="assign",
                         scheduled=scheduled,
                     )
                     if error:
                         applied["errors"].append(error)
+                        practice_had_error = True
                     else:
                         applied["assigned"] += 1
                         touched = True
-            for pace_rows in practice_row["available_by_pace"].values():
+            for pace_rows in (practice_row.get("available_by_pace") or {}).values():
                 for row in pace_rows:
                     error = _apply_schedule_row(
                         practice,
@@ -388,15 +418,168 @@ def apply_mentor_schedule(practices, schedule):
                     )
                     if error:
                         applied["errors"].append(error)
+                        practice_had_error = True
                     else:
                         applied["available"] += 1
                         touched = True
             # Sync roster once per practice instead of after every mentor.
             if touched:
                 practice.sync_mentor_assignments_from_replies()
+            if touched and not practice_had_error:
+                practices_to_close.add(practice.id)
 
-        Practice.objects.filter(pk__in=practice_by_id.keys()).update(
-            mentor_selection_closed_at=closed_at
-        )
+        if practices_to_close:
+            Practice.objects.filter(pk__in=practices_to_close).update(
+                mentor_selection_closed_at=closed_at
+            )
+            applied["closed_practice_ids"] = sorted(practices_to_close)
 
     return applied
+
+
+def _normalize_mentor_rows(pace_map, *, field_name):
+    """Validate and coerce mentor rows under a pace map. Returns (error, cleaned)."""
+    if not isinstance(pace_map, dict):
+        return f"schedule.practices entries require {field_name} object.", None
+    cleaned = {}
+    for pace_key, mentors in pace_map.items():
+        if not isinstance(mentors, list):
+            return (
+                f"schedule.practices.{field_name} values must be lists "
+                f"(pace {pace_key!r}).",
+                None,
+            )
+        cleaned_rows = []
+        for index, mentor_row in enumerate(mentors):
+            if not isinstance(mentor_row, dict):
+                return (
+                    f"schedule.practices.{field_name}[{pace_key!r}][{index}] "
+                    "must be an object.",
+                    None,
+                )
+            try:
+                mentor_id = int(mentor_row.get("mentor_id"))
+            except (TypeError, ValueError):
+                return (
+                    f"schedule.practices.{field_name}[{pace_key!r}][{index}] "
+                    "requires integer mentor_id.",
+                    None,
+                )
+            cleaned_rows.append({**mentor_row, "mentor_id": mentor_id})
+        cleaned[str(pace_key)] = cleaned_rows
+    return None, cleaned
+
+
+def normalize_and_validate_schedule_payload(schedule, practice_ids):
+    """
+    Validate apply schedule and coerce practice/mentor ids to ints.
+
+    Returns (error_message, normalized_schedule). normalized_schedule is None
+    when validation fails.
+    """
+    if not isinstance(schedule, dict):
+        return "schedule must be an object.", None
+    practice_rows = schedule.get("practices")
+    if not isinstance(practice_rows, list):
+        return "schedule.practices must be a list.", None
+    expected = set(practice_ids)
+    seen = set()
+    normalized_practices = []
+    for row in practice_rows:
+        if not isinstance(row, dict):
+            return "schedule.practices entries must be objects.", None
+        try:
+            practice_id = int(row.get("practice_id"))
+        except (TypeError, ValueError):
+            return "schedule.practices entries require integer practice_id.", None
+        if practice_id not in expected:
+            return (
+                f"schedule includes practice_id {practice_id} which was not requested.",
+                None,
+            )
+        if practice_id in seen:
+            return (
+                f"schedule lists practice_id {practice_id} more than once.",
+                None,
+            )
+        seen.add(practice_id)
+        assign_error, assignments = _normalize_mentor_rows(
+            row.get("assignments_by_pace"),
+            field_name="assignments_by_pace",
+        )
+        if assign_error:
+            return assign_error, None
+        available_error, available = _normalize_mentor_rows(
+            row.get("available_by_pace"),
+            field_name="available_by_pace",
+        )
+        if available_error:
+            return available_error, None
+        normalized_practices.append(
+            {
+                **row,
+                "practice_id": practice_id,
+                "assignments_by_pace": assignments,
+                "available_by_pace": available,
+            }
+        )
+    missing = expected - seen
+    if missing:
+        return f"schedule is missing practice_id {sorted(missing)[0]}.", None
+    return None, {
+        "practices": normalized_practices,
+        "underfilled_practices": schedule.get("underfilled_practices") or [],
+        "remote_mentors": schedule.get("remote_mentors") or [],
+        "summary": schedule.get("summary") or {},
+        "skipped_mentors": schedule.get("skipped_mentors") or [],
+    }
+
+
+def validate_schedule_payload(schedule, practice_ids):
+    """Return an error message string, or None when valid."""
+    error, _normalized = normalize_and_validate_schedule_payload(
+        schedule, practice_ids
+    )
+    return error
+
+
+def schedule_assignment_fingerprint(schedule):
+    """Comparable set of assignment/available slots for apply integrity checks."""
+    fingerprint = set()
+    for practice_row in schedule.get("practices") or []:
+        try:
+            practice_id = int(practice_row.get("practice_id"))
+        except (TypeError, ValueError):
+            continue
+        for mentors in (practice_row.get("assignments_by_pace") or {}).values():
+            if not isinstance(mentors, list):
+                continue
+            for row in mentors:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    mentor_id = int(row.get("mentor_id"))
+                except (TypeError, ValueError):
+                    continue
+                pace = normalize_pace(row.get("pace") or "")
+                fingerprint.add((practice_id, mentor_id, pace, "assign"))
+        for mentors in (practice_row.get("available_by_pace") or {}).values():
+            if not isinstance(mentors, list):
+                continue
+            for row in mentors:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    mentor_id = int(row.get("mentor_id"))
+                except (TypeError, ValueError):
+                    continue
+                pace = normalize_pace(row.get("pace") or "")
+                fingerprint.add((practice_id, mentor_id, pace, "available"))
+    return fingerprint
+
+
+def schedules_match_for_apply(submitted, computed):
+    """True when submitted assign/available slots match a fresh compute."""
+    return schedule_assignment_fingerprint(
+        submitted
+    ) == schedule_assignment_fingerprint(computed)

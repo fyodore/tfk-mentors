@@ -245,20 +245,225 @@ class MentorSchedulingTests(TestCase):
         self.assertEqual(response.data["summary"]["assignment_rows"], 1)
         self.assertNotIn("applied", response.data)
 
-        apply_response = self.client.post(
+        apply_without_schedule = self.client.post(
             "/api/practices/schedule-mentors/",
             {"practice_ids": [self.practice_one.id], "apply": True},
+            format="json",
+        )
+        self.assertEqual(apply_without_schedule.status_code, 400)
+
+        apply_response = self.client.post(
+            "/api/practices/schedule-mentors/",
+            {
+                "practice_ids": [self.practice_one.id],
+                "apply": True,
+                "schedule": response.data,
+            },
             format="json",
         )
         self.assertEqual(apply_response.status_code, 200)
         self.assertEqual(apply_response.data["applied"]["assigned"], 1)
         self.assertEqual(apply_response.data["applied"]["errors"], [])
+        self.assertEqual(
+            apply_response.data["applied"]["closed_practice_ids"],
+            [self.practice_one.id],
+        )
         detail = self.client.get(f"/api/practice/{self.practice_one.id}/")
         self.assertEqual(detail.status_code, 200)
         mentor_ids = {row["mentor_id"] for row in detail.data["mentor_replies"]}
         self.assertIn(mentor.id, mentor_ids)
         self.practice_one.refresh_from_db()
         self.assertIsNotNone(self.practice_one.mentor_selection_closed_at)
+
+    def test_apply_rejects_stale_preview(self):
+        mentor = self._create_practice_mentor(
+            first_name="Pinned",
+            last_name="Schedule",
+            email="pinned@example.com",
+            pace="11-12",
+            selections=[self.practice_one],
+        )
+        preview = self.client.post(
+            "/api/practices/schedule-mentors/",
+            {"practice_ids": [self.practice_one.id]},
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        schedule = preview.json()
+
+        ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor=mentor,
+            practice=self.practice_one,
+        ).update(attendance=PracticeAttendanceReply.NOT_ATTENDING)
+
+        apply_response = self.client.post(
+            "/api/practices/schedule-mentors/",
+            {
+                "practice_ids": [self.practice_one.id],
+                "apply": True,
+                "schedule": schedule,
+            },
+            format="json",
+        )
+        self.assertEqual(apply_response.status_code, 409)
+        self.assertIn("out of date", apply_response.data["detail"])
+        self.practice_one.refresh_from_db()
+        self.assertIsNone(self.practice_one.mentor_selection_closed_at)
+
+    def test_apply_accepts_string_practice_ids(self):
+        mentor = self._create_practice_mentor(
+            first_name="String",
+            last_name="Ids",
+            email="stringids@example.com",
+            pace="10-11",
+            selections=[self.practice_one],
+        )
+        preview = compute_mentor_schedule([self.practice_one])
+        preview["practices"][0]["practice_id"] = str(self.practice_one.id)
+        for rows in preview["practices"][0]["assignments_by_pace"].values():
+            for row in rows:
+                row["mentor_id"] = str(row["mentor_id"])
+
+        apply_response = self.client.post(
+            "/api/practices/schedule-mentors/",
+            {
+                "practice_ids": [str(self.practice_one.id)],
+                "apply": True,
+                "schedule": preview,
+            },
+            format="json",
+        )
+        self.assertEqual(apply_response.status_code, 200)
+        self.assertEqual(apply_response.data["applied"]["assigned"], 1)
+        detail = self.client.get(f"/api/practice/{self.practice_one.id}/")
+        mentor_ids = {row["mentor_id"] for row in detail.data["mentor_replies"]}
+        self.assertIn(mentor.id, mentor_ids)
+
+    def test_validate_rejects_non_list_pace_rows(self):
+        from tfk_mentors.mentor_scheduling import validate_schedule_payload
+
+        error = validate_schedule_payload(
+            {
+                "practices": [
+                    {
+                        "practice_id": self.practice_one.id,
+                        "assignments_by_pace": {"9-10": {"mentor_id": 1}},
+                        "available_by_pace": {},
+                    }
+                ]
+            },
+            [self.practice_one.id],
+        )
+        self.assertIsNotNone(error)
+        self.assertIn("must be lists", error)
+
+    def test_apply_preserves_half_practice_attendance(self):
+        mentor = self._create_practice_mentor(
+            first_name="Half",
+            last_name="Day",
+            email="halfday@example.com",
+            pace="9-10",
+            selections=[self.practice_one],
+        )
+        ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor=mentor,
+            practice=self.practice_one,
+        ).update(attendance=PracticeAttendanceReply.FIRST_HALF)
+        schedule = compute_mentor_schedule([self.practice_one])
+        assigned = schedule["practices"][0]["assignments_by_pace"]["9-10"][0]
+        self.assertEqual(assigned["attendance"], PracticeAttendanceReply.FIRST_HALF)
+
+        from tfk_mentors.mentor_scheduling import apply_mentor_schedule
+
+        applied = apply_mentor_schedule([self.practice_one], schedule)
+        self.assertEqual(applied["assigned"], 1)
+        self.assertEqual(applied["errors"], [])
+        reply = ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor=mentor,
+            practice=self.practice_one,
+        ).latest("updated_at")
+        self.assertEqual(reply.attendance, PracticeAttendanceReply.FIRST_HALF)
+
+    def test_apply_does_not_close_practice_with_row_errors(self):
+        good = self._create_practice_mentor(
+            first_name="Good",
+            last_name="Mentor",
+            email="good@example.com",
+            pace="9-10",
+            selections=[self.practice_one],
+        )
+        schedule = {
+            "practices": [
+                {
+                    "practice_id": self.practice_one.id,
+                    "assignments_by_pace": {
+                        "9-10": [
+                            {"mentor_id": good.id, "pace": "9-10"},
+                            {"mentor_id": good.id, "pace": "not-a-pace"},
+                        ]
+                    },
+                    "available_by_pace": {},
+                }
+            ]
+        }
+
+        from tfk_mentors.mentor_scheduling import apply_mentor_schedule
+
+        applied = apply_mentor_schedule([self.practice_one], schedule)
+        self.assertEqual(applied["assigned"], 1)
+        self.assertEqual(len(applied["errors"]), 1)
+        self.assertEqual(applied["closed_practice_ids"], [])
+        self.practice_one.refresh_from_db()
+        self.assertIsNone(self.practice_one.mentor_selection_closed_at)
+
+    def test_apply_empty_schedule_does_not_close_selection(self):
+        empty = compute_mentor_schedule([self.practice_one])
+        self.assertEqual(empty["summary"]["assignment_rows"], 0)
+
+        from tfk_mentors.mentor_scheduling import apply_mentor_schedule
+
+        applied = apply_mentor_schedule([self.practice_one], empty)
+        self.assertEqual(applied["assigned"], 0)
+        self.assertEqual(applied["available"], 0)
+        self.assertEqual(applied["closed_practice_ids"], [])
+        self.practice_one.refresh_from_db()
+        self.assertIsNone(self.practice_one.mentor_selection_closed_at)
+
+    def test_apply_rejects_invalid_pace(self):
+        mentor = self._create_practice_mentor(
+            first_name="Bad",
+            last_name="Pace",
+            email="badpace@example.com",
+            pace="9-10",
+            selections=[self.practice_one],
+        )
+        schedule = {
+            "practices": [
+                {
+                    "practice_id": self.practice_one.id,
+                    "assignments_by_pace": {
+                        "not-a-pace": [
+                            {
+                                "mentor_id": mentor.id,
+                                "pace": "not-a-pace",
+                            }
+                        ]
+                    },
+                    "available_by_pace": {},
+                }
+            ]
+        }
+
+        from tfk_mentors.mentor_scheduling import apply_mentor_schedule
+
+        applied = apply_mentor_schedule([self.practice_one], schedule)
+        self.assertEqual(applied["assigned"], 0)
+        self.assertEqual(len(applied["errors"]), 1)
+        self.assertEqual(applied["errors"][0]["action"], "assign")
+        self.assertIn("Invalid pace", applied["errors"][0]["detail"])
+        self.assertEqual(applied["closed_practice_ids"], [])
+        self.practice_one.refresh_from_db()
+        self.assertIsNone(self.practice_one.mentor_selection_closed_at)
 
     def test_apply_moves_overflow_to_available(self):
         mentor = self._create_practice_mentor(
@@ -283,6 +488,14 @@ class MentorSchedulingTests(TestCase):
         self.assertEqual(applied["assigned"], 2)
         self.assertEqual(applied["available"], 1)
         self.assertEqual(applied["errors"], [])
+        self.assertEqual(
+            set(applied["closed_practice_ids"]),
+            {
+                self.practice_one.id,
+                self.practice_two.id,
+                self.practice_three.id,
+            },
+        )
 
         attending_ids = set()
         available_ids = set()

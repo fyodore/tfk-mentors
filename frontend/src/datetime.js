@@ -61,6 +61,15 @@ export function formatDateTime(iso) {
   })
 }
 
+/** Calendar date YYYY-MM-DD in the display timezone (for filenames, etc.). */
+export function formatDateStamp(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = zonedPartsFromMs(d.getTime())
+  if (!parts) return ''
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`
+}
+
 /** @param {string|number|Date} iso */
 export function formatMentorDirectoryPracticeDate(iso) {
   if (!iso) return '—'

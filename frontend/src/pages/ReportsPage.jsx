@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { fetchMentorNonResponseReport, fetchPracticeRosterReport, fetchSeasons } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
-import { formatDateTime } from '../datetime.js'
+import { formatDateStamp, formatDateTime } from '../datetime.js'
 import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
@@ -506,7 +506,7 @@ export default function ReportsPage() {
   }
 
   async function handleDownloadExcel() {
-    const stamp = new Date().toISOString().slice(0, 10)
+    const stamp = formatDateStamp()
     setExporting(true)
     setError(null)
     try {

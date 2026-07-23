@@ -1,5 +1,5 @@
 import { formatDateTime } from './datetime.js'
-import { PACE_GROUPS, paceSortKey } from './paceHelpers.js'
+import { paceSortKey } from './paceHelpers.js'
 
 const NEEDS_MENTORS_FILL = {
   fill: { patternType: 'solid', fgColor: { rgb: 'FFF8E1' } },
@@ -62,13 +62,29 @@ export function buildPaceSlotRows(result) {
   const needsMentorsRowIndexes = []
 
   for (const practice of result.practices ?? []) {
+    const paces = pacesForPractice(practice)
+    if (paces.length === 0) {
+      needsMentorsRowIndexes.push(rows.length)
+      rows.push([
+        practiceLabel(practice),
+        practice.date ? formatDateTime(practice.date) : '—',
+        practice.nyrr_race?.trim() || '',
+        '—',
+        0,
+        '—',
+        maxPerPace,
+        'No mentor interest',
+      ])
+      continue
+    }
+
     const underfilledByPace = new Map(
       (practice.underfilled_pace_groups ?? []).map((group) => [
         group.pace,
         group,
       ])
     )
-    for (const pace of pacesForPractice(practice)) {
+    for (const pace of paces) {
       const filled =
         underfilledByPace.get(pace)?.assigned_count ??
         (practice.assignments_by_pace?.[pace]?.length ?? 0)
@@ -175,7 +191,22 @@ export function buildRemoteMentorRows(result) {
 export async function downloadSchedulePreviewExcel(filename, result) {
   const XLSX = await import('xlsx-js-style')
   const { rows: paceRows, needsMentorsRowIndexes } = buildPaceSlotRows(result)
-  const remoteRows = buildRemoteMentorRows(result)
+  const hasRemoteMentors = (result.remote_mentors ?? []).length > 0
+  const remoteRows = hasRemoteMentors
+    ? buildRemoteMentorRows(result)
+    : [
+        [
+          'Mentor',
+          'Email',
+          'Mentor pace',
+          'Practice',
+          'Date',
+          'NYRR race',
+          'Signup pace',
+          'Attendance',
+        ],
+        ['None', '', '', '', '', '', '', ''],
+      ]
 
   const paceSheet = XLSX.utils.aoa_to_sheet(paceRows)
   for (const rowIndex of needsMentorsRowIndexes) {

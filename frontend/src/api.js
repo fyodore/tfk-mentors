@@ -990,9 +990,19 @@ export async function fetchPublicPracticeMentorRoster(practiceId) {
 
 /**
  * @param {number[]} practiceIds
- * @param {{ apply?: boolean }} [options]
+ * @param {{ apply?: boolean, schedule?: object }} [options]
  */
 export async function scheduleMentors(practiceIds, options = {}) {
+  const body = {
+    practice_ids: practiceIds,
+    apply: Boolean(options.apply),
+  }
+  if (options.apply) {
+    if (!options.schedule || typeof options.schedule !== 'object') {
+      throw new Error('Preview schedule result is required to apply.')
+    }
+    body.schedule = options.schedule
+  }
   const res = await fetch(apiPath('/api/practices/schedule-mentors/'), {
     method: 'POST',
     credentials: 'include',
@@ -1000,10 +1010,7 @@ export async function scheduleMentors(practiceIds, options = {}) {
       'Content-Type': 'application/json',
       ...csrfHeaders(),
     },
-    body: JSON.stringify({
-      practice_ids: practiceIds,
-      apply: Boolean(options.apply),
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()

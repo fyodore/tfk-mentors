@@ -592,6 +592,29 @@
   font-size: 0.92rem;
 }
 
+.schedule-applied-note-partial {
+  background: rgba(180, 120, 0, 0.12);
+  border: 1px solid rgba(180, 120, 0, 0.35);
+}
+
+.schedule-applied-note p {
+  margin: 0;
+}
+
+.schedule-applied-errors-heading {
+  margin-top: 0.5rem !important;
+  font-weight: 600;
+}
+
+.schedule-applied-errors {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+}
+
+.schedule-applied-errors li + li {
+  margin-top: 0.2rem;
+}
+
 .btn-icon-plus {
   width: 2.5rem;
   height: 2.5rem;

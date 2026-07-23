@@ -344,7 +344,7 @@ export default function PracticesPage() {
             <button
               type="button"
               className="btn btn-secondary practices-schedule-btn"
-              disabled={loading || filteredPractices.length === 0}
+              disabled={loading || upcomingPractices.length === 0}
               onClick={() => setSchedulerOpen(true)}
             >
               Schedule mentors
@@ -808,7 +808,7 @@ export default function PracticesPage() {
       </Modal>
 
       <PracticeMentorSchedulerModal
-        practices={filteredPractices}
+        practices={upcomingPractices}
         open={schedulerOpen}
         onClose={() => setSchedulerOpen(false)}
         onApplied={async () => {
@@ -817,6 +817,7 @@ export default function PracticesPage() {
             setPractices(pList)
           } catch (e) {
             setLoadError(e instanceof Error ? e.message : String(e))
+            throw e
           }
         }}
       />

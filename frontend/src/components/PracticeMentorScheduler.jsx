@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { scheduleMentors } from '../api'
 import { Modal } from '../components/Modal.jsx'
-import { formatDateTime } from '../datetime.js'
+import { formatDateStamp, formatDateTime } from '../datetime.js'
 import { PACE_GROUPS } from '../paceHelpers.js'
 import { downloadSchedulePreviewExcel } from '../scheduleExcel.js'
 
@@ -195,6 +195,10 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
       setError('Select at least one practice.')
       return
     }
+    if (!result) {
+      setError('Run Preview schedule before applying.')
+      return
+    }
     const confirmed = window.confirm(
       'Apply this schedule? Assigned mentors will be added to practices and unassigned selections will move to available.'
     )
@@ -203,21 +207,64 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
     setPhase('apply')
     setError('')
     try {
-      const data = await scheduleMentors(practiceIds, { apply: true })
+      // Strip any prior apply metadata so the server applies this preview only.
+      const { applied: _ignored, ...previewSchedule } = result
+      const data = await scheduleMentors(practiceIds, {
+        apply: true,
+        schedule: previewSchedule,
+      })
       setResult(data)
       setApplied(true)
       const assigned = data.applied?.assigned ?? 0
       const available = data.applied?.available ?? 0
-      const issueCount = data.applied?.errors?.length ?? 0
-      window.alert(
-        `Schedule applied: ${assigned} assignment${assigned === 1 ? '' : 's'} and ${available} available move${available === 1 ? '' : 's'}.` +
-          (issueCount
-            ? ` ${issueCount} issue(s) — check practice pages.`
-            : '')
-      )
-      if (onApplied) {
-        await onApplied(data)
+      const errors = data.applied?.errors ?? []
+      const issueCount = errors.length
+
+      try {
+        if (onApplied) {
+          await onApplied(data)
+        }
+      } catch (refreshErr) {
+        window.alert(
+          `Schedule changes were saved, but refreshing the practice list failed: ${
+            refreshErr instanceof Error ? refreshErr.message : String(refreshErr)
+          }`
+        )
       }
+
+      if (assigned === 0 && available === 0 && issueCount === 0) {
+        window.alert(
+          'Nothing to apply — this preview has no assignments or available moves.'
+        )
+        setError('Nothing to apply for this preview.')
+        return
+      }
+
+      if (issueCount > 0) {
+        const detailLines = errors.slice(0, 12).map((err) => {
+          const mentor = err.mentor_id ?? '?'
+          const practice = err.practice_id ?? '?'
+          const action = err.action ?? 'update'
+          const detail = err.detail || 'Unknown error'
+          return `• Mentor ${mentor} / practice ${practice} (${action}): ${detail}`
+        })
+        const more =
+          issueCount > detailLines.length
+            ? `\n…and ${issueCount - detailLines.length} more.`
+            : ''
+        window.alert(
+          `Schedule partially applied: ${assigned} assignment${assigned === 1 ? '' : 's'} and ${available} available move${available === 1 ? '' : 's'}, but ${issueCount} issue${issueCount === 1 ? '' : 's'} occurred.\n\n` +
+            `${detailLines.join('\n')}${more}\n\nThe modal will stay open so you can review.`
+        )
+        setError(
+          `Applied with ${issueCount} issue${issueCount === 1 ? '' : 's'}. See details below.`
+        )
+        return
+      }
+
+      window.alert(
+        `Schedule applied: ${assigned} assignment${assigned === 1 ? '' : 's'} and ${available} available move${available === 1 ? '' : 's'}.`
+      )
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -234,7 +281,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
 
   async function handleDownloadExcel() {
     if (!result) return
-    const stamp = new Date().toISOString().slice(0, 10)
+    const stamp = formatDateStamp()
     setExporting(true)
     setError('')
     try {
@@ -446,13 +493,38 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
             ) : null}
 
             {applied && result.applied ? (
-              <p className="schedule-applied-note" role="status">
-                Applied {result.applied.assigned ?? 0} assignments and{' '}
-                {result.applied.available ?? 0} available moves.
-                {(result.applied.errors ?? []).length > 0
-                  ? ` ${result.applied.errors.length} issue(s) — check practice pages.`
-                  : ''}
-              </p>
+              <div
+                className={`schedule-applied-note${
+                  (result.applied.errors ?? []).length
+                    ? ' schedule-applied-note-partial'
+                    : ''
+                }`}
+                role="status"
+              >
+                <p>
+                  Applied {result.applied.assigned ?? 0} assignments and{' '}
+                  {result.applied.available ?? 0} available moves.
+                </p>
+                {(result.applied.errors ?? []).length > 0 ? (
+                  <>
+                    <p className="schedule-applied-errors-heading">
+                      {result.applied.errors.length} issue
+                      {result.applied.errors.length === 1 ? '' : 's'}:
+                    </p>
+                    <ul className="schedule-applied-errors">
+                      {result.applied.errors.map((err, index) => (
+                        <li
+                          key={`${err.mentor_id}-${err.practice_id}-${err.action}-${index}`}
+                        >
+                          Mentor {err.mentor_id ?? '?'} / practice{' '}
+                          {err.practice_id ?? '?'} ({err.action ?? 'update'}):{' '}
+                          {err.detail || 'Unknown error'}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+              </div>
             ) : null}
           </section>
         ) : null}

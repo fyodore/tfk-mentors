@@ -96,7 +96,12 @@ from .serializers import (
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
-from .mentor_scheduling import apply_mentor_schedule, compute_mentor_schedule
+from .mentor_scheduling import (
+    apply_mentor_schedule,
+    compute_mentor_schedule,
+    normalize_and_validate_schedule_payload,
+    schedules_match_for_apply,
+)
 from .practice_reminder import (
     refresh_practice_reminder_templates_for_season,
     send_practice_reminder,
@@ -1262,10 +1267,43 @@ class MentorScheduleView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        schedule = compute_mentor_schedule(practices)
         apply_changes = bool(request.data.get("apply"))
+        schedule_payload = request.data.get("schedule")
+
         if apply_changes:
+            if schedule_payload is None:
+                return Response(
+                    {
+                        "detail": (
+                            "schedule is required when apply is true "
+                            "(use the Preview schedule result)."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            schedule_error, schedule = normalize_and_validate_schedule_payload(
+                schedule_payload, practice_ids
+            )
+            if schedule_error:
+                return Response(
+                    {"detail": schedule_error},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            fresh = compute_mentor_schedule(practices)
+            if not schedules_match_for_apply(schedule, fresh):
+                return Response(
+                    {
+                        "detail": (
+                            "Schedule is out of date with current mentor replies. "
+                            "Run Preview schedule again, then apply."
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
             schedule["applied"] = apply_mentor_schedule(practices, schedule)
+            return Response(schedule)
+
+        schedule = compute_mentor_schedule(practices)
         return Response(schedule)
 
 
