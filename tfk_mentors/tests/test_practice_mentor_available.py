@@ -205,3 +205,51 @@ class PracticeMentorAvailableTests(TestCase):
         self.mentor.refresh_from_db()
         self.assertEqual(self.mentor.pace, "11-12")
 
+    def test_update_pace_does_not_change_other_practices(self):
+        other_practice = Practice.objects.create(
+            date=timezone.now() + timedelta(days=14),
+            season=self.season,
+            full_practice=True,
+        )
+        scheduled = ScheduledEmail.objects.get(practices=self.practice)
+        scheduled.practices.add(other_practice)
+        ScheduledEmailMentorPracticeReply.objects.create(
+            mentor_token=self.token,
+            mentor=self.mentor,
+            practice=other_practice,
+            attendance=PracticeAttendanceReply.ATTENDING,
+            pace="11-12",
+        )
+        other_practice.sync_mentor_assignments_from_replies()
+
+        response = self.client.patch(
+            f"/api/practice/{self.practice.id}/mentor-replies/",
+            {"mentor": self.mentor.id, "pace": "8-9"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pace"], "8-9")
+
+        self.reply.refresh_from_db()
+        self.assertEqual(self.reply.pace, "8-9")
+        other_reply = ScheduledEmailMentorPracticeReply.objects.get(
+            mentor=self.mentor,
+            practice=other_practice,
+        )
+        self.assertEqual(other_reply.pace, "11-12")
+
+        other_assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=other_practice,
+        )
+        self.assertEqual(other_assignment.pace, "11-12")
+
+        this_assignment = MentorPracticeAssignment.objects.get(
+            mentor=self.mentor,
+            practice=self.practice,
+        )
+        self.assertEqual(this_assignment.pace, "8-9")
+
+        self.mentor.refresh_from_db()
+        self.assertEqual(self.mentor.pace, "11-12")
+

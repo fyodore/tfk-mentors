@@ -503,20 +503,21 @@ class Practice(TimeStampedModel):
         return assignment
 
     def update_mentor_pace(self, mentor, pace):
-        """Update a mentor's pace for this practice only."""
+        """Update a mentor's pace for this practice only.
+
+        Does not change the mentor profile pace or any other practice.
+        """
+        from django.utils import timezone
+
         pace = normalize_pace(pace or "")
         if not pace or pace not in {choice.value for choice in PaceTypes}:
             raise ValidationError("Invalid pace choice.")
 
-        latest = self._latest_reply_by_mentor().get(mentor.id)
-        if (
-            latest is not None
-            and latest.attendance != PracticeAttendanceReply.NOT_ATTENDING
-        ):
-            latest.pace = pace
-            latest.save(update_fields=["pace", "updated_at"])
-            self.sync_mentor_assignments_from_replies()
-            return latest
+        reply_qs = ScheduledEmailMentorPracticeReply.objects.filter(
+            practice=self,
+            mentor=mentor,
+        ).exclude(attendance=PracticeAttendanceReply.NOT_ATTENDING)
+        updated_replies = reply_qs.update(pace=pace, updated_at=timezone.now())
 
         assignment = MentorPracticeAssignment.objects.filter(
             practice=self,
@@ -525,6 +526,14 @@ class Practice(TimeStampedModel):
         if assignment is not None:
             assignment.pace = pace
             assignment.save(update_fields=["pace", "updated_at"])
+
+        if updated_replies:
+            self.sync_mentor_assignments_from_replies()
+            latest = self._latest_reply_by_mentor().get(mentor.id)
+            if latest is not None:
+                return latest
+
+        if assignment is not None:
             return assignment
 
         raise ValidationError("Mentor is not assigned to this practice.")
