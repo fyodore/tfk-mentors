@@ -544,6 +544,14 @@ class Practice(TimeStampedModel):
         if not pace or pace not in {choice.value for choice in PaceTypes}:
             raise ValidationError("Invalid pace choice.")
 
+        # Clearing found-replacement lets a previously swapped-out mentor rejoin
+        # the attending roster used by practice reminders and assignments.
+        MentorPracticeShowUp.objects.filter(
+            practice=self,
+            mentor=mentor,
+            show_up=ShowUpStatus.FOUND_REPLACEMENT,
+        ).delete()
+
         latest = self._latest_reply_by_mentor().get(mentor.id)
         if latest is not None and latest.attendance == PracticeAttendanceReply.AVAILABLE:
             latest.attendance = PracticeAttendanceReply.ATTENDING
@@ -598,12 +606,15 @@ class Practice(TimeStampedModel):
 
     def remove_mentor(self, mentor_id):
         """Remove a mentor from this practice."""
+        from django.utils import timezone
+
         ScheduledEmailMentorPracticeReply.objects.filter(
             practice=self,
             mentor_id=mentor_id,
         ).update(
             attendance=PracticeAttendanceReply.NOT_ATTENDING,
             pace="",
+            updated_at=timezone.now(),
         )
         MentorPracticeAssignment.objects.filter(
             practice=self,
@@ -654,12 +665,27 @@ class Practice(TimeStampedModel):
         self.remove_mentor(outgoing.id)
         return self.mark_mentor_attending(incoming, pace)
 
+    def _found_replacement_mentor_ids(self):
+        """Mentors recorded as swapped out (found replacement) for this practice."""
+        return set(
+            self.mentor_show_ups.filter(
+                show_up=ShowUpStatus.FOUND_REPLACEMENT,
+            ).values_list("mentor_id", flat=True)
+        )
+
     def attending_mentor_roster_entries(self):
-        """All attending mentors from email replies and direct assignments."""
+        """All attending mentors from email replies and direct assignments.
+
+        Mentors marked found-replacement (swapped out) are excluded so practice
+        reminders and rosters list the replacement mentor, not the outgoing one.
+        """
         entries = []
         seen = set()
+        swapped_out_ids = self._found_replacement_mentor_ids()
         latest_by_mentor = self._latest_reply_by_mentor()
         for reply in self.latest_attending_mentor_replies():
+            if reply.mentor_id in swapped_out_ids:
+                continue
             mentor = reply.mentor
             pace = normalize_pace(reply.pace or mentor.pace or "")
             entries.append((mentor, pace, reply, None))
@@ -670,6 +696,8 @@ class Practice(TimeStampedModel):
         ).select_related("mentor")
         for assignment in assignments:
             if assignment.mentor_id in seen:
+                continue
+            if assignment.mentor_id in swapped_out_ids:
                 continue
             if assignment.is_available:
                 continue
@@ -695,7 +723,12 @@ class Practice(TimeStampedModel):
 
     def sync_mentor_assignments_from_replies(self):
         """Align reply-based assignments; preserve direct admin assignments."""
-        attending_replies = self.latest_attending_mentor_replies()
+        swapped_out_ids = self._found_replacement_mentor_ids()
+        attending_replies = [
+            reply
+            for reply in self.latest_attending_mentor_replies()
+            if reply.mentor_id not in swapped_out_ids
+        ]
         attending_mentor_ids = {reply.mentor_id for reply in attending_replies}
         mentors_with_any_reply = set(
             self.mentor_email_replies.values_list("mentor_id", flat=True)
@@ -707,6 +740,12 @@ class Practice(TimeStampedModel):
         ).exclude(
             mentor_id__in=attending_mentor_ids,
         ).delete()
+        # Never keep assignments for mentors recorded as swapped out.
+        if swapped_out_ids:
+            MentorPracticeAssignment.objects.filter(
+                practice=self,
+                mentor_id__in=swapped_out_ids,
+            ).delete()
 
         for reply in attending_replies:
             pace = normalize_pace(reply.pace or reply.mentor.pace or "")
@@ -720,7 +759,9 @@ class Practice(TimeStampedModel):
             MentorPracticeAssignment.objects.filter(
                 practice=self,
                 is_available=False,
-            ).values_list("mentor_id", flat=True)
+            )
+            .exclude(mentor_id__in=swapped_out_ids)
+            .values_list("mentor_id", flat=True)
         )
         self.mentors.set(assignment_mentor_ids)
 

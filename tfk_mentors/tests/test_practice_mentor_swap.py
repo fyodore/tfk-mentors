@@ -14,12 +14,24 @@ from tfk_mentors.models import (
     MentorTypes,
     PaceTypes,
     Practice,
+    PracticeAttendanceReply,
     PracticeReminderEmail,
     PracticeReminderKind,
+    PracticeReminderRecipientKind,
+    ScheduledEmail,
+    ScheduledEmailMentorPracticeReply,
+    ScheduledEmailMentorToken,
     Season,
     ShowUpStatus,
 )
-from tfk_mentors.practice_reminder import sync_practice_reminders_for_season
+from tfk_mentors.practice_reminder import (
+    ReminderRecipient,
+    build_practice_section,
+    collect_recipients,
+    mentor_schedule_notice,
+    render_reminder_for_recipient,
+    sync_practice_reminders_for_season,
+)
 
 
 class PracticeMentorSwapTests(TestCase):
@@ -356,6 +368,146 @@ class PracticeMentorSwapTests(TestCase):
                 for message in mail.outbox
             )
         )
+
+    def test_practice_reminder_lists_swapped_in_mentor_not_outgoing(self):
+        """Reminder roster and schedule notice follow the post-swap assignment."""
+        earlier = Practice.objects.create(
+            date=timezone.now() + timedelta(days=1),
+            season=self.season,
+            full_practice=True,
+            description="Earlier practice",
+        )
+        self.practice.description = "Target practice"
+        self.practice.save(update_fields=["description", "updated_at"])
+
+        response = self.client.post(
+            f"/api/practice/{self.practice.id}/swap-mentor/",
+            {
+                "outgoing_mentor": self.outgoing.id,
+                "incoming_mentor": self.incoming.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        section = build_practice_section(self.practice)
+        self.assertIn(self.incoming.email, section)
+        self.assertNotIn(self.outgoing.email, section)
+
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(
+            anchor_practice=earlier,
+            kind=PracticeReminderKind.AFTER_PRACTICE,
+        )
+        self.assertEqual(reminder.practice_one_id, self.practice.id)
+
+        outgoing_recipient = ReminderRecipient(
+            email=self.outgoing.email,
+            first_name=self.outgoing.first_name,
+            last_name=self.outgoing.last_name,
+            kind=PracticeReminderRecipientKind.MENTOR,
+            mentor_id=self.outgoing.id,
+        )
+        incoming_recipient = ReminderRecipient(
+            email=self.incoming.email,
+            first_name=self.incoming.first_name,
+            last_name=self.incoming.last_name,
+            kind=PracticeReminderRecipientKind.MENTOR,
+            mentor_id=self.incoming.id,
+        )
+        self.assertEqual(mentor_schedule_notice(outgoing_recipient, self.practice), "")
+        self.assertIn(
+            "You are scheduled to mentor:",
+            mentor_schedule_notice(incoming_recipient, self.practice),
+        )
+
+        _, outgoing_body = render_reminder_for_recipient(reminder, outgoing_recipient)
+        _, incoming_body = render_reminder_for_recipient(reminder, incoming_recipient)
+        self.assertNotIn("You are scheduled to mentor:", outgoing_body)
+        self.assertIn("You are scheduled to mentor:", incoming_body)
+        self.assertIn(self.incoming.email, incoming_body)
+        self.assertNotIn(self.outgoing.email, incoming_body)
+
+    def test_stale_attending_reply_after_swap_excluded_from_reminder(self):
+        """Found-replacement wins over a leftover attending reply for reminders."""
+        scheduled = ScheduledEmail.objects.create(
+            scheduled_send_at=timezone.now(),
+            body_text="Hello",
+            recipient_season=self.season,
+            task_completed_at=timezone.now(),
+        )
+        scheduled.practices.add(self.practice)
+        token = ScheduledEmailMentorToken.objects.create(
+            scheduled_email=scheduled,
+            mentor=self.outgoing,
+            included_in_send=True,
+        )
+        ScheduledEmailMentorPracticeReply.objects.create(
+            mentor_token=token,
+            mentor=self.outgoing,
+            practice=self.practice,
+            attendance=PracticeAttendanceReply.ATTENDING,
+            pace=self.outgoing.pace,
+        )
+        self.practice.sync_mentor_assignments_from_replies()
+
+        self.practice.swap_assigned_mentor(self.outgoing, self.incoming)
+
+        # Simulate incomplete cleanup: attending reply still present.
+        ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor=self.outgoing,
+            practice=self.practice,
+        ).update(attendance=PracticeAttendanceReply.ATTENDING, pace=self.outgoing.pace)
+        self.practice.sync_mentor_assignments_from_replies()
+
+        roster_ids = {
+            mentor.id
+            for mentor, _pace, _reply, _assignment in self.practice.attending_mentor_roster_entries()
+        }
+        self.assertIn(self.incoming.id, roster_ids)
+        self.assertNotIn(self.outgoing.id, roster_ids)
+
+        section = build_practice_section(self.practice)
+        self.assertIn(self.incoming.email, section)
+        self.assertNotIn(self.outgoing.email, section)
+
+        remote_out = Mentor.objects.create(
+            first_name="Remote",
+            last_name="Out",
+            email="remote-out@example.com",
+            cell_phone="555-0198",
+            type=MentorTypes.REMOTE,
+            pace=PaceTypes.NINE.value,
+        )
+        remote_in = Mentor.objects.create(
+            first_name="Remote",
+            last_name="In",
+            email="remote-in@example.com",
+            cell_phone="555-0199",
+            type=MentorTypes.REMOTE,
+            pace=PaceTypes.NINE.value,
+        )
+        remote_out.seasons.add(self.season)
+        remote_in.seasons.add(self.season)
+        other = Practice.objects.create(
+            date=timezone.now() + timedelta(days=10),
+            season=self.season,
+            full_practice=True,
+        )
+        MentorPracticeAssignment.objects.create(
+            mentor=remote_out,
+            practice=other,
+            pace=remote_out.pace,
+            is_available=False,
+        )
+        other.mentors.add(remote_out)
+        other.swap_assigned_mentor(remote_out, remote_in)
+
+        sync_practice_reminders_for_season(self.season)
+        reminder = PracticeReminderEmail.objects.get(practice_one=other)
+        recipient_emails = {item.email for item in collect_recipients(reminder)}
+        self.assertIn(remote_in.email, recipient_emails)
+        self.assertNotIn(remote_out.email, recipient_emails)
 
     def test_swap_skips_all_emails_after_practice_has_started(self):
         coach = Coach.objects.create(
