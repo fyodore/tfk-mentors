@@ -79,6 +79,33 @@
   }
 }
 
+.success {
+  margin: 0;
+  color: #166534;
+  font-weight: 600;
+}
+
+.mentor-cell-phone-panel {
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.mentor-cell-phone-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cell-phone-request-recipients {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.cell-phone-request-panel .email-section + .email-section {
+  margin-top: 1.5rem;
+}
+
 .nav-back {
   color: var(--text);
   text-decoration: none;
@@ -379,6 +406,32 @@
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.practices-panel {
+  max-width: 56rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.practices-show-mentors-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.practices-show-mentors-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.practices-show-all-toggle {
+  font-weight: 600;
 }
 
 .practices-toolbar h2 {
@@ -798,11 +851,56 @@
   border: 1px solid var(--border);
 }
 
+.practices-page-list .practices-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 12.5rem 10.5rem;
+  align-items: start;
+  column-gap: 1rem;
+  row-gap: 0.65rem;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
 .practice-row-main {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+}
+
+.practice-row-visibility {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.practice-show-to-mentors-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.practice-show-to-mentors-toggle input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.practice-show-to-mentors-status {
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.practice-show-to-mentors-status.is-shown {
+  color: #166534;
+  font-weight: 600;
 }
 
 .practice-date {
@@ -830,8 +928,155 @@
 
 .practice-row-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  width: 10.5rem;
+  flex-shrink: 0;
+}
+
+.practices-page-list .practice-row-actions {
+  width: 100%;
+}
+
+@media (max-width: 52rem) {
+  .practices-page-list .practices-list-row {
+    grid-template-columns: minmax(0, 1fr) minmax(10.5rem, 12rem);
+    grid-template-areas:
+      'main actions'
+      'visibility visibility';
+  }
+
+  .practices-page-list .practice-row-main {
+    grid-area: main;
+  }
+
+  .practices-page-list .practice-row-visibility {
+    grid-area: visibility;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem 0.75rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .practices-page-list .practice-row-actions {
+    grid-area: actions;
+    justify-content: flex-end;
+    width: auto;
+    min-width: 9.5rem;
+  }
+}
+
+@media (max-width: 36rem) {
+  .app {
+    padding: 1.25rem 0.85rem 2rem;
+  }
+
+  .practices-panel {
+    padding: 1rem 0.85rem;
+  }
+
+  .practices-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .practices-toolbar-actions {
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .practices-schedule-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .practices-show-mentors-toolbar {
+    padding: 0.75rem;
+  }
+
+  .practices-show-all-toggle {
+    align-items: flex-start;
+    gap: 0.55rem;
+    line-height: 1.35;
+  }
+
+  .practices-show-all-toggle input {
+    margin-top: 0.2rem;
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .practices-page-list {
+    gap: 0.85rem;
+  }
+
+  .practices-page-list .practices-list-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'main'
+      'visibility'
+      'actions';
+    padding: 0.85rem;
+    row-gap: 0.75rem;
+  }
+
+  .practices-page-list .practice-row-visibility {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    padding-top: 0.65rem;
+  }
+
+  .practices-page-list .practice-show-to-mentors-toggle {
+    width: 100%;
+    padding: 0.15rem 0;
+    font-size: 0.95rem;
+    gap: 0.55rem;
+  }
+
+  .practices-page-list .practice-show-to-mentors-toggle input {
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.2rem;
+  }
+
+  .practices-page-list .practice-row-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    width: 100%;
+    min-width: 0;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border);
+    justify-content: stretch;
+  }
+
+  .practices-page-list .practice-row-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    padding: 0.6rem 0.35rem;
+    min-height: 2.65rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+
+  .practices-page-list .practice-row-actions .btn-text-danger {
+    color: #b91c1c;
+    border-color: color-mix(in srgb, #b91c1c 35%, var(--border));
+  }
 }
 
 .practice-mentor-pace-label {

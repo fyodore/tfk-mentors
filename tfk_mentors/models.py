@@ -1679,3 +1679,64 @@ class ScheduledEmailMentorPracticeReply(TimeStampedModel):
         if self.pace:
             self.pace = normalize_pace(self.pace)
         super().save(*args, **kwargs)
+
+
+class MentorCellPhoneRequestSend(TimeStampedModel):
+    """One batch of cell-phone request emails to assigned mentors missing a number."""
+
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mentor_cell_phone_request_sends",
+    )
+    sent_at = models.DateTimeField(db_index=True)
+    recipients_emailed_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-sent_at", "-id"]
+
+    def __str__(self):
+        return f"Cell phone request send {self.id} ({self.recipients_emailed_count})"
+
+
+class MentorCellPhoneRequestToken(TimeStampedModel):
+    """One-time personal link from a cell-phone request email for one mentor."""
+
+    send = models.ForeignKey(
+        MentorCellPhoneRequestSend,
+        on_delete=models.CASCADE,
+        related_name="tokens",
+    )
+    mentor = models.ForeignKey(
+        Mentor,
+        on_delete=models.CASCADE,
+        related_name="cell_phone_request_tokens",
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["send", "mentor"],
+                name="unique_cell_phone_request_send_mentor",
+            )
+        ]
+
+    def __str__(self):
+        return f"Cell phone token {self.token} → mentor {self.mentor_id}"
+
+    @property
+    def is_usable(self):
+        return self.used_at is None and self.sent_at is not None
+
+    def absolute_url(self):
+        base = getattr(settings, "FRONTEND_PUBLIC_URL", "http://localhost:5173").rstrip(
+            "/"
+        )
+        return f"{base}/mentor-cell-phone?token={self.token}"
+

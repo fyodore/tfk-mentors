@@ -821,6 +821,92 @@ export async function sendPracticeReminderEmailNow(id) {
   return res.json()
 }
 
+const MENTOR_CELL_PHONE_REQUEST = apiPath('/api/mentor-cell-phone-request/')
+const MENTOR_CELL_PHONE_UPDATE = apiPath('/api/mentor-cell-phone-update/')
+
+/** @param {number|string|null|undefined} [seasonId] */
+export async function fetchMentorCellPhoneRequests(seasonId) {
+  const qs =
+    seasonId !== undefined && seasonId !== null && seasonId !== ''
+      ? `?season=${encodeURIComponent(String(seasonId))}`
+      : ''
+  const res = await fetch(`${MENTOR_CELL_PHONE_REQUEST}${qs}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/**
+ * @param {{ season?: number|string|null, dry_run?: boolean }} [body]
+ */
+export async function sendMentorCellPhoneRequests(body = {}) {
+  const payload = {}
+  if (body.season !== undefined && body.season !== null && body.season !== '') {
+    payload.season = Number(body.season)
+  }
+  if (body.dry_run) payload.dry_run = true
+  const res = await fetch(`${MENTOR_CELL_PHONE_REQUEST}send/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+/** @param {string} token */
+export async function fetchMentorCellPhoneUpdate(token) {
+  const res = await fetch(
+    `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
+    { credentials: 'include' }
+  )
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    let body = null
+    try {
+      body = await res.json()
+      if (body?.detail) detail = String(body.detail)
+    } catch {
+      /* ignore */
+    }
+    const err = new Error(detail)
+    err.status = res.status
+    err.body = body
+    throw err
+  }
+  return res.json()
+}
+
+/**
+ * @param {string} token
+ * @param {{ cell_phone: string }} body
+ */
+export async function putMentorCellPhoneUpdate(token, body) {
+  const res = await fetch(
+    `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
+    {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...csrfHeaders(),
+      },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) {
+    const err = new Error(await parseError(res))
+    err.status = res.status
+    throw err
+  }
+  return res.json()
+}
+
 const AUTH_SESSION = apiPath('/api/auth/session/')
 
 /** Bootstrap CSRF cookie and report whether the admin session is active. */

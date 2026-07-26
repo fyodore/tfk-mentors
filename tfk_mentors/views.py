@@ -20,6 +20,8 @@ from .models import (
     Coach,
     CoachPracticeAssignment,
     Mentor,
+    MentorCellPhoneRequestSend,
+    MentorCellPhoneRequestToken,
     MentorPracticeAssignment,
     MentorPracticeShowUp,
     MentorTypes,
@@ -2037,3 +2039,220 @@ class PublicPracticeMentorRosterView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(build_public_practice_mentor_roster(practice))
+
+
+class MentorCellPhoneRequestViewSet(viewsets.ViewSet):
+    """Admin: list missing cell phones and send request emails."""
+
+    def list(self, request):
+        from .cell_phone_request import (
+            mentors_assigned_without_cell_phone,
+            serialize_missing_mentor,
+        )
+
+        season_raw = request.query_params.get("season")
+        season_id = None
+        if season_raw not in (None, ""):
+            try:
+                season_id = int(season_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not Season.objects.filter(pk=season_id).exists():
+                return Response(
+                    {"detail": "Season not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        mentors = mentors_assigned_without_cell_phone(season_id=season_id)
+        sends = (
+            MentorCellPhoneRequestSend.objects.select_related("season")
+            .prefetch_related("tokens__mentor")
+            .order_by("-sent_at", "-id")[:50]
+        )
+        send_rows = []
+        for batch in sends:
+            tokens = list(batch.tokens.all())
+            send_rows.append(
+                {
+                    "id": batch.id,
+                    "sent_at": batch.sent_at.isoformat(),
+                    "recipients_emailed_count": batch.recipients_emailed_count,
+                    "season_id": batch.season_id,
+                    "season_year": batch.season.year if batch.season_id else None,
+                    "recipients": [
+                        {
+                            "mentor_id": token.mentor_id,
+                            "first_name": token.mentor.first_name,
+                            "last_name": token.mentor.last_name,
+                            "email": token.mentor.email,
+                            "used_at": (
+                                token.used_at.isoformat() if token.used_at else None
+                            ),
+                        }
+                        for token in tokens
+                    ],
+                }
+            )
+        return Response(
+            {
+                "missing_mentors": [
+                    serialize_missing_mentor(mentor) for mentor in mentors
+                ],
+                "sends": send_rows,
+            }
+        )
+
+    @action(detail=False, methods=["post"], url_path="send")
+    def send(self, request):
+        from .cell_phone_request import send_cell_phone_requests
+
+        season_raw = request.data.get("season")
+        season_id = None
+        if season_raw not in (None, ""):
+            try:
+                season_id = int(season_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        dry_run = bool(request.data.get("dry_run"))
+        try:
+            result = send_cell_phone_requests(season_id=season_id, dry_run=dry_run)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class MentorCellPhoneUpdateView(APIView):
+    """Public one-time form for a mentor to submit their cell phone."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _get_token(self, token):
+        try:
+            return MentorCellPhoneRequestToken.objects.select_related("mentor").get(
+                token=token
+            )
+        except MentorCellPhoneRequestToken.DoesNotExist:
+            return None
+
+    def get(self, request, token=None):
+        raw = token or request.query_params.get("token")
+        if not raw:
+            return Response(
+                {"detail": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            token_uuid = uuid.UUID(str(raw))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "Invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        row = self._get_token(token_uuid)
+        if row is None:
+            return Response(
+                {"detail": "This link is invalid or has expired."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not row.is_usable:
+            return Response(
+                {
+                    "detail": "This link is no longer valid.",
+                    "already_used": True,
+                },
+                status=status.HTTP_410_GONE,
+            )
+        mentor = row.mentor
+        if (mentor.cell_phone or "").strip():
+            return Response(
+                {
+                    "detail": "We already have a cell phone number for you.",
+                    "already_complete": True,
+                    "first_name": mentor.first_name,
+                },
+                status=status.HTTP_410_GONE,
+            )
+        return Response(
+            {
+                "token": str(row.token),
+                "first_name": mentor.first_name,
+                "last_name": mentor.last_name,
+                "email": mentor.email,
+            }
+        )
+
+    def put(self, request, token=None):
+        raw = token or request.query_params.get("token") or request.data.get("token")
+        if not raw:
+            return Response(
+                {"detail": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            token_uuid = uuid.UUID(str(raw))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "Invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        row = self._get_token(token_uuid)
+        if row is None:
+            return Response(
+                {"detail": "This link is invalid or has expired."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not row.is_usable:
+            return Response(
+                {"detail": "This link is no longer valid."},
+                status=status.HTTP_410_GONE,
+            )
+
+        cell_phone = str(request.data.get("cell_phone") or "").strip()
+        if not cell_phone:
+            return Response(
+                {"detail": "Please enter your cell phone number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(cell_phone) > 20:
+            return Response(
+                {"detail": "Cell phone must be 20 characters or fewer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from django.utils import timezone
+
+        with transaction.atomic():
+            locked = (
+                MentorCellPhoneRequestToken.objects.select_for_update()
+                .select_related("mentor")
+                .filter(pk=row.pk)
+                .first()
+            )
+            if locked is None or not locked.is_usable:
+                return Response(
+                    {"detail": "This link is no longer valid."},
+                    status=status.HTTP_410_GONE,
+                )
+            mentor = locked.mentor
+            mentor.cell_phone = cell_phone
+            mentor.save(update_fields=["cell_phone", "updated_at"])
+            locked.used_at = timezone.now()
+            locked.save(update_fields=["used_at", "updated_at"])
+
+        return Response(
+            {
+                "detail": (
+                    f"Thank you{', ' + mentor.first_name if mentor.first_name else ''}! "
+                    "We have saved your cell phone number."
+                ),
+                "completed": True,
+            }
+        )

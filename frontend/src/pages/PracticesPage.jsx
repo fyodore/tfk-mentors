@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -90,6 +90,9 @@ export default function PracticesPage() {
   const [form, setForm] = useState(() => emptyPracticeForm(''))
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showToMentorsBusyIds, setShowToMentorsBusyIds] = useState(() => new Set())
+  const [showToMentorsBulkBusy, setShowToMentorsBulkBusy] = useState(false)
+  const showAllUpcomingRef = useRef(null)
 
   const sortedSeasons = useMemo(
     () => sortSeasonsByYearDesc(seasons),
@@ -278,9 +281,87 @@ export default function PracticesPage() {
     }
   }
 
+  const upcomingShowToMentorsState = useMemo(() => {
+    if (upcomingPractices.length === 0) {
+      return { all: false, some: false, none: true }
+    }
+    const shown = upcomingPractices.filter((p) => p.show_to_mentors).length
+    return {
+      all: shown === upcomingPractices.length,
+      some: shown > 0 && shown < upcomingPractices.length,
+      none: shown === 0,
+    }
+  }, [upcomingPractices])
+
+  useEffect(() => {
+    const el = showAllUpcomingRef.current
+    if (!el) return
+    el.indeterminate = upcomingShowToMentorsState.some
+  }, [upcomingShowToMentorsState.some])
+
+  async function setPracticeShowToMentors(practice, showToMentors) {
+    if (Boolean(practice.show_to_mentors) === showToMentors) return practice
+    const updated = await patchPractice(practice.id, {
+      show_to_mentors: showToMentors,
+    })
+    setPractices((prev) =>
+      prev.map((row) => (row.id === practice.id ? { ...row, ...updated } : row))
+    )
+    return updated
+  }
+
+  async function togglePracticeShowToMentors(practice) {
+    const next = !Boolean(practice.show_to_mentors)
+    setShowToMentorsBusyIds((prev) => new Set(prev).add(practice.id))
+    setLoadError(null)
+    try {
+      await setPracticeShowToMentors(practice, next)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setShowToMentorsBusyIds((prev) => {
+        const nextIds = new Set(prev)
+        nextIds.delete(practice.id)
+        return nextIds
+      })
+    }
+  }
+
+  async function setUpcomingShowToMentors(showToMentors) {
+    const targets = upcomingPractices.filter(
+      (p) => Boolean(p.show_to_mentors) !== showToMentors
+    )
+    if (targets.length === 0) return
+    setShowToMentorsBulkBusy(true)
+    setLoadError(null)
+    try {
+      const results = await Promise.all(
+        targets.map((practice) =>
+          patchPractice(practice.id, { show_to_mentors: showToMentors })
+        )
+      )
+      const byId = new Map(results.map((row) => [row.id, row]))
+      setPractices((prev) =>
+        prev.map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id) } : row))
+      )
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
+      try {
+        const refreshed = await fetchPractices()
+        setPractices(refreshed)
+      } catch {
+        /* keep local state if refresh also fails */
+      }
+    } finally {
+      setShowToMentorsBulkBusy(false)
+    }
+  }
+
   function renderPracticeRow(p) {
+    const showBusy =
+      showToMentorsBusyIds.has(p.id) || showToMentorsBulkBusy
     return (
-      <li key={p.id} className="practice-row">
+      <li key={p.id} className="practice-row practices-list-row">
         <div className="practice-row-main">
           <span className="practice-date">
             {p.date ? formatDateTime(p.date) : '—'}
@@ -304,6 +385,26 @@ export default function PracticesPage() {
           {p.start_location?.trim() ? (
             <span className="muted">Start: {p.start_location.trim()}</span>
           ) : null}
+        </div>
+        <div className="practice-row-visibility">
+          <label className="practice-show-to-mentors-toggle">
+            <input
+              type="checkbox"
+              checked={Boolean(p.show_to_mentors)}
+              disabled={showBusy || busy}
+              onChange={() => togglePracticeShowToMentors(p)}
+            />
+            <span>Show to mentors</span>
+          </label>
+          <span
+            className={
+              p.show_to_mentors
+                ? 'practice-show-to-mentors-status is-shown'
+                : 'practice-show-to-mentors-status muted'
+            }
+          >
+            {p.show_to_mentors ? 'Visible to mentors' : 'Hidden from mentors'}
+          </span>
         </div>
         <div className="practice-row-actions">
           <Link className="btn btn-text" to={`/practices/${p.id}`}>
@@ -416,7 +517,22 @@ export default function PracticesPage() {
 
         {!loading && !loadError && upcomingPractices.length > 0 && (
           <section className="practices-section" aria-label="Upcoming practices">
-            <ul className="practice-list">
+            <div className="practices-show-mentors-toolbar">
+              <label className="practice-show-to-mentors-toggle practices-show-all-toggle">
+                <input
+                  type="checkbox"
+                  ref={showAllUpcomingRef}
+                  checked={upcomingShowToMentorsState.all}
+                  disabled={showToMentorsBulkBusy || busy}
+                  onChange={(e) => setUpcomingShowToMentors(e.target.checked)}
+                />
+                <span>Show all upcoming to mentors</span>
+              </label>
+              <p className="muted practices-show-mentors-hint">
+                Check or uncheck individual practices below to override.
+              </p>
+            </div>
+            <ul className="practice-list practices-page-list">
               {upcomingPractices.map((p) => renderPracticeRow(p))}
             </ul>
           </section>
@@ -438,7 +554,7 @@ export default function PracticesPage() {
             <h3 id="past-practices-heading" className="practices-section-heading">
               Past practices
             </h3>
-            <ul className="practice-list">
+            <ul className="practice-list practices-page-list">
               {pastPractices.map((p) => renderPracticeRow(p))}
             </ul>
           </section>

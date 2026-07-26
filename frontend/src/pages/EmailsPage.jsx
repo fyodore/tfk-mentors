@@ -15,6 +15,7 @@ import {
 import { normalizePendingMentorRows, pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.jsx'
+import MentorCellPhoneRequestPanel from './MentorCellPhoneRequestPanel.jsx'
 import { Modal } from '../components/Modal.jsx'
 import {
   buildQuarterTimeOptions,
@@ -896,10 +897,21 @@ export default function EmailsPage() {
           >
             Practice Reminder
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`emails-tab${activeTab === 'missing-cell-phone' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'missing-cell-phone'}
+            onClick={() => setActiveTab('missing-cell-phone')}
+          >
+            Missing Cell Phone
+          </button>
         </div>
 
         {activeTab === 'practice-reminder' ? (
           <PracticeReminderEmailsPanel />
+        ) : activeTab === 'missing-cell-phone' ? (
+          <MentorCellPhoneRequestPanel />
         ) : (
           <>
         <p className="muted">

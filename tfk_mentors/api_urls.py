@@ -4,6 +4,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CoachViewSet,
     CoachPracticeAssignmentViewSet,
+    MentorCellPhoneRequestViewSet,
+    MentorCellPhoneUpdateView,
     MentorPracticeAssignmentViewSet,
     MentorScheduledEmailReplyView,
     MentorViewSet,
@@ -49,6 +51,11 @@ router.register(
 )
 router.register("requests", RequestsViewSet, basename="requests")
 router.register(
+    "mentor-cell-phone-request",
+    MentorCellPhoneRequestViewSet,
+    basename="mentor-cell-phone-request",
+)
+router.register(
     "scheduled-email",
     ScheduledEmailViewSet,
     basename="scheduled-email",
@@ -86,6 +93,16 @@ urlpatterns = [
         "mentor-email-reply/<uuid:token>/",
         MentorScheduledEmailReplyView.as_view(),
         name="mentor-email-reply",
+    ),
+    path(
+        "mentor-cell-phone-update/",
+        MentorCellPhoneUpdateView.as_view(),
+        name="mentor-cell-phone-update-query",
+    ),
+    path(
+        "mentor-cell-phone-update/<uuid:token>/",
+        MentorCellPhoneUpdateView.as_view(),
+        name="mentor-cell-phone-update",
     ),
     path(
         "practice/<int:pk>/mentor-replies/",
