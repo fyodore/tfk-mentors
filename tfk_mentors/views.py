@@ -466,9 +466,7 @@ class MentorViewSet(viewsets.ModelViewSet):
                     value = defaults[field]
                     if field == "pace":
                         if defaults["type"] == MentorTypes.REMOTE and not value:
-                            if mentor.pace:
-                                mentor.pace = ""
-                                changed = True
+                            # Keep existing pace when CSV omits pace for Remote.
                             continue
                         if csv_mentor_requires_cell_phone(defaults["type"]) and not value:
                             continue

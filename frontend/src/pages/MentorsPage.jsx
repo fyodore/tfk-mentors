@@ -394,10 +394,8 @@ export default function MentorsPage() {
           setForm((f) => ({
             ...f,
             type: nextType,
-            pace:
-              nextType === REMOTE_TYPE && f.type !== REMOTE_TYPE
-                ? ''
-                : f.pace || (nextType === REMOTE_TYPE ? '' : '8-9'),
+            // Keep existing pace when switching At Practice ↔ Remote.
+            pace: f.pace || (nextType === REMOTE_TYPE ? '' : '8-9'),
           }))
         }}
         required
