@@ -31,6 +31,24 @@ const AVAILABLE_CELL_FILL = {
   alignment: { horizontal: 'center' },
 }
 
+/** @param {number} count */
+function mentorPaceCountCellStyle(count) {
+  /** @type {string | null} */
+  let rgb = null
+  if (count <= 2) rgb = 'FF6B6B' // red
+  else if (count === 3) rgb = 'FFE066' // yellow
+  else if (count >= 4) rgb = '69DB7C' // green
+  if (!rgb) return null
+  return {
+    fill: {
+      patternType: 'solid',
+      fgColor: { rgb },
+    },
+    alignment: { horizontal: 'center' },
+    font: { bold: true },
+  }
+}
+
 const PACE_ORDER = {
   '8-9': 1,
   '9-10': 2,
@@ -241,6 +259,7 @@ async function downloadMentorNumberSummaryExcel(filename, practices, options = {
     { wch: 8 },
   ]
 
+  const paceStartCol = includeSeason ? 3 : 2
   const totalRowIndex = rows.length - 1
   for (let c = 0; c < header.length; c += 1) {
     const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
@@ -250,6 +269,19 @@ async function downloadMentorNumberSummaryExcel(filename, practices, options = {
     const totalAddr = XLSX.utils.encode_cell({ r: totalRowIndex, c })
     if (worksheet[totalAddr]) {
       worksheet[totalAddr].s = { font: { bold: true } }
+    }
+  }
+
+  // Color pace-count cells on practice rows (not header or totals).
+  for (let rowIndex = 1; rowIndex < totalRowIndex; rowIndex += 1) {
+    for (let paceIndex = 0; paceIndex < PACE_GROUPS.length; paceIndex += 1) {
+      const col = paceStartCol + paceIndex
+      const addr = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+      const cell = worksheet[addr]
+      if (!cell) continue
+      const count = Number(cell.v) || 0
+      const style = mentorPaceCountCellStyle(count)
+      if (style) cell.s = style
     }
   }
 
