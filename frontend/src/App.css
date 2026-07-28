@@ -1597,6 +1597,13 @@
   margin-bottom: 0.75rem;
 }
 
+.reports-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .reports-toolbar h2 {
   margin: 0;
 }

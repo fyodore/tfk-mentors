@@ -166,6 +166,98 @@ async function downloadExcel(filename, practices) {
 
 const PACE_GROUPS = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
 
+/**
+ * Excel summary: one row per practice with assigned mentor counts by pace.
+ * @param {string} filename
+ * @param {Array<{
+ *   date?: string,
+ *   nyrr_race?: string,
+ *   season_year?: number,
+ *   season?: number,
+ *   mentors?: Array<{ pace?: string }>,
+ *   mentor_pace_counts?: Array<{ pace?: string, count?: number }>
+ * }>} practices
+ * @param {{ includeSeasonColumn?: boolean }} [options]
+ */
+async function downloadMentorNumberSummaryExcel(filename, practices, options = {}) {
+  const XLSX = await import('xlsx-js-style')
+  const includeSeason = Boolean(options.includeSeasonColumn)
+  const sorted = sortPracticesByDateAsc(practices)
+
+  const header = [
+    ...(includeSeason ? ['Season'] : []),
+    'Practice Date',
+    'NYRR Race',
+    ...PACE_GROUPS,
+    'Total',
+  ]
+  const rows = [header]
+  const columnTotals = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+  let grandTotal = 0
+
+  for (const practice of sorted) {
+    const countsByPace = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+    if (Array.isArray(practice.mentor_pace_counts) && practice.mentor_pace_counts.length) {
+      for (const row of practice.mentor_pace_counts) {
+        const pace = row.pace?.trim() || ''
+        if (pace in countsByPace) {
+          countsByPace[pace] = Number(row.count) || 0
+        }
+      }
+    } else {
+      for (const mentor of practice.mentors ?? []) {
+        const pace = mentor.pace?.trim() || ''
+        if (pace in countsByPace) countsByPace[pace] += 1
+      }
+    }
+    const total = PACE_GROUPS.reduce((sum, pace) => sum + countsByPace[pace], 0)
+    for (const pace of PACE_GROUPS) {
+      columnTotals[pace] += countsByPace[pace]
+    }
+    grandTotal += total
+    rows.push([
+      ...(includeSeason ? [practice.season_year ?? practice.season ?? ''] : []),
+      practice.date ? formatDateTime(practice.date) : '',
+      practice.nyrr_race ?? '',
+      ...PACE_GROUPS.map((pace) => countsByPace[pace]),
+      total,
+    ])
+  }
+
+  rows.push([
+    ...(includeSeason ? [''] : []),
+    'Total',
+    '',
+    ...PACE_GROUPS.map((pace) => columnTotals[pace]),
+    grandTotal,
+  ])
+
+  const worksheet = XLSX.utils.aoa_to_sheet(rows)
+  worksheet['!cols'] = [
+    ...(includeSeason ? [{ wch: 8 }] : []),
+    { wch: 24 },
+    { wch: 22 },
+    ...PACE_GROUPS.map(() => ({ wch: 8 })),
+    { wch: 8 },
+  ]
+
+  const totalRowIndex = rows.length - 1
+  for (let c = 0; c < header.length; c += 1) {
+    const headerAddr = XLSX.utils.encode_cell({ r: 0, c })
+    if (worksheet[headerAddr]) {
+      worksheet[headerAddr].s = { font: { bold: true } }
+    }
+    const totalAddr = XLSX.utils.encode_cell({ r: totalRowIndex, c })
+    if (worksheet[totalAddr]) {
+      worksheet[totalAddr].s = { font: { bold: true } }
+    }
+  }
+
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Mentor numbers')
+  XLSX.writeFile(workbook, filename)
+}
+
 /** @param {Array<{ mentors?: Array<{ mentor_id?: number, email?: string, pace?: string, first_name?: string, last_name?: string, mentor_type?: string }>, id?: number }>} practices */
 function buildMentorSignupSummary(practices) {
   /** @type {Map<number|string, { mentor_id?: number, first_name?: string, last_name?: string, email?: string, pace?: string, mentor_type?: string, practice_count: number }>} */
@@ -381,7 +473,7 @@ export default function ReportsPage() {
   /** @type {[SortKey, function(SortKey): void]} */
   const [sortKey, setSortKey] = useState('pace')
   const [sortDirection, setSortDirection] = useState('asc')
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState(/** @type {null | 'roster' | 'summary'} */ (null))
 
   const sortedSeasons = useMemo(
     () => sortSeasonsByYearDesc(seasons),
@@ -507,14 +599,33 @@ export default function ReportsPage() {
 
   async function handleDownloadExcel() {
     const stamp = formatDateStamp()
-    setExporting(true)
+    setExporting('roster')
     setError(null)
     try {
       await downloadExcel(`practice-roster-report-${stamp}.xlsx`, displayPractices)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setExporting(false)
+      setExporting(null)
+    }
+  }
+
+  async function handleDownloadMentorNumberSummary() {
+    const stamp = formatDateStamp()
+    const season = sortedSeasons.find((s) => String(s.id) === seasonFilter)
+    const yearPart = season?.year ? `${season.year}-` : ''
+    setExporting('summary')
+    setError(null)
+    try {
+      await downloadMentorNumberSummaryExcel(
+        `mentor-number-summary-${yearPart}${stamp}.xlsx`,
+        sortedReport,
+        { includeSeasonColumn: !seasonFilter }
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExporting(null)
     }
   }
 
@@ -525,14 +636,31 @@ export default function ReportsPage() {
       <main className="panel reports-panel">
         <div className="reports-toolbar">
           <h2>Practice roster</h2>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={loading || exporting || displayPractices.length === 0}
-            onClick={handleDownloadExcel}
-          >
-            {exporting ? 'Preparing…' : 'Download Excel'}
-          </button>
+          <div className="reports-toolbar-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading || exporting !== null || sortedReport.length === 0}
+              onClick={handleDownloadMentorNumberSummary}
+              title={
+                seasonFilter
+                  ? 'Excel: mentor counts by pace for each practice in this season'
+                  : 'Excel: mentor counts by pace for each practice (all seasons)'
+              }
+            >
+              {exporting === 'summary'
+                ? 'Preparing…'
+                : 'Download mentor number summary'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading || exporting !== null || displayPractices.length === 0}
+              onClick={handleDownloadExcel}
+            >
+              {exporting === 'roster' ? 'Preparing…' : 'Download Excel'}
+            </button>
+          </div>
         </div>
 
         <p className="muted reports-intro">
