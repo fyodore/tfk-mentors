@@ -37,7 +37,8 @@ function mentorPaceCountCellStyle(count) {
   let rgb = null
   if (count <= 2) rgb = 'FF6B6B' // red
   else if (count === 3) rgb = 'FFE066' // yellow
-  else if (count >= 4) rgb = '69DB7C' // green
+  else if (count === 4) rgb = '69DB7C' // green
+  else if (count >= 5) rgb = 'B197FC' // purple
   if (!rgb) return null
   return {
     fill: {
