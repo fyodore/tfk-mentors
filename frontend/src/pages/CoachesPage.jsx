@@ -507,6 +507,7 @@ export default function CoachesPage() {
                           firstName: c.first_name,
                           lastName: c.last_name,
                           phone: c.cell,
+                          email: c.email,
                           note: 'TFK Coach',
                           filenamePrefix: 'TFK-Coach',
                         })

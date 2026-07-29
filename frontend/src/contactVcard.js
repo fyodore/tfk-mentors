@@ -17,6 +17,7 @@ function escapeVCardText(value) {
  *   firstName?: string,
  *   lastName?: string,
  *   phone?: string,
+ *   email?: string,
  *   note?: string,
  * }} person
  */
@@ -24,6 +25,7 @@ export function buildVCard(person) {
   const firstName = (person.firstName || '').trim()
   const lastName = (person.lastName || '').trim()
   const phone = (person.phone || '').trim()
+  const email = (person.email || '').trim()
   const note = (person.note || '').trim()
   const fullName = `${firstName} ${lastName}`.trim() || 'Contact'
 
@@ -35,6 +37,9 @@ export function buildVCard(person) {
   ]
   if (phone) {
     lines.push(`TEL;TYPE=CELL:${escapeVCardText(phone)}`)
+  }
+  if (email) {
+    lines.push(`EMAIL;TYPE=INTERNET:${escapeVCardText(email)}`)
   }
   if (note) {
     lines.push(`NOTE:${escapeVCardText(note)}`)
@@ -48,6 +53,7 @@ export function buildVCard(person) {
  *   firstName?: string,
  *   lastName?: string,
  *   phone?: string,
+ *   email?: string,
  *   note?: string,
  *   filenamePrefix?: string,
  * }} person

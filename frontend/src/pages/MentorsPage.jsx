@@ -549,6 +549,7 @@ export default function MentorsPage() {
                           firstName: m.first_name,
                           lastName: m.last_name,
                           phone: m.cell_phone,
+                          email: m.email,
                           note: 'TFK Mentor',
                           filenamePrefix: 'TFK-Mentor',
                         })
