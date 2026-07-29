@@ -10,6 +10,7 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
+import { downloadContactVCard } from '../contactVcard.js'
 import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
@@ -497,6 +498,23 @@ export default function CoachesPage() {
                   </span>
                 </div>
                 <div className="practice-row-actions">
+                  {c.cell?.trim() ? (
+                    <button
+                      type="button"
+                      className="btn btn-text"
+                      onClick={() =>
+                        downloadContactVCard({
+                          firstName: c.first_name,
+                          lastName: c.last_name,
+                          phone: c.cell,
+                          note: 'TFK Coach',
+                          filenamePrefix: 'TFK-Coach',
+                        })
+                      }
+                    >
+                      Download contact
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-text"

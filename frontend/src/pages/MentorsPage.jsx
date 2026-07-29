@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
+import { downloadContactVCard } from '../contactVcard.js'
 import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
@@ -539,6 +540,23 @@ export default function MentorsPage() {
                   </span>
                 </div>
                 <div className="practice-row-actions">
+                  {m.cell_phone?.trim() ? (
+                    <button
+                      type="button"
+                      className="btn btn-text"
+                      onClick={() =>
+                        downloadContactVCard({
+                          firstName: m.first_name,
+                          lastName: m.last_name,
+                          phone: m.cell_phone,
+                          note: 'TFK Mentor',
+                          filenamePrefix: 'TFK-Mentor',
+                        })
+                      }
+                    >
+                      Download contact
+                    </button>
+                  ) : null}
                   <Link className="btn btn-text" to={`/mentors/${m.id}`}>
                     View
                   </Link>
