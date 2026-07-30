@@ -141,6 +141,9 @@ export async function fetchPractices(params = {}) {
   if (params.season != null && params.season !== '') {
     query.set('season', String(params.season))
   }
+  if (params.lite) {
+    query.set('lite', '1')
+  }
   const suffix = query.toString() ? `?${query}` : ''
   const res = await fetch(`${PRACTICE_LIST}${suffix}`, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
@@ -431,8 +434,15 @@ export async function importMentorsCsv(file) {
 }
 
 /** @param {number|string} id */
-export async function fetchPractice(id) {
-  const res = await fetch(`${PRACTICE_LIST}${id}/`, { credentials: 'include' })
+export async function fetchPractice(id, params = {}) {
+  const query = new URLSearchParams()
+  if (params.basic) {
+    query.set('basic', '1')
+  }
+  const suffix = query.toString() ? `?${query}` : ''
+  const res = await fetch(`${PRACTICE_LIST}${id}/${suffix}`, {
+    credentials: 'include',
+  })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }

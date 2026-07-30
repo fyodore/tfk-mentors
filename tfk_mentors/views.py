@@ -80,9 +80,11 @@ from .serializers import (
     MentorPracticeAssignmentSerializer,
     PracticeDetailSerializer,
     PracticeListSerializer,
+    PracticeReminderEmailListSerializer,
     PracticeReminderEmailSerializer,
     PracticeSerializer,
     RequestsSerializer,
+    ScheduledEmailListSerializer,
     ScheduledEmailSerializer,
     SeasonSerializer,
     TfkStaffSerializer,
@@ -106,6 +108,7 @@ from .mentor_scheduling import (
     schedules_match_for_apply,
 )
 from .practice_reminder import (
+    recipient_counts_for_reminders,
     refresh_practice_reminder_templates_for_season,
     send_practice_reminder,
     sync_practice_reminders_for_season,
@@ -552,8 +555,18 @@ class PracticeViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return PracticeListSerializer
         if self.action == "retrieve":
+            basic = (self.request.query_params.get("basic") or "").strip().lower()
+            if basic in {"1", "true", "yes"}:
+                return PracticeSerializer
             return PracticeDetailSerializer
         return PracticeSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == "list":
+            lite = (self.request.query_params.get("lite") or "").strip().lower()
+            context["lite"] = lite in {"1", "true", "yes"}
+        return context
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -1630,7 +1643,15 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
     queryset = (
         ScheduledEmail.objects.all()
         .select_related("recipient_season")
-        .prefetch_related(
+        .order_by("-scheduled_send_at", "-id")
+    )
+    serializer_class = ScheduledEmailSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action == "list":
+            return qs.prefetch_related("practices", "specific_mentors", "mentor_tokens")
+        return qs.prefetch_related(
             "practices",
             "specific_mentors",
             Prefetch(
@@ -1640,9 +1661,11 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
                 ),
             ),
         )
-        .order_by("-scheduled_send_at", "-id")
-    )
-    serializer_class = ScheduledEmailSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ScheduledEmailListSerializer
+        return ScheduledEmailSerializer
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -1739,7 +1762,6 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
             "practice_one",
             "practice_two",
         )
-        .prefetch_related("send_records")
         .order_by("scheduled_send_at", "id")
     )
     serializer_class = PracticeReminderEmailSerializer
@@ -1747,6 +1769,8 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        if self.action != "list":
+            qs = qs.prefetch_related("send_records")
         season_id = self.request.query_params.get("season")
         if season_id:
             try:
@@ -1755,6 +1779,20 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
                 pass
             qs = qs.filter(season_id=season_id)
         return qs
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return PracticeReminderEmailListSerializer
+        return PracticeReminderEmailSerializer
+
+    def list(self, request, *args, **kwargs):
+        reminders = list(self.filter_queryset(self.get_queryset()))
+        context = self.get_serializer_context()
+        context["reminder_recipient_counts"] = recipient_counts_for_reminders(
+            reminders
+        )
+        serializer = self.get_serializer(reminders, many=True, context=context)
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         reminder = self.get_object()

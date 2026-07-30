@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import {
   createPractice,
   deletePractice,
+  fetchPractice,
   fetchPractices,
   fetchSeasons,
   patchPractice,
@@ -201,23 +202,43 @@ export default function PracticesPage() {
     setModal('create')
   }
 
-  const openEdit = (practice) => {
+  const openEdit = async (practice) => {
     setModalError('')
     setActivePractice(practice)
-    const { practiceDate, practiceTime } = isoToPracticeDateAndTime(
-      practice.date
-    )
-    setForm({
-      practiceDate,
-      practiceTime,
-      nyrr_race: practice.nyrr_race ?? '',
-      description: practice.description ?? '',
-      start_location: practice.start_location ?? '',
-      full_practice: Boolean(practice.full_practice),
-      show_to_mentors: Boolean(practice.show_to_mentors),
-      season: String(practice.season ?? ''),
-    })
     setModal('edit')
+    setBusy(true)
+    try {
+      const full = await fetchPractice(practice.id, { basic: true })
+      const { practiceDate, practiceTime } = isoToPracticeDateAndTime(full.date)
+      setForm({
+        practiceDate,
+        practiceTime,
+        nyrr_race: full.nyrr_race ?? '',
+        description: full.description ?? '',
+        start_location: full.start_location ?? '',
+        full_practice: Boolean(full.full_practice),
+        show_to_mentors: Boolean(full.show_to_mentors),
+        season: String(full.season ?? ''),
+      })
+      setActivePractice(full)
+    } catch (err) {
+      setModalError(err instanceof Error ? err.message : String(err))
+      const { practiceDate, practiceTime } = isoToPracticeDateAndTime(
+        practice.date
+      )
+      setForm({
+        practiceDate,
+        practiceTime,
+        nyrr_race: practice.nyrr_race ?? '',
+        description: practice.description ?? '',
+        start_location: practice.start_location ?? '',
+        full_practice: Boolean(practice.full_practice),
+        show_to_mentors: Boolean(practice.show_to_mentors),
+        season: String(practice.season ?? ''),
+      })
+    } finally {
+      setBusy(false)
+    }
   }
 
   const openDelete = (practice) => {

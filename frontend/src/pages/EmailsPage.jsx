@@ -217,7 +217,7 @@ export default function EmailsPage() {
   async function reloadAll() {
     const [eList, pList, sList, mList] = await Promise.all([
       fetchScheduledEmails(),
-      fetchPractices(),
+      fetchPractices({ lite: true }),
       fetchSeasons(),
       fetchMentors(),
     ])
@@ -237,7 +237,7 @@ export default function EmailsPage() {
       try {
         const [eList, pList, sList, mList] = await Promise.all([
           fetchScheduledEmails(),
-          fetchPractices(),
+          fetchPractices({ lite: true }),
           fetchSeasons(),
           fetchMentors(),
         ])

@@ -350,6 +350,84 @@ def collect_recipients(reminder: PracticeReminderEmail):
     return list(recipients.values())
 
 
+def _normalized_email_set(emails):
+    result = set()
+    for email in emails:
+        key = (email or "").strip().lower()
+        if key:
+            result.add(key)
+    return result
+
+
+def _season_base_recipient_emails(season):
+    emails = _normalized_email_set(
+        TfkStaff.objects.exclude(email="").values_list("email", flat=True)
+    )
+    emails.update(
+        _normalized_email_set(
+            Coach.objects.filter(seasons=season)
+            .exclude(email="")
+            .values_list("email", flat=True)
+        )
+    )
+    emails.update(
+        _normalized_email_set(
+            Mentor.objects.filter(seasons=season, type=MentorTypes.PRACTICE)
+            .exclude(email="")
+            .values_list("email", flat=True)
+        )
+    )
+    return emails
+
+
+def recipient_counts_for_reminders(reminders):
+    """Map reminder id -> recipient count, sharing season base lookups."""
+    reminders = [reminder for reminder in reminders if reminder is not None]
+    counts = {}
+    unsent_by_season = {}
+    for reminder in reminders:
+        if reminder.task_completed_at:
+            counts[reminder.pk] = reminder.recipients_emailed_count or 0
+        else:
+            unsent_by_season.setdefault(reminder.season_id, []).append(reminder)
+
+    for season_reminders in unsent_by_season.values():
+        season = season_reminders[0].season
+        base_emails = _season_base_recipient_emails(season)
+        practice_ids = {
+            pid
+            for reminder in season_reminders
+            for pid in (reminder.practice_one_id, reminder.practice_two_id)
+            if pid is not None
+        }
+        practices = {
+            practice.id: practice
+            for practice in Practice.objects.filter(pk__in=practice_ids).prefetch_related(
+                "mentor_email_replies__mentor",
+                "mentorpracticeassignment_set__mentor",
+            )
+        }
+        remote_emails_by_practice = {}
+        for practice_id, practice in practices.items():
+            emails = set()
+            for mentor, _pace, _reply, _assignment in practice.attending_mentor_roster_entries():
+                if mentor.type != MentorTypes.REMOTE:
+                    continue
+                key = (mentor.email or "").strip().lower()
+                if key:
+                    emails.add(key)
+            remote_emails_by_practice[practice_id] = emails
+
+        for reminder in season_reminders:
+            emails = set(base_emails)
+            for practice_id in (reminder.practice_one_id, reminder.practice_two_id):
+                if practice_id:
+                    emails.update(remote_emails_by_practice.get(practice_id, ()))
+            counts[reminder.pk] = len(emails)
+
+    return counts
+
+
 REMINDER_RECIPIENT_KIND_LABELS = {
     "staff": "Staff",
     "coach": "Coach",

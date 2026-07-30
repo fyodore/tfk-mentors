@@ -137,7 +137,10 @@ export default function PracticeReminderEmailsPanel() {
       setLoading(true)
       setLoadError(null)
       try {
-        const [pList, sList] = await Promise.all([fetchPractices(), fetchSeasons()])
+        const [pList, sList] = await Promise.all([
+          fetchPractices({ lite: true }),
+          fetchSeasons(),
+        ])
         if (cancelled) return
         setPractices(sortPracticesByDateAsc(pList))
         setSeasons(sList)

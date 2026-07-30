@@ -271,7 +271,7 @@ class PracticeReminderTests(TestCase):
         sent.save(update_fields=["task_completed_at"])
 
         result = refresh_practice_reminder_templates_for_season(self.season)
-        self.assertEqual(result["updated"], unsent.count() - 1)
+        self.assertEqual(result["updated"], unsent.count())
 
         for reminder in PracticeReminderEmail.objects.filter(
             season=self.season,

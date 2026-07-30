@@ -49,6 +49,23 @@ class PracticeListSeasonFilterTests(TestCase):
         self.assertNotIn("attendance_comments", row)
         self.assertEqual(row["description"], "B season practice")
 
+    def test_list_truncates_long_description(self):
+        long_text = "x" * 400
+        self.practice_b.description = long_text
+        self.practice_b.save(update_fields=["description"])
+        response = self.client.get(f"/api/practice/?season={self.season_b.id}")
+        self.assertEqual(response.status_code, 200)
+        description = response.data[0]["description"]
+        self.assertTrue(description.endswith("…"))
+        self.assertLess(len(description), len(long_text))
+
+    def test_list_lite_omits_description_body(self):
+        response = self.client.get(
+            f"/api/practice/?season={self.season_b.id}&lite=1"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["description"], "")
+
     def test_list_invalid_season_returns_empty(self):
         response = self.client.get("/api/practice/?season=not-a-number")
         self.assertEqual(response.status_code, 200)

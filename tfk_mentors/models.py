@@ -1516,6 +1516,35 @@ class ScheduledEmail(TimeStampedModel):
             "pending_mentors": self.serialize_pending_mentor_rows(pending_mentors),
         }
 
+    def reply_stats_summary(self):
+        """Count-only reply stats for list views (no token writes, no mentor rows)."""
+        attending_values = {
+            PracticeAttendanceReply.ATTENDING,
+            PracticeAttendanceReply.FIRST_HALF,
+            PracticeAttendanceReply.SECOND_HALF,
+        }
+        emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
+        mentors_replied_ids = self._mentors_replied_ids_for_stats(
+            emailed_mentor_ids
+        )
+        pending_ids = self._pending_mentor_ids_for_stats(emailed_mentor_ids)
+        selected_ids = set(
+            ScheduledEmailMentorPracticeReply.objects.filter(
+                mentor_token__scheduled_email_id=self.pk,
+                mentor_id__in=emailed_mentor_ids,
+                attendance__in=attending_values,
+            ).values_list("mentor_id", flat=True)
+        )
+        mentors_replied = len(mentors_replied_ids)
+        return {
+            "mentors_emailed": len(emailed_mentor_ids),
+            "mentors_replied": mentors_replied,
+            "mentors_selected_practices": len(selected_ids),
+            "mentors_responded": mentors_replied,
+            "mentors_pending": max(0, len(pending_ids)),
+            "pending_mentor_ids": sorted(pending_ids),
+        }
+
     def reply_absolute_url_for_mentor(self, mentor):
         """Public mentor reply URL including opaque token (requires sync_mentor_tokens first)."""
         mentor_id = getattr(mentor, "pk", None) or mentor

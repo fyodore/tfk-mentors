@@ -490,16 +490,14 @@ class MentorEmailReplySubmitTests(TestCase):
         first_row = rows_by_id[first_send.id]
         second_row = rows_by_id[second_send.id]
         self.assertEqual(first_row["reply_stats"]["mentors_pending"], 0)
-        self.assertEqual(first_row["pending_mentors"], [])
+        self.assertNotIn("pending_mentors", first_row)
         self.assertEqual(second_row["reply_stats"]["mentors_pending"], 2)
         self.assertEqual(
-            {row["email"] for row in second_row["pending_mentors"]},
-            {self.mentor.email, mentor_b.email},
+            set(second_row["reply_stats"]["pending_mentor_ids"]),
+            {self.mentor.id, mentor_b.id},
         )
-        self.assertEqual(
-            {row["email"] for row in second_row["reply_stats"]["pending_mentors"]},
-            {self.mentor.email, mentor_b.email},
-        )
+        self.assertNotIn("pending_mentors", second_row)
+        self.assertNotIn("pending_mentors", second_row["reply_stats"])
 
         pending_response = self.client.get(
             f"/api/scheduled-email/{second_send.id}/pending-mentors/"
@@ -595,7 +593,8 @@ class MentorEmailReplySubmitTests(TestCase):
         self.assertEqual(stats["mentors_selected_practices"], 1)
         self.assertEqual(stats["mentors_pending"], 0)
         self.assertEqual(stats["pending_mentor_ids"], [])
-        self.assertEqual(stats["pending_mentors"], [])
+        self.assertNotIn("pending_mentors", stats)
+        self.assertNotIn("pending_mentors", row)
 
 
 class ReplyReminderTests(TestCase):

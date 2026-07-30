@@ -597,7 +597,7 @@ class PracticeSerializer(serializers.ModelSerializer):
 
 
 class PracticeListSerializer(serializers.ModelSerializer):
-    """Lean list payload: omit mentors M2M and attendance comments."""
+    """Lean list payload: omit mentors M2M and attendance comments; truncate description."""
 
     nyrr_race = serializers.CharField(
         max_length=150, allow_blank=True, required=False
@@ -605,6 +605,7 @@ class PracticeListSerializer(serializers.ModelSerializer):
     start_location = serializers.CharField(
         max_length=255, allow_blank=True, required=False
     )
+    description = serializers.SerializerMethodField()
 
     class Meta:
         model = Practice
@@ -621,6 +622,15 @@ class PracticeListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+    def get_description(self, obj):
+        text = (obj.description or "").strip()
+        if self.context.get("lite"):
+            return ""
+        max_len = 280
+        if len(text) <= max_len:
+            return text
+        return f"{text[:max_len].rstrip()}…"
 
 
 class PracticeDetailSerializer(PracticeSerializer):
@@ -822,6 +832,40 @@ class ScheduledEmailSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class ScheduledEmailListSerializer(serializers.ModelSerializer):
+    """Lean list payload: summary reply stats, no pending mentor rows."""
+
+    practices = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    specific_mentors = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    reply_stats = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScheduledEmail
+        fields = [
+            "id",
+            "scheduled_send_at",
+            "task_completed_at",
+            "recipients_emailed_count",
+            "body_text",
+            "practices",
+            "recipient_mode",
+            "recipient_season",
+            "specific_mentors",
+            "reply_stats",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_reply_stats(self, obj):
+        cache = self.context.setdefault("_scheduled_email_summary_cache", {})
+        if obj.pk in cache:
+            return cache[obj.pk]
+        stats = obj.reply_stats_summary()
+        cache[obj.pk] = stats
+        return stats
+
+
 class PracticeReminderSendRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = PracticeReminderSendRecord
@@ -910,3 +954,40 @@ class PracticeReminderEmailSerializer(serializers.ModelSerializer):
                 "Sent practice reminders cannot be edited."
             )
         return attrs
+
+
+class PracticeReminderEmailListSerializer(serializers.ModelSerializer):
+    """Lean list: no send records or full recipient payloads."""
+
+    recipient_count = serializers.SerializerMethodField()
+    scheduled_send_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    class Meta:
+        model = PracticeReminderEmail
+        fields = [
+            "id",
+            "season",
+            "kind",
+            "anchor_practice",
+            "practice_one",
+            "practice_two",
+            "scheduled_send_at",
+            "subject",
+            "body_text",
+            "task_completed_at",
+            "recipients_emailed_count",
+            "recipient_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_recipient_count(self, obj):
+        if obj.task_completed_at:
+            return obj.recipients_emailed_count or 0
+        counts = self.context.get("reminder_recipient_counts") or {}
+        if obj.pk in counts:
+            return counts[obj.pk]
+        from .practice_reminder import pending_recipients_for_reminder
+
+        return len(pending_recipients_for_reminder(obj))
