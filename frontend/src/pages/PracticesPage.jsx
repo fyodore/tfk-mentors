@@ -413,13 +413,9 @@ export default function PracticesPage() {
           <span className="practice-date">
             {p.date ? formatDateTime(p.date) : '—'}
           </span>
-          <span className="practice-race">
-            {p.nyrr_race?.trim() ? (
-              p.nyrr_race
-            ) : (
-              <span className="muted">No race name</span>
-            )}
-          </span>
+          {p.nyrr_race?.trim() ? (
+            <span className="practice-race">{p.nyrr_race}</span>
+          ) : null}
           <span className="muted">
             Season {seasonYearById.get(p.season) ?? p.season}
             {p.full_practice ? ' · Full practice' : ' · Partial'}
