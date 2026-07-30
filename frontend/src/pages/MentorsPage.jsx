@@ -50,7 +50,7 @@ export default function MentorsPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [seasonFilter, setSeasonFilter] = useState('')
-  const [emailFilter, setEmailFilter] = useState('')
+  const [nameEmailFilter, setNameEmailFilter] = useState('')
   const [sortBy, setSortBy] = useState('last_name')
 
   const [modal, setModal] = useState(null)
@@ -83,13 +83,20 @@ export default function MentorsPage() {
         )
       }
     }
-    const emailNeedle = emailFilter.trim().toLowerCase()
-    if (emailNeedle) {
-      next = next.filter((m) =>
-        String(m.email || '')
-          .toLowerCase()
-          .includes(emailNeedle)
-      )
+    const needle = nameEmailFilter.trim().toLowerCase()
+    if (needle) {
+      next = next.filter((m) => {
+        const first = String(m.first_name || '').toLowerCase()
+        const last = String(m.last_name || '').toLowerCase()
+        const full = `${first} ${last}`.trim()
+        const email = String(m.email || '').toLowerCase()
+        return (
+          first.includes(needle) ||
+          last.includes(needle) ||
+          full.includes(needle) ||
+          email.includes(needle)
+        )
+      })
     }
     return [...next].sort((a, b) => {
       if (sortBy === 'email') {
@@ -114,7 +121,7 @@ export default function MentorsPage() {
       if (fn !== 0) return fn
       return a.id - b.id
     })
-  }, [mentors, seasonFilter, emailFilter, sortBy, seasonYearById])
+  }, [mentors, seasonFilter, nameEmailFilter, sortBy, seasonYearById])
 
   useEffect(() => {
     let cancelled = false
@@ -485,16 +492,16 @@ export default function MentorsPage() {
             ))}
           </select>
 
-          <label className="field-label" htmlFor="mentor-email-filter">
-            Filter by email
+          <label className="field-label" htmlFor="mentor-name-email-filter">
+            Filter by name or email
           </label>
           <input
-            id="mentor-email-filter"
+            id="mentor-name-email-filter"
             type="text"
             className="field-input"
-            placeholder="Partial or full email"
-            value={emailFilter}
-            onChange={(e) => setEmailFilter(e.target.value)}
+            placeholder="Name or email"
+            value={nameEmailFilter}
+            onChange={(e) => setNameEmailFilter(e.target.value)}
           />
 
           <label className="field-label" htmlFor="mentor-sort-by">
@@ -519,14 +526,14 @@ export default function MentorsPage() {
           <p className="muted">
             {mentors.length === 0
               ? 'No mentors yet. Use + to add one.'
-              : 'No mentors match this season filter.'}
+              : 'No mentors match these filters.'}
           </p>
         )}
 
         {!loading && !loadError && filteredMentors.length > 0 && (
-          <ul className="practice-list">
+          <ul className="practice-list mentors-page-list">
             {filteredMentors.map((m) => (
-              <li key={m.id} className="practice-row">
+              <li key={m.id} className="practice-row mentors-list-row">
                 <div className="practice-row-main">
                   <span className="practice-date">{m.first_name} {m.last_name}</span>
                   <span className="practice-race muted">{m.email}</span>
@@ -557,7 +564,9 @@ export default function MentorsPage() {
                     >
                       Download contact
                     </button>
-                  ) : null}
+                  ) : (
+                    <span className="practice-row-action-spacer" aria-hidden="true" />
+                  )}
                   <Link className="btn btn-text" to={`/mentors/${m.id}`}>
                     View
                   </Link>

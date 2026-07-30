@@ -51,11 +51,26 @@ export function normalizeSeasonList(data) {
   return []
 }
 
+/** @type {Promise<ReturnType<typeof normalizeSeasonList>> | null} */
+let seasonsListPromise = null
+
+function invalidateSeasonsCache() {
+  seasonsListPromise = null
+}
+
 export async function fetchSeasons() {
-  const res = await fetch(SEASON_LIST, { credentials: 'include' })
-  if (!res.ok) throw new Error(await parseError(res))
-  const data = await res.json()
-  return normalizeSeasonList(data)
+  if (!seasonsListPromise) {
+    seasonsListPromise = (async () => {
+      const res = await fetch(SEASON_LIST, { credentials: 'include' })
+      if (!res.ok) throw new Error(await parseError(res))
+      const data = await res.json()
+      return normalizeSeasonList(data)
+    })().catch((err) => {
+      invalidateSeasonsCache()
+      throw err
+    })
+  }
+  return seasonsListPromise
 }
 
 /** @param {number | { year: number, head_coach?: number|null }} body */
@@ -71,6 +86,7 @@ export async function createSeason(body) {
     body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
+  invalidateSeasonsCache()
   return res.json()
 }
 
@@ -87,6 +103,7 @@ export async function patchSeason(id, body) {
     body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(await parseError(res))
+  invalidateSeasonsCache()
   return res.json()
 }
 
@@ -106,6 +123,7 @@ export async function deleteSeason(id) {
   })
   if (!res.ok && res.status !== 204)
     throw new Error(await parseError(res))
+  invalidateSeasonsCache()
 }
 
 const PRACTICE_LIST = apiPath('/api/practice/')

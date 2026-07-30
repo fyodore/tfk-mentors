@@ -1,151 +1,80 @@
-import { Route, Routes } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { Outlet, Route, Routes } from 'react-router-dom'
 
 import { PasswordGate } from './components/PasswordGate.jsx'
-import AttendancePage from './pages/AttendancePage.jsx'
-import CoachesPage from './pages/CoachesPage.jsx'
-import EmailsPage from './pages/EmailsPage.jsx'
-import EmailDetailPage from './pages/EmailDetailPage.jsx'
-import PracticeReminderDetailPage from './pages/PracticeReminderDetailPage.jsx'
-import HomePage from './pages/HomePage.jsx'
-import MentorReplyPage from './pages/MentorReplyPage.jsx'
-import MentorCellPhonePage from './pages/MentorCellPhonePage.jsx'
-import PublicMentorDirectoryPage from './pages/PublicMentorDirectoryPage.jsx'
-import MentorDetailPage from './pages/MentorDetailPage.jsx'
-import MentorsPage from './pages/MentorsPage.jsx'
-import PracticeDetailPage from './pages/PracticeDetailPage.jsx'
-import PracticesPage from './pages/PracticesPage.jsx'
-import ReportsPage from './pages/ReportsPage.jsx'
-import SeasonsPage from './pages/SeasonsPage.jsx'
-import TfkStaffPage from './pages/TfkStaffPage.jsx'
 
 import './App.css'
 
-function Protected({ children }) {
-  return <PasswordGate>{children}</PasswordGate>
+const AttendancePage = lazy(() => import('./pages/AttendancePage.jsx'))
+const CoachesPage = lazy(() => import('./pages/CoachesPage.jsx'))
+const EmailsPage = lazy(() => import('./pages/EmailsPage.jsx'))
+const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.jsx'))
+const PracticeReminderDetailPage = lazy(
+  () => import('./pages/PracticeReminderDetailPage.jsx')
+)
+const HomePage = lazy(() => import('./pages/HomePage.jsx'))
+const MentorReplyPage = lazy(() => import('./pages/MentorReplyPage.jsx'))
+const MentorCellPhonePage = lazy(() => import('./pages/MentorCellPhonePage.jsx'))
+const PublicMentorDirectoryPage = lazy(
+  () => import('./pages/PublicMentorDirectoryPage.jsx')
+)
+const MentorDetailPage = lazy(() => import('./pages/MentorDetailPage.jsx'))
+const MentorsPage = lazy(() => import('./pages/MentorsPage.jsx'))
+const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.jsx'))
+const PracticesPage = lazy(() => import('./pages/PracticesPage.jsx'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'))
+const SeasonsPage = lazy(() => import('./pages/SeasonsPage.jsx'))
+const TfkStaffPage = lazy(() => import('./pages/TfkStaffPage.jsx'))
+
+function PageFallback() {
+  return <p className="muted">Loading…</p>
+}
+
+function ProtectedLayout() {
+  return (
+    <PasswordGate>
+      <Outlet />
+    </PasswordGate>
+  )
 }
 
 export default function App() {
   return (
     <div className="app">
-      <Routes>
-        <Route path="/mentor-reply" element={<MentorReplyPage />} />
-        <Route path="/mentor-reply/:token" element={<MentorReplyPage />} />
-        <Route path="/mentor-cell-phone" element={<MentorCellPhonePage />} />
-        <Route path="/mentor-cell-phone/:token" element={<MentorCellPhonePage />} />
-        <Route path="/mentor-directory" element={<PublicMentorDirectoryPage />} />
-        <Route
-          path="/"
-          element={
-            <Protected>
-              <HomePage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/seasons"
-          element={
-            <Protected>
-              <SeasonsPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/practices"
-          element={
-            <Protected>
-              <PracticesPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/practices/:id"
-          element={
-            <Protected>
-              <PracticeDetailPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/attendance"
-          element={
-            <Protected>
-              <AttendancePage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/attendance/:id"
-          element={
-            <Protected>
-              <AttendancePage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/coaches"
-          element={
-            <Protected>
-              <CoachesPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/tfk-staff"
-          element={
-            <Protected>
-              <TfkStaffPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/mentors/:id"
-          element={
-            <Protected>
-              <MentorDetailPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/mentors"
-          element={
-            <Protected>
-              <MentorsPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/emails"
-          element={
-            <Protected>
-              <EmailsPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/emails/practice-reminder/:id"
-          element={
-            <Protected>
-              <PracticeReminderDetailPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/emails/:id"
-          element={
-            <Protected>
-              <EmailDetailPage />
-            </Protected>
-          }
-        />
-        <Route
-          path="/reports"
-          element={
-            <Protected>
-              <ReportsPage />
-            </Protected>
-          }
-        />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/mentor-reply" element={<MentorReplyPage />} />
+          <Route path="/mentor-reply/:token" element={<MentorReplyPage />} />
+          <Route path="/mentor-cell-phone" element={<MentorCellPhonePage />} />
+          <Route
+            path="/mentor-cell-phone/:token"
+            element={<MentorCellPhonePage />}
+          />
+          <Route
+            path="/mentor-directory"
+            element={<PublicMentorDirectoryPage />}
+          />
+          <Route element={<ProtectedLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/seasons" element={<SeasonsPage />} />
+            <Route path="/practices" element={<PracticesPage />} />
+            <Route path="/practices/:id" element={<PracticeDetailPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/attendance/:id" element={<AttendancePage />} />
+            <Route path="/coaches" element={<CoachesPage />} />
+            <Route path="/tfk-staff" element={<TfkStaffPage />} />
+            <Route path="/mentors/:id" element={<MentorDetailPage />} />
+            <Route path="/mentors" element={<MentorsPage />} />
+            <Route path="/emails" element={<EmailsPage />} />
+            <Route
+              path="/emails/practice-reminder/:id"
+              element={<PracticeReminderDetailPage />}
+            />
+            <Route path="/emails/:id" element={<EmailDetailPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </div>
   )
 }

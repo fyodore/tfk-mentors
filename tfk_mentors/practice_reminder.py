@@ -233,6 +233,7 @@ def build_practice_section(practice):
             lines.extend(pace_rows)
         else:
             lines.append("\t\t(none listed)")
+        lines.append("")
     return "\n".join(lines)
 
 

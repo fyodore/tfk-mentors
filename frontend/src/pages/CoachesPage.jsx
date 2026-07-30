@@ -479,9 +479,9 @@ export default function CoachesPage() {
         )}
 
         {!loading && !loadError && filteredCoaches.length > 0 && (
-          <ul className="practice-list">
+          <ul className="practice-list coaches-page-list">
             {filteredCoaches.map((c) => (
-              <li key={c.id} className="practice-row">
+              <li key={c.id} className="practice-row coaches-list-row">
                 <div className="practice-row-main">
                   <span className="practice-date">
                     {c.first_name} {c.last_name}
@@ -515,7 +515,9 @@ export default function CoachesPage() {
                     >
                       Download contact
                     </button>
-                  ) : null}
+                  ) : (
+                    <span className="practice-row-action-spacer" aria-hidden="true" />
+                  )}
                   <button
                     type="button"
                     className="btn btn-text"
