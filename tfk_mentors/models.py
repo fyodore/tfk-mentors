@@ -1518,24 +1518,122 @@ class ScheduledEmail(TimeStampedModel):
 
     def reply_stats_summary(self):
         """Count-only reply stats for list views (no token writes, no mentor rows)."""
+        return self.reply_stats_summaries_for([self])[self.pk]
+
+    @classmethod
+    def reply_stats_summaries_for(cls, emails):
+        """Bulk count-only reply stats keyed by scheduled email id.
+
+        Uses prefetched ``mentor_tokens`` when present, plus one practice-reply
+        query for the whole page.
+        """
+        emails = [email for email in emails if email is not None and email.pk]
+        if not emails:
+            return {}
+
         attending_values = {
             PracticeAttendanceReply.ATTENDING,
             PracticeAttendanceReply.FIRST_HALF,
             PracticeAttendanceReply.SECOND_HALF,
         }
-        emailed_mentor_ids = self._emailed_mentor_ids_for_stats()
-        mentors_replied_ids = self._mentors_replied_ids_for_stats(
-            emailed_mentor_ids
+        email_ids = [email.pk for email in emails]
+        tokens_by_email = {email.pk: [] for email in emails}
+        missing_token_email_ids = []
+
+        for email in emails:
+            cache = getattr(email, "_prefetched_objects_cache", None) or {}
+            if "mentor_tokens" in cache:
+                tokens_by_email[email.pk] = list(email.mentor_tokens.all())
+            else:
+                missing_token_email_ids.append(email.pk)
+
+        if missing_token_email_ids:
+            for token in ScheduledEmailMentorToken.objects.filter(
+                scheduled_email_id__in=missing_token_email_ids
+            ):
+                tokens_by_email[token.scheduled_email_id].append(token)
+
+        replies_by_email = {email_id: [] for email_id in email_ids}
+        for row in ScheduledEmailMentorPracticeReply.objects.filter(
+            mentor_token__scheduled_email_id__in=email_ids
+        ).values("mentor_token__scheduled_email_id", "mentor_id", "attendance"):
+            replies_by_email[row["mentor_token__scheduled_email_id"]].append(row)
+
+        summaries = {}
+        for email in emails:
+            summaries[email.pk] = cls._reply_stats_summary_from_rows(
+                email,
+                tokens_by_email.get(email.pk, []),
+                replies_by_email.get(email.pk, []),
+                attending_values,
+            )
+        return summaries
+
+    @classmethod
+    def _reply_stats_summary_from_rows(
+        cls, email, tokens, reply_rows, attending_values
+    ):
+        reply_mentor_ids = {row["mentor_id"] for row in reply_rows}
+
+        if email.task_completed_at:
+            emailed_mentor_ids = {
+                token.mentor_id for token in tokens if token.included_in_send
+            }
+            emailed_mentor_ids.update(reply_mentor_ids)
+            if not emailed_mentor_ids:
+                cutoff = email.task_completed_at + timedelta(minutes=1)
+                emailed_mentor_ids = {
+                    token.mentor_id
+                    for token in tokens
+                    if token.created_at <= cutoff
+                }
+        else:
+            emailed_mentor_ids = {token.mentor_id for token in tokens}
+            emailed_mentor_ids.update(reply_mentor_ids)
+            if not emailed_mentor_ids:
+                specific_cache = getattr(email, "_prefetched_objects_cache", None) or {}
+                if "specific_mentors" in specific_cache:
+                    emailed_mentor_ids = {
+                        mentor.pk for mentor in email.specific_mentors.all()
+                    }
+                if not emailed_mentor_ids:
+                    emailed_mentor_ids = set(
+                        email.get_target_mentors().values_list("pk", flat=True)
+                    )
+                if not emailed_mentor_ids:
+                    emailed_mentor_ids = set(
+                        email.specific_mentors.values_list("pk", flat=True)
+                    )
+
+        if not emailed_mentor_ids:
+            return {
+                "mentors_emailed": 0,
+                "mentors_replied": 0,
+                "mentors_selected_practices": 0,
+                "mentors_responded": 0,
+                "mentors_pending": 0,
+                "pending_mentor_ids": [],
+            }
+
+        replied_ids = {
+            row["mentor_id"]
+            for row in reply_rows
+            if row["mentor_id"] in emailed_mentor_ids
+        }
+        replied_ids.update(
+            token.mentor_id
+            for token in tokens
+            if token.email_received_confirmed
+            and token.mentor_id in emailed_mentor_ids
         )
-        pending_ids = self._pending_mentor_ids_for_stats(emailed_mentor_ids)
-        selected_ids = set(
-            ScheduledEmailMentorPracticeReply.objects.filter(
-                mentor_token__scheduled_email_id=self.pk,
-                mentor_id__in=emailed_mentor_ids,
-                attendance__in=attending_values,
-            ).values_list("mentor_id", flat=True)
-        )
-        mentors_replied = len(mentors_replied_ids)
+        selected_ids = {
+            row["mentor_id"]
+            for row in reply_rows
+            if row["mentor_id"] in emailed_mentor_ids
+            and row["attendance"] in attending_values
+        }
+        pending_ids = emailed_mentor_ids - replied_ids
+        mentors_replied = len(replied_ids)
         return {
             "mentors_emailed": len(emailed_mentor_ids),
             "mentors_replied": mentors_replied,

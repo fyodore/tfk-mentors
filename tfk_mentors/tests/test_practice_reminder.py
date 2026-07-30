@@ -338,6 +338,12 @@ class PracticeReminderTests(TestCase):
         )
         self.assertEqual(response.status_code, 204)
         self.assertFalse(PracticeReminderEmail.objects.filter(pk=reminder.id).exists())
+        sync_response = self.client.post(
+            "/api/practice-reminder-email/sync/",
+            {"season": self.season.id},
+            format="json",
+        )
+        self.assertEqual(sync_response.status_code, 200)
         list_response = self.client.get(
             f"/api/practice-reminder-email/?season={self.season.id}"
         )
@@ -349,4 +355,32 @@ class PracticeReminderTests(TestCase):
                 anchor_practice=reminder.anchor_practice,
                 kind=PracticeReminderKind.BEFORE_FIRST,
             ).exists()
+        )
+
+    def test_list_does_not_sync_reminders(self):
+        self.assertEqual(
+            PracticeReminderEmail.objects.filter(season=self.season).count(),
+            0,
+        )
+        response = self.client.get(
+            f"/api/practice-reminder-email/?season={self.season.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
+        self.assertEqual(
+            PracticeReminderEmail.objects.filter(season=self.season).count(),
+            0,
+        )
+
+    def test_sync_endpoint_creates_reminders(self):
+        response = self.client.post(
+            "/api/practice-reminder-email/sync/",
+            {"season": self.season.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.data["created"], 0)
+        self.assertGreater(
+            PracticeReminderEmail.objects.filter(season=self.season).count(),
+            0,
         )

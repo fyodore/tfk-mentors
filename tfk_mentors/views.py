@@ -1667,6 +1667,15 @@ class ScheduledEmailViewSet(viewsets.ModelViewSet):
             return ScheduledEmailListSerializer
         return ScheduledEmailSerializer
 
+    def list(self, request, *args, **kwargs):
+        emails = list(self.filter_queryset(self.get_queryset()))
+        context = self.get_serializer_context()
+        context["_scheduled_email_summary_cache"] = (
+            ScheduledEmail.reply_stats_summaries_for(emails)
+        )
+        serializer = self.get_serializer(emails, many=True, context=context)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
         instance = serializer.save()
         instance.sync_mentor_tokens()
@@ -1774,10 +1783,9 @@ class PracticeReminderEmailViewSet(viewsets.ModelViewSet):
         season_id = self.request.query_params.get("season")
         if season_id:
             try:
-                sync_practice_reminders_for_season(int(season_id))
-            except (TypeError, ValueError, Season.DoesNotExist):
-                pass
-            qs = qs.filter(season_id=season_id)
+                qs = qs.filter(season_id=int(season_id))
+            except (TypeError, ValueError):
+                qs = qs.none()
         return qs
 
     def get_serializer_class(self):

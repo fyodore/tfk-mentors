@@ -10,6 +10,7 @@ import {
   patchPracticeReminderEmail,
   refreshPracticeReminderEmailTemplates,
   sendPracticeReminderEmailNow,
+  syncPracticeReminderEmails,
 } from '../api'
 import { currentSeasonFromList, sortSeasonsByYearDesc } from '../seasonHelpers.js'
 import { Modal } from '../components/Modal.jsx'
@@ -126,6 +127,7 @@ export default function PracticeReminderEmailsPanel() {
       setReminders([])
       return
     }
+    await syncPracticeReminderEmails(sid)
     const list = await fetchPracticeReminderEmails(sid)
     setReminders(list)
   }
@@ -146,18 +148,18 @@ export default function PracticeReminderEmailsPanel() {
         setSeasons(sList)
         const current = currentSeasonFromList(sList)
         const sid = current?.id != null ? String(current.id) : ''
-        setSeasonFilter(sid)
         if (sid) {
-          const list = await fetchPracticeReminderEmails(sid)
-          if (!cancelled) setReminders(list)
+          setSeasonFilter(sid)
+        } else {
+          setReminders([])
+          setLoading(false)
         }
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : String(e))
           setReminders([])
+          setLoading(false)
         }
-      } finally {
-        if (!cancelled) setLoading(false)
       }
     })
 
@@ -167,12 +169,22 @@ export default function PracticeReminderEmailsPanel() {
   }, [])
 
   useEffect(() => {
-    if (!seasonFilter || loading) return
+    if (!seasonFilter) return
+
     let cancelled = false
 
-    reloadReminders(seasonFilter).catch((e) => {
-      if (!cancelled) {
-        setLoadError(e instanceof Error ? e.message : String(e))
+    Promise.resolve().then(async () => {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        await reloadReminders(seasonFilter)
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : String(e))
+          setReminders([])
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })
 
