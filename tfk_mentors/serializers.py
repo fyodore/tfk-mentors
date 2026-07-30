@@ -596,6 +596,33 @@ class PracticeSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class PracticeListSerializer(serializers.ModelSerializer):
+    """Lean list payload: omit mentors M2M and attendance comments."""
+
+    nyrr_race = serializers.CharField(
+        max_length=150, allow_blank=True, required=False
+    )
+    start_location = serializers.CharField(
+        max_length=255, allow_blank=True, required=False
+    )
+
+    class Meta:
+        model = Practice
+        fields = [
+            "id",
+            "date",
+            "nyrr_race",
+            "description",
+            "start_location",
+            "full_practice",
+            "show_to_mentors",
+            "season",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
 class PracticeDetailSerializer(PracticeSerializer):
     mentor_replies = serializers.SerializerMethodField()
     available_mentor_replies = serializers.SerializerMethodField()

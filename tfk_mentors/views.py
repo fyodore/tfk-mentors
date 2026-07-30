@@ -79,6 +79,7 @@ from .serializers import (
     MentorSerializer,
     MentorPracticeAssignmentSerializer,
     PracticeDetailSerializer,
+    PracticeListSerializer,
     PracticeReminderEmailSerializer,
     PracticeSerializer,
     RequestsSerializer,
@@ -531,12 +532,25 @@ class PracticeViewSet(viewsets.ModelViewSet):
     queryset = (
         Practice.objects.all()
         .select_related("season")
-        .prefetch_related("mentors")
         .order_by("-date", "-id")
     )
     serializer_class = PracticeSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action != "list":
+            qs = qs.prefetch_related("mentors")
+        season_raw = (self.request.query_params.get("season") or "").strip()
+        if season_raw:
+            try:
+                qs = qs.filter(season_id=int(season_raw))
+            except (TypeError, ValueError):
+                qs = qs.none()
+        return qs
+
     def get_serializer_class(self):
+        if self.action == "list":
+            return PracticeListSerializer
         if self.action == "retrieve":
             return PracticeDetailSerializer
         return PracticeSerializer

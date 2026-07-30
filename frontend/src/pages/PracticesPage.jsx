@@ -118,27 +118,53 @@ export default function PracticesPage() {
     let cancelled = false
 
     Promise.resolve().then(async () => {
+      setLoadError(null)
+      try {
+        const sList = await fetchSeasons()
+        if (cancelled) return
+        const orderedSeasons = sortSeasonsByYearDesc(sList)
+        setSeasons(orderedSeasons)
+        const current = currentSeasonFromList(orderedSeasons)
+        const initialId = current?.id ?? orderedSeasons[0]?.id
+        if (initialId != null) {
+          setSeasonFilter(String(initialId))
+        } else {
+          setLoading(false)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : String(e))
+          setSeasons([])
+          setLoading(false)
+        }
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!seasonFilter) {
+      setPractices([])
+      return
+    }
+
+    let cancelled = false
+
+    Promise.resolve().then(async () => {
       setLoading(true)
       setLoadError(null)
       try {
-        const [pList, sList] = await Promise.all([
-          fetchPractices(),
-          fetchSeasons(),
-        ])
+        const pList = await fetchPractices({ season: seasonFilter })
         if (!cancelled) {
           setPractices(pList)
-          const orderedSeasons = sortSeasonsByYearDesc(sList)
-          setSeasons(orderedSeasons)
-          const current = currentSeasonFromList(orderedSeasons)
-          if (current) {
-            setSeasonFilter(String(current.id))
-          }
         }
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : String(e))
           setPractices([])
-          setSeasons([])
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -148,14 +174,9 @@ export default function PracticesPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [seasonFilter])
 
-  const filteredPractices = useMemo(() => {
-    if (!seasonFilter) return []
-    const id = Number.parseInt(seasonFilter, 10)
-    if (Number.isNaN(id)) return []
-    return practices.filter((p) => p.season === id)
-  }, [practices, seasonFilter])
+  const filteredPractices = practices
 
   const { upcoming: upcomingPractices, past: pastPractices } = useMemo(
     () => splitPracticesByUpcoming(filteredPractices),
@@ -234,7 +255,9 @@ export default function PracticesPage() {
     setBusy(true)
     try {
       const created = await createPractice(built.payload)
-      setPractices((prev) => [...prev, created])
+      if (String(created.season) === seasonFilter) {
+        setPractices((prev) => [...prev, created])
+      }
       resetModal()
     } catch (err) {
       setModalError(err instanceof Error ? err.message : String(err))
@@ -255,9 +278,12 @@ export default function PracticesPage() {
     setBusy(true)
     try {
       const updated = await patchPractice(activePractice.id, built.payload)
-      setPractices((prev) =>
-        prev.map((p) => (p.id === activePractice.id ? updated : p))
-      )
+      setPractices((prev) => {
+        if (String(updated.season) !== seasonFilter) {
+          return prev.filter((p) => p.id !== activePractice.id)
+        }
+        return prev.map((p) => (p.id === activePractice.id ? updated : p))
+      })
       resetModal()
     } catch (err) {
       setModalError(err instanceof Error ? err.message : String(err))
@@ -347,7 +373,7 @@ export default function PracticesPage() {
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
       try {
-        const refreshed = await fetchPractices()
+        const refreshed = await fetchPractices({ season: seasonFilter })
         setPractices(refreshed)
       } catch {
         /* keep local state if refresh also fails */
@@ -929,7 +955,7 @@ export default function PracticesPage() {
         onClose={() => setSchedulerOpen(false)}
         onApplied={async () => {
           try {
-            const pList = await fetchPractices()
+            const pList = await fetchPractices({ season: seasonFilter })
             setPractices(pList)
           } catch (e) {
             setLoadError(e instanceof Error ? e.message : String(e))

@@ -136,8 +136,13 @@ export function normalizePracticeList(data) {
   return []
 }
 
-export async function fetchPractices() {
-  const res = await fetch(PRACTICE_LIST, { credentials: 'include' })
+export async function fetchPractices(params = {}) {
+  const query = new URLSearchParams()
+  if (params.season != null && params.season !== '') {
+    query.set('season', String(params.season))
+  }
+  const suffix = query.toString() ? `?${query}` : ''
+  const res = await fetch(`${PRACTICE_LIST}${suffix}`, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   const data = await res.json()
   return normalizePracticeList(data)
