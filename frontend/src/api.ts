@@ -26,6 +26,12 @@ import type {
   ScheduledEmail,
   ScheduledEmailPendingMentorsResponse,
   SendEmailResult,
+  MentorEmailReplyResponse,
+  MentorEmailReplyPutPayload,
+  MentorCellPhoneRequestsResponse,
+  MentorCellPhoneSendResult,
+  MentorCellPhoneUpdateGetResponse,
+  MentorCellPhoneUpdatePutResponse,
 } from './types.js'
 
 export type { Id, JsonObject, Season, Practice, Mentor, Coach, TfkStaff } from './types.js'
@@ -827,7 +833,9 @@ export async function sendPracticeReminderEmailNow(id: Id) {
 const MENTOR_CELL_PHONE_REQUEST = apiPath('/api/mentor-cell-phone-request/')
 const MENTOR_CELL_PHONE_UPDATE = apiPath('/api/mentor-cell-phone-update/')
 
-export async function fetchMentorCellPhoneRequests(seasonId: Id) {
+export async function fetchMentorCellPhoneRequests(
+  seasonId?: Id | null
+): Promise<MentorCellPhoneRequestsResponse> {
   const qs =
     seasonId !== undefined && seasonId !== null && seasonId !== ''
       ? `?season=${encodeURIComponent(String(seasonId))}`
@@ -839,7 +847,9 @@ export async function fetchMentorCellPhoneRequests(seasonId: Id) {
   return res.json()
 }
 
-export async function sendMentorCellPhoneRequests(body: { season?: Id | null; dry_run?: boolean } = {}) {
+export async function sendMentorCellPhoneRequests(
+  body: { season?: Id | null; dry_run?: boolean } = {}
+): Promise<MentorCellPhoneSendResult> {
   const payload: JsonObject = {}
   if (body.season !== undefined && body.season !== null && body.season !== '') {
     payload.season = Number(body.season)
@@ -858,17 +868,26 @@ export async function sendMentorCellPhoneRequests(body: { season?: Id | null; dr
   return res.json()
 }
 
-export async function fetchMentorCellPhoneUpdate(token: string) {
+export async function fetchMentorCellPhoneUpdate(
+  token: string
+): Promise<MentorCellPhoneUpdateGetResponse> {
   const res = await fetch(
     `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
     { credentials: 'include' }
   )
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`
-    let body = null
+    let body: unknown = null
     try {
       body = await res.json()
-      if (body?.detail) detail = String(body.detail)
+      if (
+        body &&
+        typeof body === 'object' &&
+        'detail' in body &&
+        (body as { detail?: unknown }).detail
+      ) {
+        detail = String((body as { detail: unknown }).detail)
+      }
     } catch {
       /* ignore */
     }
@@ -877,7 +896,10 @@ export async function fetchMentorCellPhoneUpdate(token: string) {
   return res.json()
 }
 
-export async function putMentorCellPhoneUpdate(token: string, body: { cell_phone: string }) {
+export async function putMentorCellPhoneUpdate(
+  token: string,
+  body: { cell_phone: string }
+): Promise<MentorCellPhoneUpdatePutResponse> {
   const res = await fetch(
     `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
     {
@@ -921,14 +943,19 @@ export async function loginSitePassword(password: string) {
 
 const MENTOR_EMAIL_REPLY = apiPath('/api/mentor-email-reply')
 
-export async function fetchMentorEmailReply(token: string) {
+export async function fetchMentorEmailReply(
+  token: string
+): Promise<MentorEmailReplyResponse> {
   const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-export async function putMentorEmailReply(token: string, payload: { replies: { practice: number; attendance: string; pace?: string }[]; email_received_confirmed?: boolean; mentor_pace?: string }) {
+export async function putMentorEmailReply(
+  token: string,
+  payload: MentorEmailReplyPutPayload
+): Promise<unknown> {
   const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, {
     method: 'PUT',

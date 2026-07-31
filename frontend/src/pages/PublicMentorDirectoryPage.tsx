@@ -12,11 +12,39 @@ import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHov
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'
 import { downloadMentorAssignedPracticesIcs } from '../practiceCalendar.js'
+import type {
+  PublicMentorDirectoryPractices,
+  PublicMentorDirectoryRow,
+  PublicMentorPracticeRow,
+} from '../types.js'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 
-const DIRECTORY_TABS = {
+type DirectoryTabSlug = 'all' | 'by-pace' | 'upcoming' | 'request-swap'
+type DirectoryTabId =
+  | 'all'
+  | 'at-practice-by-pace'
+  | 'upcoming-practices'
+  | 'request-swap'
+
+type DirectoryTab = {
+  id: DirectoryTabId
+  path: string
+  label: string
+}
+
+type DirectoryTabWithSlug = DirectoryTab & { slug: DirectoryTabSlug }
+
+type PaceGroup = {
+  pace: string
+  label: string
+  mentors: PublicMentorDirectoryRow[]
+}
+
+type CalendarProvider = 'apple' | 'google' | 'outlook'
+
+const DIRECTORY_TABS: Record<DirectoryTabSlug, DirectoryTab> = {
   all: {
     id: 'all',
     path: '/mentor-directory',
@@ -40,26 +68,36 @@ const DIRECTORY_TABS = {
 }
 
 const TAB_BY_SLUG = DIRECTORY_TABS
-const TAB_BY_ID = Object.fromEntries(
-  Object.entries(DIRECTORY_TABS).map(([slug, tab]) => [tab.id, { ...tab, slug }])
-)
+const TAB_BY_ID: Record<DirectoryTabId, DirectoryTabWithSlug> = Object.fromEntries(
+  Object.entries(DIRECTORY_TABS).map(([slug, tab]) => [
+    tab.id,
+    { ...tab, slug: slug as DirectoryTabSlug },
+  ])
+) as Record<DirectoryTabId, DirectoryTabWithSlug>
 
-function tabIdFromSlug(slug) {
+function tabIdFromSlug(slug: string | undefined): DirectoryTabId | null {
   if (!slug) return DIRECTORY_TABS.all.id
-  return TAB_BY_SLUG[slug]?.id ?? null
+  const tab = TAB_BY_SLUG[slug as DirectoryTabSlug]
+  return tab?.id ?? null
 }
 
-function mentorName(row) {
+function mentorName(row: PublicMentorDirectoryRow): string {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()
 }
 
-function assignedPracticeLabel(row) {
+function assignedPracticeLabel(row: PublicMentorPracticeRow): string {
   if (row.attendance === 'first_half') return 'First half'
   if (row.attendance === 'second_half') return 'Second half'
   return 'Attending'
 }
 
-function PracticeList({ title, practices, emptyMessage }) {
+type PracticeListProps = {
+  title: string
+  practices: PublicMentorPracticeRow[]
+  emptyMessage: string
+}
+
+function PracticeList({ title, practices, emptyMessage }: PracticeListProps) {
   if (!practices.length) {
     return (
       <div className="mentor-directory-practice-group">
@@ -98,6 +136,17 @@ function PracticeList({ title, practices, emptyMessage }) {
   )
 }
 
+type MentorDirectoryListProps = {
+  mentors: PublicMentorDirectoryRow[]
+  expandedIds: Set<number>
+  practiceDetailsByMentorId: Record<number, PublicMentorDirectoryPractices>
+  loadingPracticeIds: Set<number>
+  practiceErrorsByMentorId: Record<number, string>
+  onToggleExpanded: (id: number) => void
+  onOpenCalendar: (mentor: PublicMentorDirectoryRow) => void
+  hidePace?: boolean
+}
+
 function MentorDirectoryList({
   mentors,
   expandedIds,
@@ -107,7 +156,7 @@ function MentorDirectoryList({
   onToggleExpanded,
   onOpenCalendar,
   hidePace = false,
-}) {
+}: MentorDirectoryListProps) {
   return (
     <ul className="mentor-directory-list">
       {mentors.map((mentor) => {
@@ -184,7 +233,9 @@ function MentorDirectoryList({
   )
 }
 
-function sortMentorsByName(mentors) {
+function sortMentorsByName(
+  mentors: PublicMentorDirectoryRow[]
+): PublicMentorDirectoryRow[] {
   return [...mentors].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -192,22 +243,24 @@ function sortMentorsByName(mentors) {
   })
 }
 
-function groupAtPracticeMentorsByPace(mentors) {
-  const byPace = new Map()
+function groupAtPracticeMentorsByPace(
+  mentors: PublicMentorDirectoryRow[]
+): PaceGroup[] {
+  const byPace = new Map<string, PublicMentorDirectoryRow[]>()
 
   for (const mentor of mentors) {
     const pace = mentor.pace?.trim() || ''
     if (!byPace.has(pace)) byPace.set(pace, [])
-    byPace.get(pace).push(mentor)
+    byPace.get(pace)!.push(mentor)
   }
 
-  const groups = []
+  const groups: PaceGroup[] = []
   for (const pace of PACE_GROUPS) {
     if (!byPace.has(pace)) continue
     groups.push({
       pace,
       label: `Pace ${pace}`,
-      mentors: sortMentorsByName(byPace.get(pace)),
+      mentors: sortMentorsByName(byPace.get(pace)!),
     })
     byPace.delete(pace)
   }
@@ -229,25 +282,32 @@ export default function PublicMentorDirectoryPage() {
   const { tab: tabSlug } = useParams()
   const navigate = useNavigate()
   const activeTab = tabIdFromSlug(tabSlug)
-  const [mentors, setMentors] = useState([])
+  const [mentors, setMentors] = useState<PublicMentorDirectoryRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [nameFilter, setNameFilter] = useState('')
   const [paceFilter, setPaceFilter] = useState('')
-  const [expandedIds, setExpandedIds] = useState(() => new Set())
-  const [practiceDetailsByMentorId, setPracticeDetailsByMentorId] = useState({})
-  const [loadingPracticeIds, setLoadingPracticeIds] = useState(() => new Set())
-  const [practiceErrorsByMentorId, setPracticeErrorsByMentorId] = useState({})
-  const [calendarMentor, setCalendarMentor] = useState(null)
+  const [expandedIds, setExpandedIds] = useState(() => new Set<number>())
+  const [practiceDetailsByMentorId, setPracticeDetailsByMentorId] = useState<
+    Record<number, PublicMentorDirectoryPractices>
+  >({})
+  const [loadingPracticeIds, setLoadingPracticeIds] = useState(
+    () => new Set<number>()
+  )
+  const [practiceErrorsByMentorId, setPracticeErrorsByMentorId] = useState<
+    Record<number, string>
+  >({})
+  const [calendarMentor, setCalendarMentor] =
+    useState<PublicMentorDirectoryRow | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
-  const [calendarError, setCalendarError] = useState(null)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
 
   useEffect(() => {
     if (activeTab != null) return
     navigate('/mentor-directory', { replace: true })
   }, [activeTab, navigate])
 
-  function selectTab(tabId) {
+  function selectTab(tabId: DirectoryTabId) {
     const tab = TAB_BY_ID[tabId]
     if (!tab) return
     navigate(tab.path)
@@ -264,7 +324,7 @@ export default function PublicMentorDirectoryPage() {
         if (!cancelled) {
           setMentors(Array.isArray(rows) ? rows : [])
         }
-      } catch (e) {
+      } catch (e: unknown) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
           setMentors([])
@@ -304,7 +364,9 @@ export default function PublicMentorDirectoryPage() {
     [filteredMentors]
   )
 
-  async function ensurePracticeDetails(id) {
+  async function ensurePracticeDetails(
+    id: number
+  ): Promise<PublicMentorDirectoryPractices> {
     if (practiceDetailsByMentorId[id]) {
       return practiceDetailsByMentorId[id]
     }
@@ -321,7 +383,7 @@ export default function PublicMentorDirectoryPage() {
       const details = await fetchPublicMentorDirectoryPractices(id)
       setPracticeDetailsByMentorId((prev) => ({ ...prev, [id]: details }))
       return details
-    } catch (e) {
+    } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e)
       setPracticeErrorsByMentorId((prev) => ({
         ...prev,
@@ -337,7 +399,7 @@ export default function PublicMentorDirectoryPage() {
     }
   }
 
-  async function toggleExpanded(id) {
+  async function toggleExpanded(id: number) {
     const willExpand = !expandedIds.has(id)
 
     setExpandedIds((prev) => {
@@ -358,13 +420,13 @@ export default function PublicMentorDirectoryPage() {
     }
   }
 
-  async function openCalendar(mentor) {
+  async function openCalendar(mentor: PublicMentorDirectoryRow) {
     setCalendarMentor(mentor)
     setCalendarError(null)
     setCalendarLoading(true)
     try {
       await ensurePracticeDetails(mentor.id)
-    } catch (e) {
+    } catch (e: unknown) {
       setCalendarError(e instanceof Error ? e.message : String(e))
     } finally {
       setCalendarLoading(false)
@@ -377,7 +439,7 @@ export default function PublicMentorDirectoryPage() {
     setCalendarLoading(false)
   }
 
-  function handleCalendarDownload(provider) {
+  function handleCalendarDownload(provider: CalendarProvider) {
     if (!calendarMentor) return
     const details = practiceDetailsByMentorId[calendarMentor.id]
     const practices = details?.assigned_practices ?? []
@@ -386,7 +448,7 @@ export default function PublicMentorDirectoryPage() {
       firstName: calendarMentor.first_name,
       lastName: calendarMentor.last_name,
       practices,
-    })
+    }) as boolean
     if (!ok) {
       setCalendarError('No assigned practices to add to the calendar.')
       return
@@ -404,8 +466,12 @@ export default function PublicMentorDirectoryPage() {
     practiceDetailsByMentorId,
     loadingPracticeIds,
     practiceErrorsByMentorId,
-    onToggleExpanded: toggleExpanded,
-    onOpenCalendar: openCalendar,
+    onToggleExpanded: (id: number) => {
+      void toggleExpanded(id)
+    },
+    onOpenCalendar: (mentor: PublicMentorDirectoryRow) => {
+      void openCalendar(mentor)
+    },
   }
 
   return (

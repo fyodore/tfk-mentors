@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 
 import {
+  ApiError,
   fetchMentorCellPhoneUpdate,
   putMentorCellPhoneUpdate,
 } from '../api'
@@ -32,10 +33,10 @@ export default function MentorCellPhonePage() {
         const data = await fetchMentorCellPhoneUpdate(token)
         if (cancelled) return
         setFirstName(data.first_name || '')
-      } catch (e) {
+      } catch (e: unknown) {
         if (cancelled) return
         setError(e instanceof Error ? e.message : String(e))
-        if (e?.status === 410) {
+        if (e instanceof ApiError && e.status === 410) {
           setDoneMessage(e.message)
         }
       } finally {
@@ -47,7 +48,7 @@ export default function MentorCellPhonePage() {
     }
   }, [token])
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     setError('')
@@ -59,7 +60,7 @@ export default function MentorCellPhonePage() {
         result.detail ||
           'Thank you! We have saved your cell phone number.'
       )
-    } catch (err) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSubmitting(false)

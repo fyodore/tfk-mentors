@@ -422,3 +422,99 @@ export type CsvImportResult = {
   errors?: string[]
   created_by_season?: Record<string, number>
 }
+
+export type MentorEmailReplyPractice = {
+  id: number
+  date: string
+  nyrr_race: string
+  full_practice: boolean
+  season_id: number
+  attendance?: string | null
+  pace?: string
+}
+
+export type MentorEmailReplyMentor = {
+  id: number
+  first_name: string
+  last_name: string
+  email?: string
+  cell_phone?: string
+  type?: string
+  pace?: string
+  split_practice?: boolean
+  season_years?: number[]
+}
+
+export type MentorEmailReplyResponse = {
+  mentor: MentorEmailReplyMentor
+  season_year?: number | null
+  assigned_pace?: string
+  scheduled_send_at?: string
+  practices: MentorEmailReplyPractice[]
+  pace_choices: string[]
+  email_received_confirmed?: boolean
+  shows_partial_month?: boolean
+  selection_closed?: boolean
+  has_practice_selection?: boolean
+}
+
+export type MentorEmailReplyPutPayload = {
+  replies: { practice: number; attendance: string; pace?: string }[]
+  email_received_confirmed?: boolean
+  mentor_pace?: string
+  cell_phone?: string
+}
+
+export type MentorCellPhoneMissingMentor = {
+  id: number
+  first_name: string
+  last_name: string
+  email?: string
+  type?: string
+  cell_phone?: string
+}
+
+export type MentorCellPhoneRequestRecipient = {
+  mentor_id: number
+  first_name: string
+  last_name: string
+  email?: string
+  used_at?: string | null
+}
+
+export type MentorCellPhoneRequestSendBatch = {
+  id: number
+  sent_at?: string | null
+  recipients_emailed_count: number
+  season_id?: number | null
+  season_year?: number | null
+  recipients?: MentorCellPhoneRequestRecipient[]
+}
+
+export type MentorCellPhoneRequestsResponse = {
+  missing_mentors: MentorCellPhoneMissingMentor[]
+  sends: MentorCellPhoneRequestSendBatch[]
+}
+
+export type MentorCellPhoneSendResult = {
+  sent?: number
+  recipients?: number
+  subject?: string
+  send_id?: number
+  sent_at?: string
+}
+
+export type MentorCellPhoneUpdateGetResponse = {
+  token?: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  detail?: string
+  already_used?: boolean
+  already_complete?: boolean
+}
+
+export type MentorCellPhoneUpdatePutResponse = {
+  detail?: string
+  completed?: boolean
+}

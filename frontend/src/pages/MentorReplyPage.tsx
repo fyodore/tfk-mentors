@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 
 import { fetchMentorEmailReply, putMentorEmailReply } from '../api'
 import { Modal } from '../components/Modal.tsx'
 import { formatPracticeWhen } from '../datetime.js'
+import type {
+  MentorEmailReplyMentor,
+  MentorEmailReplyPractice,
+} from '../types.js'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
@@ -22,48 +26,52 @@ const REMOTE_SELECT_WARNING =
 const REMOTE_ASSIGN_CONFIRM =
   'You will be assigned to the practice selected. If you can not attend any practice selected you will be responsible to find a replacement.'
 
-/** @typedef {{ id: number, date: string, nyrr_race: string, full_practice: boolean, season_id: number, attendance?: string|null, pace?: string }} PracticeReplyRow */
-
-function formatPaceLabel(pace) {
+function formatPaceLabel(pace: string | undefined | null): string {
   const trimmed = pace?.trim()
   if (!trimmed) return ''
   if (/min\/mile/i.test(trimmed)) return trimmed
   return `${trimmed} min/mile`
 }
 
-function isAttending(attendance) {
+function isAttending(attendance: string | null | undefined): boolean {
   return ATTENDING.has(attendance ?? '')
 }
 
-/** @param {PracticeReplyRow[]} practices */
-function initialAttendanceMap(practices) {
-  /** @type {Record<number, string>} */
-  const m = {}
+function initialAttendanceMap(
+  practices: MentorEmailReplyPractice[]
+): Record<number, string> {
+  const m: Record<number, string> = {}
   for (const p of practices) {
     m[p.id] = p.attendance || 'not_attending'
   }
   return m
 }
 
-/** @param {PracticeReplyRow[]} practices @param {string} defaultPace */
-function initialPaceMap(practices, defaultPace) {
-  /** @type {Record<number, string>} */
-  const m = {}
+function initialPaceMap(
+  practices: MentorEmailReplyPractice[],
+  defaultPace: string
+): Record<number, string> {
+  const m: Record<number, string> = {}
   for (const p of practices) {
     m[p.id] = p.pace?.trim() || defaultPace || ''
   }
   return m
 }
 
-/** @param {PracticeReplyRow[]} practices @param {string} mentorPace */
-function initialRemotePace(practices, mentorPace) {
+function initialRemotePace(
+  practices: MentorEmailReplyPractice[],
+  mentorPace: string
+): string {
   const saved = practices.find(
     (p) => isAttending(p.attendance) && (p.pace ?? '').trim()
   )
   return (saved?.pace ?? mentorPace ?? '').trim()
 }
 
-function resolveToken(pathToken, searchParams) {
+function resolveToken(
+  pathToken: string | undefined,
+  searchParams: URLSearchParams
+): string {
   const fromPath = typeof pathToken === 'string' ? pathToken.trim() : ''
   if (fromPath) return fromPath
   return (searchParams.get('token') ?? '').trim()
@@ -75,22 +83,22 @@ export default function MentorReplyPage() {
   const rawToken = resolveToken(pathToken, searchParams)
 
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [mentor, setMentor] = useState(null)
-  const [seasonYear, setSeasonYear] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [mentor, setMentor] = useState<MentorEmailReplyMentor | null>(null)
+  const [seasonYear, setSeasonYear] = useState<number | null>(null)
   const [assignedPace, setAssignedPace] = useState('')
-  /** @type {PracticeReplyRow[]} */
-  const [practices, setPractices] = useState([])
-  /** @type {string[]} */
-  const [paceChoices, setPaceChoices] = useState([])
+  const [practices, setPractices] = useState<MentorEmailReplyPractice[]>([])
+  const [paceChoices, setPaceChoices] = useState<string[]>([])
   const [showsPartialMonth, setShowsPartialMonth] = useState(false)
   const [selectionClosed, setSelectionClosed] = useState(false)
   const [hasPracticeSelection, setHasPracticeSelection] = useState(false)
   const [emailReceivedConfirmed, setEmailReceivedConfirmed] = useState(false)
-  /** @type {Record<number, string>} */
-  const [attendanceByPractice, setAttendanceByPractice] = useState({})
-  /** @type {Record<number, string>} */
-  const [paceByPractice, setPaceByPractice] = useState({})
+  const [attendanceByPractice, setAttendanceByPractice] = useState<
+    Record<number, string>
+  >({})
+  const [paceByPractice, setPaceByPractice] = useState<Record<number, string>>(
+    {}
+  )
   const [remotePace, setRemotePace] = useState('')
   const [cellPhone, setCellPhone] = useState('')
   const [busy, setBusy] = useState(false)
@@ -147,7 +155,7 @@ export default function MentorReplyPage() {
         ) {
           setRemotePracticesVisible(true)
         }
-      } catch (e) {
+      } catch (e: unknown) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
           setMentor(null)
@@ -202,14 +210,14 @@ export default function MentorReplyPage() {
     return ''
   }, [mentor, isAtPractice, isRemote])
 
-  function setAttendance(practiceId, attendance) {
+  function setAttendance(practiceId: number, attendance: string) {
     setAttendanceByPractice((prev) => ({ ...prev, [practiceId]: attendance }))
     if (!isAttending(attendance)) {
       setPaceByPractice((prev) => ({ ...prev, [practiceId]: '' }))
     }
   }
 
-  function validateBeforeSubmit() {
+  function validateBeforeSubmit(): string | null {
     if (isRemote && !emailReceivedConfirmed) {
       return 'Please confirm that you received the email.'
     }
@@ -265,14 +273,14 @@ export default function MentorReplyPage() {
       setSubmitted(true)
       setConfirmOpen(false)
       setRemoteAssignConfirmOpen(false)
-    } catch (err) {
+    } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
   }
 
-  function handleSubmit(e) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!rawToken || submitted || formLocked) return
     const validationError = validateBeforeSubmit()
@@ -290,7 +298,7 @@ export default function MentorReplyPage() {
 
   function handleConfirmSubmit() {
     if (busy) return
-    submitReply()
+    void submitReply()
   }
 
   function handleRemoteAssignCancel() {

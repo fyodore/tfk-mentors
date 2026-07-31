@@ -10,14 +10,21 @@ import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
 } from '../seasonHelpers.js'
+import type {
+  MentorCellPhoneMissingMentor,
+  MentorCellPhoneRequestSendBatch,
+  Season,
+} from '../types.js'
 
 export default function MentorCellPhoneRequestPanel() {
-  const [seasons, setSeasons] = useState([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [seasonFilter, setSeasonFilter] = useState('')
-  const [missingMentors, setMissingMentors] = useState([])
-  const [sends, setSends] = useState([])
+  const [missingMentors, setMissingMentors] = useState<MentorCellPhoneMissingMentor[]>(
+    []
+  )
+  const [sends, setSends] = useState<MentorCellPhoneRequestSendBatch[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sendMessage, setSendMessage] = useState('')
 
@@ -26,7 +33,7 @@ export default function MentorCellPhoneRequestPanel() {
     [seasons]
   )
 
-  async function load(seasonId) {
+  async function load(seasonId: string) {
     setLoading(true)
     setLoadError(null)
     try {
@@ -35,7 +42,7 @@ export default function MentorCellPhoneRequestPanel() {
         Array.isArray(data.missing_mentors) ? data.missing_mentors : []
       )
       setSends(Array.isArray(data.sends) ? data.sends : [])
-    } catch (e) {
+    } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : String(e))
       setMissingMentors([])
       setSends([])
@@ -63,7 +70,7 @@ export default function MentorCellPhoneRequestPanel() {
           Array.isArray(data.missing_mentors) ? data.missing_mentors : []
         )
         setSends(Array.isArray(data.sends) ? data.sends : [])
-      } catch (e) {
+      } catch (e: unknown) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : String(e))
         }
@@ -76,11 +83,12 @@ export default function MentorCellPhoneRequestPanel() {
     }
   }, [])
 
-  async function handleSeasonChange(value) {
+  async function handleSeasonChange(value: string) {
     setSeasonFilter(value)
     setSendMessage('')
     await load(value)
   }
+
   async function handleSend() {
     setSending(true)
     setSendMessage('')
@@ -93,7 +101,7 @@ export default function MentorCellPhoneRequestPanel() {
         `Sent ${result.sent ?? 0} email${(result.sent ?? 0) === 1 ? '' : 's'}.`
       )
       await load(seasonFilter)
-    } catch (e) {
+    } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : String(e))
     } finally {
       setSending(false)

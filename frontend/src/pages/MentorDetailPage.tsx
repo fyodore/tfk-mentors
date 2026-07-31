@@ -4,8 +4,9 @@ import { Link, useParams } from 'react-router-dom'
 import { fetchMentor, fetchMentorPractices, fetchSeasons } from '../api'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
+import type { Mentor, MentorPracticeRow, Season } from '../types.js'
 
-function practiceStatusLabel(row) {
+function practiceStatusLabel(row: MentorPracticeRow): string {
   if (row.status === 'available') return 'Available'
   if (row.status !== 'assigned') return 'Not assigned'
   if (row.attendance === 'first_half') return 'Assigned (first half)'
@@ -13,7 +14,7 @@ function practiceStatusLabel(row) {
   return 'Assigned'
 }
 
-function practiceStatusClass(row) {
+function practiceStatusClass(row: MentorPracticeRow): string {
   if (row.status === 'available') return 'mentor-practice-status mentor-practice-status-available'
   if (row.status === 'assigned') return 'mentor-practice-status mentor-practice-status-assigned'
   return 'mentor-practice-status mentor-practice-status-none'
@@ -23,14 +24,14 @@ export default function MentorDetailPage() {
   const { id } = useParams()
   const mentorId = Number.parseInt(String(id), 10)
 
-  const [mentor, setMentor] = useState(null)
-  const [practiceRows, setPracticeRows] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [mentor, setMentor] = useState<Mentor | null>(null)
+  const [practiceRows, setPracticeRows] = useState<MentorPracticeRow[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
@@ -55,7 +56,7 @@ export default function MentorDetailPage() {
           setSeasons(sList)
         }
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
           setMentor(null)
