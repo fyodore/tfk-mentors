@@ -17,6 +17,7 @@ import type {
   PublicUpcomingPractice,
   Season,
   ServerConfig,
+  CsvImportResult,
 } from './types.js'
 
 export type { Id, JsonObject, Season, Practice, Mentor, Coach } from './types.js'
@@ -338,7 +339,7 @@ export async function deleteTfkStaff(id: Id) {
     throw new Error(await parseError(res))
 }
 
-export async function importCoachesCsv(file: File) {
+export async function importCoachesCsv(file: File): Promise<CsvImportResult> {
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${COACH_LIST}import-csv/`, {

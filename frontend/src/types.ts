@@ -193,3 +193,11 @@ export type ArchivedPracticeAttendance = {
 }
 
 export type JsonObject = Record<string, unknown>
+
+export type CsvImportResult = {
+  created?: number
+  updated?: number
+  skipped?: number
+  errors?: string[]
+  created_by_season?: Record<string, number>
+}

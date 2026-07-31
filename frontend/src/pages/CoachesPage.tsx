@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   createCoach,
@@ -15,8 +15,28 @@ import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
 } from '../seasonHelpers.js'
+import type { Coach, Season } from '../types.js'
 
-function sortCoaches(list) {
+type CoachModal = 'create' | 'edit' | 'delete' | 'import'
+type CoachSortBy = 'last_name' | 'email' | 'season'
+
+type CoachFormState = {
+  first_name: string
+  last_name: string
+  email: string
+  cell: string
+  seasons: string[]
+}
+
+type CoachPayload = {
+  first_name: string
+  last_name: string
+  email: string
+  cell: string
+  seasons: number[]
+}
+
+function sortCoaches(list: Coach[]): Coach[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -26,7 +46,7 @@ function sortCoaches(list) {
   })
 }
 
-function emptyCoachForm() {
+function emptyCoachForm(): CoachFormState {
   return {
     first_name: '',
     last_name: '',
@@ -37,20 +57,20 @@ function emptyCoachForm() {
 }
 
 export default function CoachesPage() {
-  const [coaches, setCoaches] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [coaches, setCoaches] = useState<Coach[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [seasonFilter, setSeasonFilter] = useState('')
   const [emailFilter, setEmailFilter] = useState('')
-  const [sortBy, setSortBy] = useState('last_name')
+  const [sortBy, setSortBy] = useState<CoachSortBy>('last_name')
 
-  const [modal, setModal] = useState(null)
-  const [activeCoach, setActiveCoach] = useState(null)
-  const [form, setForm] = useState(() => emptyCoachForm())
+  const [modal, setModal] = useState<CoachModal | null>(null)
+  const [activeCoach, setActiveCoach] = useState<Coach | null>(null)
+  const [form, setForm] = useState<CoachFormState>(() => emptyCoachForm())
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [csvFile, setCsvFile] = useState(null)
+  const [csvFile, setCsvFile] = useState<File | null>(null)
   const [importMessage, setImportMessage] = useState('')
   const [importBusy, setImportBusy] = useState(false)
 
@@ -60,7 +80,7 @@ export default function CoachesPage() {
   )
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
@@ -88,8 +108,10 @@ export default function CoachesPage() {
         const cmp = String(a.email || '').localeCompare(String(b.email || ''))
         if (cmp !== 0) return cmp
       } else if (sortBy === 'season') {
-        const seasonSortValue = (coach) => {
-          if (!Array.isArray(coach.seasons) || coach.seasons.length === 0) return Number.POSITIVE_INFINITY
+        const seasonSortValue = (coach: Coach) => {
+          if (!Array.isArray(coach.seasons) || coach.seasons.length === 0) {
+            return Number.POSITIVE_INFINITY
+          }
           const years = coach.seasons
             .map((id) => Number.parseInt(String(seasonYearById.get(id)), 10))
             .filter((y) => !Number.isNaN(y))
@@ -169,7 +191,7 @@ export default function CoachesPage() {
     setModal('import')
   }
 
-  const openEdit = (coach) => {
+  const openEdit = (coach: Coach) => {
     setModalError('')
     setActiveCoach(coach)
     setForm({
@@ -184,13 +206,13 @@ export default function CoachesPage() {
     setModal('edit')
   }
 
-  const openDelete = (coach) => {
+  const openDelete = (coach: Coach) => {
     setModalError('')
     setActiveCoach(coach)
     setModal('delete')
   }
 
-  const buildPayload = () => {
+  const buildPayload = (): { error: string } | { payload: CoachPayload } => {
     if (!form.first_name.trim()) return { error: 'First name is required.' }
     if (!form.last_name.trim()) return { error: 'Last name is required.' }
     if (!form.email.trim()) return { error: 'Email is required.' }
@@ -208,7 +230,7 @@ export default function CoachesPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const built = buildPayload()
@@ -229,7 +251,7 @@ export default function CoachesPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activeCoach) return
@@ -267,7 +289,7 @@ export default function CoachesPage() {
     }
   }
 
-  const handleCsvUpload = async (e) => {
+  const handleCsvUpload = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!csvFile) return
     setImportBusy(true)
@@ -290,7 +312,7 @@ export default function CoachesPage() {
           errCount ? `, errors ${errCount}` : ''
         }.${seasonSummary ? ` ${seasonSummary}.` : ''}`
       )
-      if (errCount) {
+      if (errCount && result.errors) {
         setLoadError(result.errors.slice(0, 5).join(' | '))
       }
     } catch (err) {
@@ -300,7 +322,7 @@ export default function CoachesPage() {
     }
   }
 
-  const coachFormFields = (formId) => (
+  const coachFormFields = (formId: string): ReactNode => (
     <>
       <label className="field-label" htmlFor={`${formId}-seasons`}>
         Seasons
@@ -455,7 +477,7 @@ export default function CoachesPage() {
             id="coach-sort-by"
             className="field-input field-select"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => setSortBy(e.target.value as CoachSortBy)}
           >
             <option value="last_name">Last name</option>
             <option value="email">Email</option>
@@ -516,7 +538,10 @@ export default function CoachesPage() {
                       Download ICS
                     </button>
                   ) : (
-                    <span className="practice-row-action-spacer" aria-hidden="true" />
+                    <span
+                      className="practice-row-action-spacer"
+                      aria-hidden="true"
+                    />
                   )}
                   <button
                     type="button"
@@ -565,7 +590,11 @@ export default function CoachesPage() {
           </>
         }
       >
-        <form id="coach-import-form" className="modal-form-stack" onSubmit={handleCsvUpload}>
+        <form
+          id="coach-import-form"
+          className="modal-form-stack"
+          onSubmit={handleCsvUpload}
+        >
           <label className="field-label" htmlFor="coach-csv-upload">
             Select CSV file
           </label>
