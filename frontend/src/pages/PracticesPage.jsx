@@ -420,11 +420,6 @@ export default function PracticesPage() {
             Season {seasonYearById.get(p.season) ?? p.season}
             {p.full_practice ? ' · Full practice' : ' · Partial'}
           </span>
-          {p.description?.trim() ? (
-            <span className="muted practice-description-preview">
-              {p.description.trim()}
-            </span>
-          ) : null}
           {p.start_location?.trim() ? (
             <span className="muted">Start: {p.start_location.trim()}</span>
           ) : null}
@@ -468,6 +463,11 @@ export default function PracticesPage() {
             Delete
           </button>
         </div>
+        {p.description?.trim() ? (
+          <div className="muted practice-description-preview practices-list-description">
+            {p.description.trim()}
+          </div>
+        ) : null}
       </li>
     )
   }
@@ -609,6 +609,7 @@ export default function PracticesPage() {
         title="Add practice"
         onClose={closeModal}
         closeDisabled={busy}
+        panelClassName="modal-panel-practice"
         footer={
           <>
             <button
@@ -767,6 +768,7 @@ export default function PracticesPage() {
         title="Edit practice"
         onClose={closeModal}
         closeDisabled={busy}
+        panelClassName="modal-panel-practice"
         footer={
           <>
             <button

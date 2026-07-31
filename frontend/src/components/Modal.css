@@ -36,6 +36,10 @@
   width: min(100%, 40rem);
 }
 
+.modal-panel-practice {
+  width: min(100%, 48rem);
+}
+
 .email-mentor-multiselect {
   width: 100%;
   min-width: 0;

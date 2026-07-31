@@ -380,7 +380,8 @@
 
 .practice-description-textarea.field-textarea.field-input {
   width: 100%;
-  min-height: 14rem;
+  min-width: 100%;
+  min-height: 10rem;
   max-height: 70vh;
   resize: vertical;
   field-sizing: content;
@@ -915,14 +916,34 @@
 .practice-description-preview {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   overflow: hidden;
   white-space: pre-wrap;
 }
 
-.practice-description {
+.practices-page-list .practices-list-description {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: none;
+}
+
+.practice-description-block {
+  width: 100%;
+  max-width: none;
   margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.practice-description {
+  margin: 0;
+  width: 100%;
+  max-width: none;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   line-height: 1.45;
 }
 
@@ -1052,11 +1073,16 @@
     grid-template-columns: minmax(0, 1fr) minmax(10.5rem, 12rem);
     grid-template-areas:
       'main actions'
+      'description description'
       'visibility visibility';
   }
 
   .practices-page-list .practice-row-main {
     grid-area: main;
+  }
+
+  .practices-page-list .practices-list-description {
+    grid-area: description;
   }
 
   .practices-page-list .practice-row-visibility {

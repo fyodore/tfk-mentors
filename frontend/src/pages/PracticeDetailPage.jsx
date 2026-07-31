@@ -563,7 +563,9 @@ export default function PracticeDetailPage() {
               </p>
             </div>
             {practice.description?.trim() ? (
-              <p className="practice-description">{practice.description.trim()}</p>
+              <div className="practice-description-block">
+                <p className="practice-description">{practice.description.trim()}</p>
+              </div>
             ) : null}
             {practice.start_location?.trim() ? (
               <p className="muted">
