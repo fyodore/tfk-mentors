@@ -136,3 +136,59 @@ class MentorCellPhoneRequestTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(MentorCellPhoneRequestSend.objects.count(), 0)
+
+    def test_excludes_mentors_only_assigned_to_past_practices(self):
+        past_practice = Practice.objects.create(
+            date=timezone.now() - timedelta(days=5),
+            season=self.season,
+            full_practice=True,
+        )
+        past_only = Mentor.objects.create(
+            first_name="Past",
+            last_name="Only",
+            email="pastonly@example.com",
+            cell_phone="",
+            type=MentorTypes.REMOTE,
+            pace=PaceTypes.TEN.value,
+        )
+        past_only.seasons.add(self.season)
+        MentorPracticeAssignment.objects.create(
+            mentor=past_only,
+            practice=past_practice,
+            pace=past_only.pace,
+            is_available=False,
+        )
+        past_practice.mentors.add(past_only)
+
+        both = Mentor.objects.create(
+            first_name="Both",
+            last_name="Practices",
+            email="both@example.com",
+            cell_phone="",
+            type=MentorTypes.REMOTE,
+            pace=PaceTypes.TEN.value,
+        )
+        both.seasons.add(self.season)
+        MentorPracticeAssignment.objects.create(
+            mentor=both,
+            practice=past_practice,
+            pace=both.pace,
+            is_available=False,
+        )
+        MentorPracticeAssignment.objects.create(
+            mentor=both,
+            practice=self.practice,
+            pace=both.pace,
+            is_available=False,
+        )
+        past_practice.mentors.add(both)
+        self.practice.mentors.add(both)
+
+        response = self.client.get(
+            f"/api/mentor-cell-phone-request/?season={self.season.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["missing_mentors"]}
+        self.assertIn(self.missing.id, ids)
+        self.assertIn(both.id, ids)
+        self.assertNotIn(past_only.id, ids)

@@ -170,7 +170,11 @@ GMAIL_CLIENT_ID = os.environ.get("GMAIL_CLIENT_ID", "")
 GMAIL_CLIENT_SECRET = os.environ.get("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.environ.get("GMAIL_REFRESH_TOKEN", "")
 
-if GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN:
+# EMAIL_BACKEND env override (e.g. console backend for local Docker).
+_email_backend_override = (os.environ.get("EMAIL_BACKEND") or "").strip()
+if _email_backend_override:
+    EMAIL_BACKEND = _email_backend_override
+elif GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN:
     # HTTPS Gmail API (works when SMTP ports 465/587 are blocked).
     # Set GMAIL_USE_SMTP=1 to use OAuth-over-SMTP instead.
     if os.environ.get("GMAIL_USE_SMTP", "0") in ("1", "true", "True"):

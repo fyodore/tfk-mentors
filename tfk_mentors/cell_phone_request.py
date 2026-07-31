@@ -26,8 +26,9 @@ Ted"""
 
 
 def mentors_assigned_without_cell_phone(*, season_id=None):
-    """Mentors on an attending practice roster with no cell phone on file."""
-    practices = Practice.objects.all().order_by("date", "id")
+    """Mentors on an upcoming attending practice roster with no cell phone on file."""
+    today = timezone.localdate()
+    practices = Practice.objects.filter(date__date__gte=today).order_by("date", "id")
     if season_id is not None:
         practices = practices.filter(season_id=season_id)
 

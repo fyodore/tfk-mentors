@@ -178,7 +178,18 @@ def create_mentor_swap_request(practice, outgoing, incoming):
             outgoing_pace=outgoing_pace,
             incoming_pace=incoming_pace,
         )
-    email_result = send_swap_request_email(request_row)
+    try:
+        email_result = send_swap_request_email(request_row)
+    except Exception as exc:
+        email_result = {
+            "sent": 0,
+            "recipients": 1,
+            "subject": swap_request_email_subject(),
+            "skipped": False,
+            "error": str(exc),
+            "approve_url": request_row.approve_absolute_url(),
+            "reject_url": request_row.reject_absolute_url(),
+        }
     return request_row, email_result
 
 
@@ -309,7 +320,16 @@ def reject_mentor_swap_request(request_row: MentorSwapRequest, comments: str):
     request_row.save(
         update_fields=["status", "reject_comments", "decided_at", "updated_at"]
     )
-    email_result = send_rejected_swap_email(request_row)
+    try:
+        email_result = send_rejected_swap_email(request_row)
+    except Exception as exc:
+        email_result = {
+            "sent": 0,
+            "recipients": 1,
+            "subject": rejected_swap_email_subject(),
+            "skipped": False,
+            "error": str(exc),
+        }
     return {
         "already_decided": False,
         "status": request_row.status,
