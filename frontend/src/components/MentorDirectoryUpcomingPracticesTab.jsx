@@ -19,14 +19,19 @@ function sortByLastName(list) {
   })
 }
 
+function filterBySelectedPaces(people, selectedPaces) {
+  if (selectedPaces.size === 0) return people
+  return people.filter((person) => {
+    const pace = person.pace?.trim() || ''
+    return pace && selectedPaces.has(pace)
+  })
+}
+
 function buildMentorPaceGroups(mentors, selectedPaces) {
   const byPace = new Map()
 
-  for (const mentor of mentors) {
+  for (const mentor of filterBySelectedPaces(mentors, selectedPaces)) {
     const pace = mentor.pace?.trim() || ''
-    if (selectedPaces.size > 0 && !selectedPaces.has(pace || '__none__')) {
-      continue
-    }
     const key = pace || '__none__'
     if (!byPace.has(key)) byPace.set(key, [])
     byPace.get(key).push(mentor)
@@ -166,8 +171,9 @@ export function MentorDirectoryUpcomingPracticesTab() {
     selectedPracticeId != null && rosterLoadingId === selectedPracticeId
 
   const coaches = useMemo(
-    () => sortByLastName(roster?.coaches ?? []),
-    [roster]
+    () =>
+      sortByLastName(filterBySelectedPaces(roster?.coaches ?? [], selectedPaces)),
+    [roster, selectedPaces]
   )
 
   const mentorPaceGroups = useMemo(
@@ -247,7 +253,7 @@ export function MentorDirectoryUpcomingPracticesTab() {
             <div
               className="mentor-directory-upcoming-pace-options"
               role="group"
-              aria-label="Filter mentors by pace"
+              aria-label="Filter coaches and mentors by pace"
             >
               {PACE_GROUPS.map((pace) => {
                 const checked = selectedPaces.has(pace)
@@ -294,7 +300,11 @@ export function MentorDirectoryUpcomingPracticesTab() {
               >
                 <h3 id="upcoming-coaches-heading">Coaches</h3>
                 {coaches.length === 0 ? (
-                  <p className="muted">No coaches assigned.</p>
+                  <p className="muted">
+                    {selectedPaces.size > 0
+                      ? 'No coaches match the selected pace groups.'
+                      : 'No coaches assigned.'}
+                  </p>
                 ) : (
                   <ul className="mentor-directory-upcoming-person-list">
                     {coaches.map((coach) => (
