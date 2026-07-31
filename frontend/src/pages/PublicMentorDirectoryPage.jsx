@@ -7,7 +7,7 @@ import {
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
 import { MentorDirectoryUpcomingPracticesTab } from '../components/MentorDirectoryUpcomingPracticesTab.jsx'
-import { MentorDirectoryRequestSwapTab } from '../components/MentorDirectoryRequestSwapTab.jsx'
+import { MentorDirectoryRequestSwapTab } from '../components/MentorDirectoryRequestSwapTab.tsx'
 import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'

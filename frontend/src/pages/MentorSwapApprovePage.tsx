@@ -7,7 +7,7 @@ export default function MentorSwapApprovePage() {
   const { token } = useParams()
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false

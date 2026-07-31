@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useParams } from 'react-router-dom'
 
 import {
@@ -6,19 +6,22 @@ import {
   rejectPublicMentorSwapRequest,
 } from '../api'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
+import type { MentorSwapRequestSummary, PublicSwapMentorOption } from '../types.js'
 
-function personName(row) {
+function personName(row: PublicSwapMentorOption | null | undefined): string {
   return `${row?.first_name ?? ''} ${row?.last_name ?? ''}`.trim() || '—'
 }
 
 export default function MentorSwapRejectPage() {
   const { token } = useParams()
   const [loading, setLoading] = useState(true)
-  const [requestRow, setRequestRow] = useState(null)
-  const [error, setError] = useState(null)
+  const [requestRow, setRequestRow] = useState<MentorSwapRequestSummary | null>(
+    null
+  )
+  const [error, setError] = useState<string | null>(null)
   const [comments, setComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [doneMessage, setDoneMessage] = useState(null)
+  const [doneMessage, setDoneMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -52,14 +55,16 @@ export default function MentorSwapRejectPage() {
     }
   }, [token])
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || submitting) return
     setSubmitting(true)
     setError(null)
     try {
       const result = await rejectPublicMentorSwapRequest(token, comments)
-      setDoneMessage(result.message || 'Your rejection was submitted. Thank you.')
+      setDoneMessage(
+        result.message || 'Your rejection was submitted. Thank you.'
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -77,7 +82,10 @@ export default function MentorSwapRejectPage() {
         </p>
       ) : null}
 
-      {!loading && requestRow && !doneMessage && requestRow.status === 'pending' ? (
+      {!loading &&
+      requestRow &&
+      !doneMessage &&
+      requestRow.status === 'pending' ? (
         <>
           <p>
             Practice:{' '}
@@ -87,7 +95,9 @@ export default function MentorSwapRejectPage() {
             {requestRow.nyrr_race ? ` · ${requestRow.nyrr_race}` : ''}
           </p>
           <p>Original mentor: {personName(requestRow.outgoing_mentor)}</p>
-          <p>Requested replacement: {personName(requestRow.incoming_mentor)}</p>
+          <p>
+            Requested replacement: {personName(requestRow.incoming_mentor)}
+          </p>
 
           <form className="mentor-swap-reject-form" onSubmit={handleSubmit}>
             <label className="field-label" htmlFor="swap-reject-comments">

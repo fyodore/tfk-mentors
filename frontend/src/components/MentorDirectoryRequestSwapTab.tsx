@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 
 import {
   createPublicMentorSwapRequest,
@@ -7,12 +7,23 @@ import {
 } from '../api'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { PACE_GROUPS, paceSortKey } from '../paceHelpers.js'
+import type {
+  PublicPracticeSwapOptions,
+  PublicSwapMentorOption,
+  PublicUpcomingPractice,
+} from '../types.js'
 
-function personName(row) {
+type PaceMentorGroup = {
+  pace: string
+  label: string
+  mentors: PublicSwapMentorOption[]
+}
+
+function personName(row: PublicSwapMentorOption): string {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()
 }
 
-function practiceLabel(practice) {
+function practiceLabel(practice: PublicUpcomingPractice): string {
   const when = practice.date
     ? formatMentorDirectoryPracticeDate(practice.date)
     : '—'
@@ -20,7 +31,7 @@ function practiceLabel(practice) {
   return race ? `${when} · ${race}` : when
 }
 
-function sortByLastName(list) {
+function sortByLastName(list: PublicSwapMentorOption[]): PublicSwapMentorOption[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -28,22 +39,24 @@ function sortByLastName(list) {
   })
 }
 
-function groupMentorsByPace(mentors) {
-  const byPace = new Map()
+function groupMentorsByPace(
+  mentors: PublicSwapMentorOption[]
+): PaceMentorGroup[] {
+  const byPace = new Map<string, PublicSwapMentorOption[]>()
   for (const mentor of mentors) {
     const pace = mentor.pace?.trim() || ''
     const key = pace || '__none__'
     if (!byPace.has(key)) byPace.set(key, [])
-    byPace.get(key).push(mentor)
+    byPace.get(key)!.push(mentor)
   }
 
-  const groups = []
+  const groups: PaceMentorGroup[] = []
   for (const pace of PACE_GROUPS) {
     if (!byPace.has(pace)) continue
     groups.push({
       pace,
       label: `Pace ${pace}`,
-      mentors: sortByLastName(byPace.get(pace)),
+      mentors: sortByLastName(byPace.get(pace)!),
     })
     byPace.delete(pace)
   }
@@ -62,18 +75,18 @@ function groupMentorsByPace(mentors) {
 }
 
 export function MentorDirectoryRequestSwapTab() {
-  const [practices, setPractices] = useState([])
+  const [practices, setPractices] = useState<PublicUpcomingPractice[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [practiceId, setPracticeId] = useState('')
-  const [options, setOptions] = useState(null)
+  const [options, setOptions] = useState<PublicPracticeSwapOptions | null>(null)
   const [optionsLoading, setOptionsLoading] = useState(false)
-  const [optionsError, setOptionsError] = useState(null)
+  const [optionsError, setOptionsError] = useState<string | null>(null)
   const [outgoingId, setOutgoingId] = useState('')
   const [incomingId, setIncomingId] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState(null)
-  const [successMessage, setSuccessMessage] = useState(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -140,7 +153,7 @@ export function MentorDirectoryRequestSwapTab() {
     [options]
   )
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!practiceId || !outgoingId || !incomingId || submitting) return
     setSubmitting(true)
@@ -173,17 +186,24 @@ export function MentorDirectoryRequestSwapTab() {
     )
   }
   if (practices.length === 0) {
-    return <p className="muted">No upcoming practices are available for swap requests.</p>
+    return (
+      <p className="muted">
+        No upcoming practices are available for swap requests.
+      </p>
+    )
   }
 
   return (
     <div className="mentor-directory-request-swap">
       <p className="muted mentor-directory-request-swap-intro">
-        Request a mentor swap for an upcoming practice. The replacement mentor will
-        get an email to approve or reject.
+        Request a mentor swap for an upcoming practice. The replacement mentor
+        will get an email to approve or reject.
       </p>
 
-      <form className="mentor-directory-request-swap-form" onSubmit={handleSubmit}>
+      <form
+        className="mentor-directory-request-swap-form"
+        onSubmit={handleSubmit}
+      >
         <label className="field-label" htmlFor="swap-practice-select">
           Practice
         </label>
@@ -235,7 +255,9 @@ export function MentorDirectoryRequestSwapTab() {
                   ))}
                 </select>
                 {(options.attending_mentors ?? []).length === 0 ? (
-                  <p className="muted">No mentors are attending this practice.</p>
+                  <p className="muted">
+                    No mentors are attending this practice.
+                  </p>
                 ) : null}
 
                 <label className="field-label" htmlFor="swap-incoming-select">
@@ -262,8 +284,8 @@ export function MentorDirectoryRequestSwapTab() {
                 </select>
                 {(options.incoming_mentors ?? []).length === 0 ? (
                   <p className="muted">
-                    No eligible replacement mentors (season mentors with a pace who
-                    are not attending).
+                    No eligible replacement mentors (season mentors with a pace
+                    who are not attending).
                   </p>
                 ) : null}
 
