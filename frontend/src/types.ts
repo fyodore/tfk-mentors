@@ -37,6 +37,7 @@ export type Mentor = {
   cell_phone?: string
   type?: string
   pace?: string
+  split_practice?: boolean
   seasons?: number[]
   [key: string]: unknown
 }

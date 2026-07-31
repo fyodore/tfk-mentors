@@ -21,7 +21,7 @@ const PublicMentorDirectoryPage = lazy(
 const MentorSwapApprovePage = lazy(() => import('./pages/MentorSwapApprovePage.jsx'))
 const MentorSwapRejectPage = lazy(() => import('./pages/MentorSwapRejectPage.jsx'))
 const MentorDetailPage = lazy(() => import('./pages/MentorDetailPage.jsx'))
-const MentorsPage = lazy(() => import('./pages/MentorsPage.jsx'))
+const MentorsPage = lazy(() => import('./pages/MentorsPage.tsx'))
 const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.jsx'))
 const PracticesPage = lazy(() => import('./pages/PracticesPage.jsx'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage.tsx'))

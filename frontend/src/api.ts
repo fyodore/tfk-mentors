@@ -364,14 +364,14 @@ export function normalizeMentorList(data: unknown): Mentor[] {
   return normalizeList<Mentor>(data)
 }
 
-export async function fetchMentors() {
+export async function fetchMentors(): Promise<Mentor[]> {
   const res = await fetch(MENTOR_LIST, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   const data = await res.json()
   return normalizeMentorList(data)
 }
 
-export async function fetchMentor(id: Id) {
+export async function fetchMentor(id: Id): Promise<Mentor> {
   const res = await fetch(`${MENTOR_LIST}${id}/`, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
@@ -426,7 +426,7 @@ export async function deleteMentor(id: Id) {
     throw new Error(await parseError(res))
 }
 
-export async function importMentorsCsv(file: File) {
+export async function importMentorsCsv(file: File): Promise<CsvImportResult> {
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${MENTOR_LIST}import-csv/`, {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -16,12 +16,38 @@ import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
 } from '../seasonHelpers.js'
+import type { Mentor, Season } from '../types.js'
 
-const MENTOR_TYPES = ['At Practice', 'Remote']
+type MentorModal = 'create' | 'edit' | 'delete' | 'import'
+type MentorSortBy = 'last_name' | 'email' | 'season'
+
+type MentorFormState = {
+  first_name: string
+  last_name: string
+  email: string
+  cell_phone: string
+  type: string
+  pace: string
+  split_practice: boolean
+  seasons: string[]
+}
+
+type MentorPayload = {
+  first_name: string
+  last_name: string
+  email: string
+  cell_phone: string
+  type: string
+  pace: string
+  split_practice: boolean
+  seasons: number[]
+}
+
+const MENTOR_TYPES = ['At Practice', 'Remote'] as const
 const REMOTE_TYPE = 'Remote'
-const PACE_TYPES = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
+const PACE_TYPES = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+'] as const
 
-function sortMentors(list) {
+function sortMentors(list: Mentor[]): Mentor[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -31,7 +57,7 @@ function sortMentors(list) {
   })
 }
 
-function emptyMentorForm() {
+function emptyMentorForm(): MentorFormState {
   return {
     first_name: '',
     last_name: '',
@@ -45,20 +71,20 @@ function emptyMentorForm() {
 }
 
 export default function MentorsPage() {
-  const [mentors, setMentors] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [mentors, setMentors] = useState<Mentor[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [seasonFilter, setSeasonFilter] = useState('')
   const [nameEmailFilter, setNameEmailFilter] = useState('')
-  const [sortBy, setSortBy] = useState('last_name')
+  const [sortBy, setSortBy] = useState<MentorSortBy>('last_name')
 
-  const [modal, setModal] = useState(null)
-  const [activeMentor, setActiveMentor] = useState(null)
-  const [form, setForm] = useState(() => emptyMentorForm())
+  const [modal, setModal] = useState<MentorModal | null>(null)
+  const [activeMentor, setActiveMentor] = useState<Mentor | null>(null)
+  const [form, setForm] = useState<MentorFormState>(() => emptyMentorForm())
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [csvFile, setCsvFile] = useState(null)
+  const [csvFile, setCsvFile] = useState<File | null>(null)
   const [importMessage, setImportMessage] = useState('')
   const [importBusy, setImportBusy] = useState(false)
 
@@ -68,7 +94,7 @@ export default function MentorsPage() {
   )
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
@@ -103,8 +129,10 @@ export default function MentorsPage() {
         const cmp = String(a.email || '').localeCompare(String(b.email || ''))
         if (cmp !== 0) return cmp
       } else if (sortBy === 'season') {
-        const seasonSortValue = (mentor) => {
-          if (!Array.isArray(mentor.seasons) || mentor.seasons.length === 0) return Number.POSITIVE_INFINITY
+        const seasonSortValue = (mentor: Mentor) => {
+          if (!Array.isArray(mentor.seasons) || mentor.seasons.length === 0) {
+            return Number.POSITIVE_INFINITY
+          }
           const years = mentor.seasons
             .map((id) => Number.parseInt(String(seasonYearById.get(id)), 10))
             .filter((y) => !Number.isNaN(y))
@@ -181,7 +209,7 @@ export default function MentorsPage() {
     setModal('import')
   }
 
-  const openEdit = (mentor) => {
+  const openEdit = (mentor: Mentor) => {
     setModalError('')
     setActiveMentor(mentor)
     setForm({
@@ -190,9 +218,7 @@ export default function MentorsPage() {
       email: mentor.email ?? '',
       cell_phone: mentor.cell_phone ?? '',
       type: mentor.type ?? 'At Practice',
-      pace:
-        mentor.pace ??
-        (mentor.type === REMOTE_TYPE ? '' : '8-9'),
+      pace: mentor.pace ?? (mentor.type === REMOTE_TYPE ? '' : '8-9'),
       split_practice: Boolean(mentor.split_practice),
       seasons: Array.isArray(mentor.seasons)
         ? mentor.seasons.map((s) => String(s))
@@ -201,13 +227,13 @@ export default function MentorsPage() {
     setModal('edit')
   }
 
-  const openDelete = (mentor) => {
+  const openDelete = (mentor: Mentor) => {
     setModalError('')
     setActiveMentor(mentor)
     setModal('delete')
   }
 
-  const buildPayload = () => {
+  const buildPayload = (): { error: string } | { payload: MentorPayload } => {
     if (!form.first_name.trim()) return { error: 'First name is required.' }
     if (!form.last_name.trim()) return { error: 'Last name is required.' }
     if (!form.email.trim()) return { error: 'Email is required.' }
@@ -235,7 +261,7 @@ export default function MentorsPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const built = buildPayload()
@@ -256,7 +282,7 @@ export default function MentorsPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activeMentor) return
@@ -294,7 +320,7 @@ export default function MentorsPage() {
     }
   }
 
-  const handleCsvUpload = async (e) => {
+  const handleCsvUpload = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!csvFile) return
     setImportBusy(true)
@@ -317,7 +343,9 @@ export default function MentorsPage() {
           errCount ? `, errors ${errCount}` : ''
         }.${seasonSummary ? ` ${seasonSummary}.` : ''}`
       )
-      if (errCount) setLoadError(result.errors.slice(0, 5).join(' | '))
+      if (errCount && result.errors) {
+        setLoadError(result.errors.slice(0, 5).join(' | '))
+      }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -325,9 +353,11 @@ export default function MentorsPage() {
     }
   }
 
-  const mentorFormFields = (formId) => (
+  const mentorFormFields = (formId: string): ReactNode => (
     <>
-      <label className="field-label" htmlFor={`${formId}-seasons`}>Seasons</label>
+      <label className="field-label" htmlFor={`${formId}-seasons`}>
+        Seasons
+      </label>
       <select
         id={`${formId}-seasons`}
         className="field-input field-select"
@@ -342,11 +372,15 @@ export default function MentorsPage() {
         size={Math.min(Math.max(sortedSeasons.length, 3), 8)}
       >
         {sortedSeasons.map((s) => (
-          <option key={s.id} value={String(s.id)}>{s.year}</option>
+          <option key={s.id} value={String(s.id)}>
+            {s.year}
+          </option>
         ))}
       </select>
 
-      <label className="field-label" htmlFor={`${formId}-first`}>First name</label>
+      <label className="field-label" htmlFor={`${formId}-first`}>
+        First name
+      </label>
       <input
         id={`${formId}-first`}
         type="text"
@@ -357,7 +391,9 @@ export default function MentorsPage() {
         required
       />
 
-      <label className="field-label" htmlFor={`${formId}-last`}>Last name</label>
+      <label className="field-label" htmlFor={`${formId}-last`}>
+        Last name
+      </label>
       <input
         id={`${formId}-last`}
         type="text"
@@ -368,7 +404,9 @@ export default function MentorsPage() {
         required
       />
 
-      <label className="field-label" htmlFor={`${formId}-email`}>Email</label>
+      <label className="field-label" htmlFor={`${formId}-email`}>
+        Email
+      </label>
       <input
         id={`${formId}-email`}
         type="email"
@@ -392,7 +430,9 @@ export default function MentorsPage() {
         required={form.type !== REMOTE_TYPE}
       />
 
-      <label className="field-label" htmlFor={`${formId}-type`}>Type</label>
+      <label className="field-label" htmlFor={`${formId}-type`}>
+        Type
+      </label>
       <select
         id={`${formId}-type`}
         className="field-input field-select"
@@ -402,14 +442,15 @@ export default function MentorsPage() {
           setForm((f) => ({
             ...f,
             type: nextType,
-            // Keep existing pace when switching At Practice ↔ Remote.
             pace: f.pace || (nextType === REMOTE_TYPE ? '' : '8-9'),
           }))
         }}
         required
       >
         {MENTOR_TYPES.map((t) => (
-          <option key={t} value={t}>{t}</option>
+          <option key={t} value={t}>
+            {t}
+          </option>
         ))}
       </select>
 
@@ -423,11 +464,11 @@ export default function MentorsPage() {
         onChange={(e) => setForm((f) => ({ ...f, pace: e.target.value }))}
         required={form.type !== REMOTE_TYPE}
       >
-        {form.type === REMOTE_TYPE ? (
-          <option value="">None</option>
-        ) : null}
+        {form.type === REMOTE_TYPE ? <option value="">None</option> : null}
         {PACE_TYPES.map((p) => (
-          <option key={p} value={p}>{p}</option>
+          <option key={p} value={p}>
+            {p}
+          </option>
         ))}
       </select>
 
@@ -435,7 +476,9 @@ export default function MentorsPage() {
         <input
           type="checkbox"
           checked={form.split_practice}
-          onChange={(e) => setForm((f) => ({ ...f, split_practice: e.target.checked }))}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, split_practice: e.target.checked }))
+          }
         />
         Split practice
       </label>
@@ -511,7 +554,7 @@ export default function MentorsPage() {
             id="mentor-sort-by"
             className="field-input field-select"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => setSortBy(e.target.value as MentorSortBy)}
           >
             <option value="last_name">Last name</option>
             <option value="email">Email</option>
@@ -520,7 +563,11 @@ export default function MentorsPage() {
         </div>
 
         {loading && <p className="muted">Loading…</p>}
-        {loadError && <p className="error" role="alert">{loadError}</p>}
+        {loadError && (
+          <p className="error" role="alert">
+            {loadError}
+          </p>
+        )}
 
         {!loading && !loadError && filteredMentors.length === 0 && (
           <p className="muted">
@@ -535,14 +582,18 @@ export default function MentorsPage() {
             {filteredMentors.map((m) => (
               <li key={m.id} className="practice-row mentors-list-row">
                 <div className="practice-row-main">
-                  <span className="practice-date">{m.first_name} {m.last_name}</span>
+                  <span className="practice-date">
+                    {m.first_name} {m.last_name}
+                  </span>
                   <span className="practice-race muted">{m.email}</span>
                   <span className="muted">
                     {m.cell_phone} · {m.type}
                     {m.pace ? ` · Pace ${m.pace}` : ''}
                     {m.split_practice ? ' · Split practice' : ''} · Seasons{' '}
                     {Array.isArray(m.seasons) && m.seasons.length > 0
-                      ? m.seasons.map((id) => seasonYearById.get(id) ?? id).join(', ')
+                      ? m.seasons
+                          .map((id) => seasonYearById.get(id) ?? id)
+                          .join(', ')
                       : 'none'}
                   </span>
                 </div>
@@ -565,12 +616,19 @@ export default function MentorsPage() {
                       Download ICS
                     </button>
                   ) : (
-                    <span className="practice-row-action-spacer" aria-hidden="true" />
+                    <span
+                      className="practice-row-action-spacer"
+                      aria-hidden="true"
+                    />
                   )}
                   <Link className="btn btn-text" to={`/mentors/${m.id}`}>
                     View
                   </Link>
-                  <button type="button" className="btn btn-text" onClick={() => openEdit(m)}>
+                  <button
+                    type="button"
+                    className="btn btn-text"
+                    onClick={() => openEdit(m)}
+                  >
                     Edit
                   </button>
                   <button
@@ -613,7 +671,11 @@ export default function MentorsPage() {
           </>
         }
       >
-        <form id="mentor-import-form" className="modal-form-stack" onSubmit={handleCsvUpload}>
+        <form
+          id="mentor-import-form"
+          className="modal-form-stack"
+          onSubmit={handleCsvUpload}
+        >
           <label className="field-label" htmlFor="mentor-csv-upload">
             Select CSV file
           </label>
@@ -625,11 +687,13 @@ export default function MentorsPage() {
           />
           <p className="muted">
             CSV format example columns:
-            <code> email</code>, <code>season_year</code> (or <code>season</code>/<code>year</code>),
-            <code> first_name</code>, <code>last_name</code>, <code>cell_phone</code> (or <code>cell</code>;
-            required for At Practice; optional for Remote),
-            <code> type</code>, <code>pace</code> (required for At Practice; optional
-            for Remote), <code>split_practice</code>.
+            <code> email</code>, <code>season_year</code> (or{' '}
+            <code>season</code>/<code>year</code>),
+            <code> first_name</code>, <code>last_name</code>,{' '}
+            <code>cell_phone</code> (or <code>cell</code>; required for At
+            Practice; optional for Remote),
+            <code> type</code>, <code>pace</code> (required for At Practice;
+            optional for Remote), <code>split_practice</code>.
           </p>
           {importMessage ? (
             <p className="muted" role="status">
@@ -646,18 +710,36 @@ export default function MentorsPage() {
         closeDisabled={busy}
         footer={
           <>
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={closeModal}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={closeModal}
+            >
               Cancel
             </button>
-            <button form="mentor-create-form" type="submit" className="btn btn-primary" disabled={busy}>
+            <button
+              form="mentor-create-form"
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy}
+            >
               {busy ? 'Saving…' : 'Save'}
             </button>
           </>
         }
       >
-        <form id="mentor-create-form" className="modal-form-stack" onSubmit={handleCreateSubmit}>
+        <form
+          id="mentor-create-form"
+          className="modal-form-stack"
+          onSubmit={handleCreateSubmit}
+        >
           {mentorFormFields('mc')}
-          {modalError ? <p className="error modal-error" role="alert">{modalError}</p> : null}
+          {modalError ? (
+            <p className="error modal-error" role="alert">
+              {modalError}
+            </p>
+          ) : null}
         </form>
       </Modal>
 
@@ -668,18 +750,36 @@ export default function MentorsPage() {
         closeDisabled={busy}
         footer={
           <>
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={closeModal}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={closeModal}
+            >
               Cancel
             </button>
-            <button form="mentor-edit-form" type="submit" className="btn btn-primary" disabled={busy}>
+            <button
+              form="mentor-edit-form"
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy}
+            >
               {busy ? 'Saving…' : 'Save'}
             </button>
           </>
         }
       >
-        <form id="mentor-edit-form" className="modal-form-stack" onSubmit={handleEditSubmit}>
+        <form
+          id="mentor-edit-form"
+          className="modal-form-stack"
+          onSubmit={handleEditSubmit}
+        >
           {mentorFormFields('me')}
-          {modalError ? <p className="error modal-error" role="alert">{modalError}</p> : null}
+          {modalError ? (
+            <p className="error modal-error" role="alert">
+              {modalError}
+            </p>
+          ) : null}
         </form>
       </Modal>
 
@@ -690,21 +790,38 @@ export default function MentorsPage() {
         closeDisabled={busy}
         footer={
           <>
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={closeModal}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={closeModal}
+            >
               Cancel
             </button>
-            <button type="button" className="btn btn-danger" disabled={busy} onClick={handleDeleteConfirm}>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={busy}
+              onClick={handleDeleteConfirm}
+            >
               {busy ? 'Deleting…' : 'Delete'}
             </button>
           </>
         }
       >
         <p className="delete-prompt">
-          Delete mentor <strong>{activeMentor?.first_name} {activeMentor?.last_name}</strong>?
+          Delete mentor{' '}
+          <strong>
+            {activeMentor?.first_name} {activeMentor?.last_name}
+          </strong>
+          ?
         </p>
-        {modalError ? <p className="error modal-error" role="alert">{modalError}</p> : null}
+        {modalError ? (
+          <p className="error modal-error" role="alert">
+            {modalError}
+          </p>
+        ) : null}
       </Modal>
     </>
   )
 }
-
