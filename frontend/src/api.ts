@@ -7,6 +7,9 @@ import type {
   MentorSwapReport,
   MentorSwapRequestSummary,
   Practice,
+  PracticeAttendanceCurrentResponse,
+  PracticeAttendanceDetail,
+  ArchivedPracticeAttendance,
   PublicMentorDirectoryPractices,
   PublicMentorDirectoryRow,
   PublicPracticeRoster,
@@ -960,13 +963,13 @@ export async function fetchMentorNonResponseReport(params: { season?: Id | null 
 const PRACTICE_ATTENDANCE_CURRENT = apiPath('/api/practice-attendance/current/')
 const PRACTICE_ATTENDANCE_ARCHIVED = apiPath('/api/practice-attendance/archived/')
 
-export async function fetchCurrentPracticeAttendance() {
+export async function fetchCurrentPracticeAttendance(): Promise<PracticeAttendanceCurrentResponse> {
   const res = await fetch(PRACTICE_ATTENDANCE_CURRENT, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-export async function fetchPracticeAttendance(id: Id) {
+export async function fetchPracticeAttendance(id: Id): Promise<PracticeAttendanceDetail> {
   const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
     credentials: 'include',
   })
@@ -974,7 +977,9 @@ export async function fetchPracticeAttendance(id: Id) {
   return res.json()
 }
 
-export async function fetchArchivedPracticeAttendance(params: { season?: Id | null } = {}) {
+export async function fetchArchivedPracticeAttendance(
+  params: { season?: Id | null } = {}
+): Promise<ArchivedPracticeAttendance[]> {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))
@@ -987,7 +992,13 @@ export async function fetchArchivedPracticeAttendance(params: { season?: Id | nu
   return res.json()
 }
 
-export async function patchPracticeAttendance(id: Id, body: { attendance_comments?: string; mentors?: Array<{ mentor_id: number; show_up: string | null }> }) {
+export async function patchPracticeAttendance(
+  id: Id,
+  body: {
+    attendance_comments?: string
+    mentors?: Array<{ mentor_id: number; show_up: string | null }>
+  }
+): Promise<PracticeAttendanceDetail> {
   const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
     method: 'PATCH',
     credentials: 'include',

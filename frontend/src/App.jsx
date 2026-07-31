@@ -5,7 +5,7 @@ import { PasswordGate } from './components/PasswordGate.jsx'
 
 import './App.css'
 
-const AttendancePage = lazy(() => import('./pages/AttendancePage.jsx'))
+const AttendancePage = lazy(() => import('./pages/AttendancePage.tsx'))
 const CoachesPage = lazy(() => import('./pages/CoachesPage.jsx'))
 const EmailsPage = lazy(() => import('./pages/EmailsPage.jsx'))
 const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.jsx'))

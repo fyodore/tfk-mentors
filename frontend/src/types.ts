@@ -149,4 +149,47 @@ export type ServerConfig = {
   time_zone: string
 }
 
+export type AttendanceShowUp = 'attended' | 'missed' | 'found_replacement'
+
+export type PracticeAttendanceMentor = {
+  mentor_id: number
+  first_name?: string | null
+  last_name?: string | null
+  pace?: string | null
+  show_up?: AttendanceShowUp | null
+  swapped_out?: boolean
+}
+
+export type PracticeAttendanceDetail = {
+  practice_id: number
+  date: string
+  nyrr_race?: string
+  description?: string
+  start_location?: string
+  season_id?: number | null
+  season_year?: number | null
+  full_practice?: boolean
+  attendance_comments?: string
+  assigned_mentors?: PracticeAttendanceMentor[]
+  is_current_window?: boolean
+}
+
+export type PracticeAttendanceCurrentResponse = {
+  practice: PracticeAttendanceDetail | null
+}
+
+export type ArchivedPracticeAttendance = {
+  practice_id: number
+  date: string
+  nyrr_race?: string
+  season_id?: number | null
+  season_year?: number | null
+  assigned_count: number
+  attended_count: number
+  missed_count: number
+  found_replacement_count?: number
+  unset_count: number
+  assigned_mentors?: PracticeAttendanceMentor[]
+}
+
 export type JsonObject = Record<string, unknown>
