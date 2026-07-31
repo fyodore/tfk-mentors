@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import {
   fetchPublicMentorDirectory,
@@ -13,6 +14,34 @@ import { downloadMentorAssignedPracticesIcs } from '../practiceCalendar.js'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
+
+const DIRECTORY_TABS = {
+  all: {
+    id: 'all',
+    path: '/mentor-directory',
+    label: 'All mentors',
+  },
+  'by-pace': {
+    id: 'at-practice-by-pace',
+    path: '/mentor-directory/by-pace',
+    label: 'Practice Mentors by Pace',
+  },
+  upcoming: {
+    id: 'upcoming-practices',
+    path: '/mentor-directory/upcoming',
+    label: 'Upcoming practices',
+  },
+}
+
+const TAB_BY_SLUG = DIRECTORY_TABS
+const TAB_BY_ID = Object.fromEntries(
+  Object.entries(DIRECTORY_TABS).map(([slug, tab]) => [tab.id, { ...tab, slug }])
+)
+
+function tabIdFromSlug(slug) {
+  if (!slug) return DIRECTORY_TABS.all.id
+  return TAB_BY_SLUG[slug]?.id ?? null
+}
 
 function mentorName(row) {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()
@@ -191,7 +220,9 @@ function groupAtPracticeMentorsByPace(mentors) {
 }
 
 export default function PublicMentorDirectoryPage() {
-  const [activeTab, setActiveTab] = useState('all')
+  const { tab: tabSlug } = useParams()
+  const navigate = useNavigate()
+  const activeTab = tabIdFromSlug(tabSlug)
   const [mentors, setMentors] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -204,6 +235,17 @@ export default function PublicMentorDirectoryPage() {
   const [calendarMentor, setCalendarMentor] = useState(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [calendarError, setCalendarError] = useState(null)
+
+  useEffect(() => {
+    if (activeTab != null) return
+    navigate('/mentor-directory', { replace: true })
+  }, [activeTab, navigate])
+
+  function selectTab(tabId) {
+    const tab = TAB_BY_ID[tabId]
+    if (!tab) return
+    navigate(tab.path)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -380,7 +422,7 @@ export default function PublicMentorDirectoryPage() {
             role="tab"
             className={`emails-tab${activeTab === 'all' ? ' emails-tab-active' : ''}`}
             aria-selected={activeTab === 'all'}
-            onClick={() => setActiveTab('all')}
+            onClick={() => selectTab('all')}
           >
             All mentors
           </button>
@@ -389,7 +431,7 @@ export default function PublicMentorDirectoryPage() {
             role="tab"
             className={`emails-tab${activeTab === 'at-practice-by-pace' ? ' emails-tab-active' : ''}`}
             aria-selected={activeTab === 'at-practice-by-pace'}
-            onClick={() => setActiveTab('at-practice-by-pace')}
+            onClick={() => selectTab('at-practice-by-pace')}
           >
             Practice Mentors by Pace
           </button>
@@ -398,7 +440,7 @@ export default function PublicMentorDirectoryPage() {
             role="tab"
             className={`emails-tab${activeTab === 'upcoming-practices' ? ' emails-tab-active' : ''}`}
             aria-selected={activeTab === 'upcoming-practices'}
-            onClick={() => setActiveTab('upcoming-practices')}
+            onClick={() => selectTab('upcoming-practices')}
           >
             Upcoming practices
           </button>

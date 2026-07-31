@@ -51,7 +51,7 @@ export default function App() {
             element={<MentorCellPhonePage />}
           />
           <Route
-            path="/mentor-directory"
+            path="/mentor-directory/:tab?"
             element={<PublicMentorDirectoryPage />}
           />
           <Route element={<ProtectedLayout />}>
