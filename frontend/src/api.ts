@@ -19,6 +19,8 @@ import type {
   ServerConfig,
   CsvImportResult,
   TfkStaff,
+  PracticeRosterReportRow,
+  MentorNonResponseReport,
 } from './types.js'
 
 export type { Id, JsonObject, Season, Practice, Mentor, Coach, TfkStaff } from './types.js'
@@ -932,7 +934,9 @@ export async function putMentorEmailReply(token: string, payload: { replies: { p
 
 const PRACTICE_ROSTER_REPORT = apiPath('/api/reports/practice-roster/')
 
-export async function fetchPracticeRosterReport(params: { season?: Id | null } = {}) {
+export async function fetchPracticeRosterReport(
+  params: { season?: Id | null } = {}
+): Promise<PracticeRosterReportRow[]> {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))
@@ -948,7 +952,9 @@ export async function fetchPracticeRosterReport(params: { season?: Id | null } =
 
 const MENTOR_NON_RESPONSE_REPORT = apiPath('/api/reports/mentor-non-responses/')
 
-export async function fetchMentorNonResponseReport(params: { season?: Id | null } = {}) {
+export async function fetchMentorNonResponseReport(
+  params: { season?: Id | null } = {}
+): Promise<MentorNonResponseReport> {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))

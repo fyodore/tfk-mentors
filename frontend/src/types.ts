@@ -145,6 +145,76 @@ export type MentorSwapReport = {
   rejected: MentorSwapRequestSummary[]
 }
 
+export type ReportPaceCount = {
+  pace: string
+  count: number
+}
+
+export type ReportRosterPerson = {
+  role: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  pace?: string | null
+  mentor_id?: number
+  mentor_type?: string | null
+  attendance?: string | null
+  available?: boolean
+}
+
+export type PracticeRosterReportRow = {
+  id: number
+  date?: string | null
+  nyrr_race?: string
+  season?: number | null
+  season_year?: number | null
+  full_practice?: boolean
+  coaches?: ReportRosterPerson[]
+  mentors?: ReportRosterPerson[]
+  available_mentors?: ReportRosterPerson[]
+  mentor_pace_counts?: ReportPaceCount[]
+}
+
+export type EmailResponsePaceCount = {
+  pace: string
+  emailed: number
+  responded: number
+  pending: number
+}
+
+export type MentorNonResponsePendingMentor = {
+  mentor_id: number
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  pace?: string | null
+  mentor_type?: string | null
+}
+
+export type MentorNonResponsePractice = {
+  id: number
+  date?: string | null
+  nyrr_race?: string
+  season?: number | null
+  season_year?: number | null
+  full_practice?: boolean
+  scheduled_email_id?: number | null
+  scheduled_send_at?: string | null
+  email_sent?: boolean
+  mentors_emailed?: number
+  mentors_responded?: number
+  response_pace_counts?: EmailResponsePaceCount[]
+  pending_mentors?: MentorNonResponsePendingMentor[]
+}
+
+export type MentorNonResponseReport = {
+  summary?: {
+    mentors_emailed?: number
+    mentors_responded?: number
+  }
+  practices?: MentorNonResponsePractice[]
+}
+
 export type ServerConfig = {
   time_zone: string
 }

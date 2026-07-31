@@ -13,6 +13,40 @@ import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
 } from '../seasonHelpers.js'
+import type {
+  EmailResponsePaceCount,
+  MentorNonResponsePractice,
+  MentorSwapReport,
+  PracticeRosterReportRow,
+  ReportPaceCount,
+  ReportRosterPerson,
+  Season,
+} from '../types.js'
+
+type SortKey = 'name' | 'email' | 'pace'
+type SortDirection = 'asc' | 'desc'
+
+type DisplayPerson = ReportRosterPerson & { available?: boolean }
+
+type DisplayPractice = PracticeRosterReportRow & {
+  people: DisplayPerson[]
+}
+
+type SignupMentor = {
+  mentor_id?: number
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  pace?: string | null
+  mentor_type?: string | null
+  practice_count: number
+}
+
+type CellStyle = {
+  fill?: { patternType: string; fgColor: { rgb: string } }
+  alignment?: { horizontal: string }
+  font?: { bold?: boolean }
+}
 
 const ROSTER_HEADERS = [
   'Practice Date',
@@ -37,10 +71,8 @@ const AVAILABLE_CELL_FILL = {
   alignment: { horizontal: 'center' },
 }
 
-/** @param {number} count */
-function mentorPaceCountCellStyle(count) {
-  /** @type {string | null} */
-  let rgb = null
+function mentorPaceCountCellStyle(count: number): CellStyle | null {
+  let rgb: string | null = null
   if (count <= 2) rgb = 'FF6B6B' // red
   else if (count === 3) rgb = 'FFE066' // yellow
   else if (count === 4) rgb = '69DB7C' // green
@@ -56,7 +88,7 @@ function mentorPaceCountCellStyle(count) {
   }
 }
 
-const PACE_ORDER = {
+const PACE_ORDER: Record<string, number> = {
   '8-9': 1,
   '9-10': 2,
   '10-11': 3,
@@ -65,14 +97,17 @@ const PACE_ORDER = {
   '13+': 6,
 }
 
-/** @typedef {'name' | 'email' | 'pace'} SortKey */
 
-function fullName(first, last) {
+function fullName(first?: string | null, last?: string | null): string {
   return `${first ?? ''} ${last ?? ''}`.trim()
 }
 
-/** @param {SortKey} sortKey @param {'asc' | 'desc'} direction */
-function comparePeople(a, b, sortKey, direction) {
+function comparePeople(
+  a: DisplayPerson,
+  b: DisplayPerson,
+  sortKey: SortKey,
+  direction: SortDirection
+): number {
   const sign = direction === 'asc' ? 1 : -1
   if (sortKey === 'name') {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
@@ -82,16 +117,17 @@ function comparePeople(a, b, sortKey, direction) {
   if (sortKey === 'email') {
     return (a.email || '').localeCompare(b.email || '') * sign
   }
-  const pa = PACE_ORDER[a.pace] ?? 99
-  const pb = PACE_ORDER[b.pace] ?? 99
+  const pa = PACE_ORDER[a.pace ?? ''] ?? 99
+  const pb = PACE_ORDER[b.pace ?? ''] ?? 99
   if (pa !== pb) return (pa - pb) * sign
   return fullName(a.first_name, a.last_name).localeCompare(
     fullName(b.first_name, b.last_name)
   )
 }
 
-/** @param {Array<{ date?: string, id?: number }>} practices */
-function sortPracticesByDateAsc(practices) {
+function sortPracticesByDateAsc<T extends { date?: string | null; id?: number }>(
+  practices: T[]
+): T[] {
   return [...practices].sort((a, b) => {
     const ta = a.date ? new Date(a.date).getTime() : 0
     const tb = b.date ? new Date(b.date).getTime() : 0
@@ -99,8 +135,11 @@ function sortPracticesByDateAsc(practices) {
   })
 }
 
-/** @param {Array<{ coaches?: unknown[], mentors?: unknown[], available_mentors?: unknown[] }>} practices */
-function sortPracticePeople(practices, sortKey, direction) {
+function sortPracticePeople(
+  practices: PracticeRosterReportRow[],
+  sortKey: SortKey,
+  direction: SortDirection
+): DisplayPractice[] {
   return practices.map((practice) => {
     const attendingMentors = (practice.mentors ?? []).map((mentor) => ({
       ...mentor,
@@ -110,7 +149,7 @@ function sortPracticePeople(practices, sortKey, direction) {
       ...mentor,
       available: true,
     }))
-    const people = [
+    const people: DisplayPerson[] = [
       ...(practice.coaches ?? []),
       ...attendingMentors,
       ...availableMentors,
@@ -120,19 +159,18 @@ function sortPracticePeople(practices, sortKey, direction) {
   })
 }
 
-/** @param {ReturnType<typeof sortPracticePeople>} practices */
-function buildRosterRows(practices) {
-  const rows = [ROSTER_HEADERS]
+function buildRosterRows(practices: DisplayPractice[]): (string | number)[][] {
+  const rows: (string | number)[][] = [ROSTER_HEADERS]
   for (const practice of practices) {
     const when = practice.date ? formatDateTime(practice.date) : ''
     for (const person of practice.people) {
       rows.push([
         when,
-        practice.season_year ?? practice.season,
+        practice.season_year ?? practice.season ?? '',
         practice.nyrr_race ?? '',
         person.role,
-        person.first_name,
-        person.last_name,
+        person.first_name ?? '',
+        person.last_name ?? '',
         person.email ?? '',
         person.pace ?? '',
         person.available ? 'X' : '',
@@ -142,8 +180,7 @@ function buildRosterRows(practices) {
   return rows
 }
 
-/** @param {ReturnType<typeof sortPracticePeople>} practices */
-async function downloadExcel(filename, practices) {
+async function downloadExcel(filename: string, practices: DisplayPractice[]) {
   const XLSX = await import('xlsx-js-style')
   const rows = buildRosterRows(practices)
   const worksheet = XLSX.utils.aoa_to_sheet(rows)
@@ -191,20 +228,11 @@ async function downloadExcel(filename, practices) {
 
 const PACE_GROUPS = ['8-9', '9-10', '10-11', '11-12', '12-13', '13+']
 
-/**
- * Excel summary: one row per practice with assigned mentor counts by pace.
- * @param {string} filename
- * @param {Array<{
- *   date?: string,
- *   nyrr_race?: string,
- *   season_year?: number,
- *   season?: number,
- *   mentors?: Array<{ pace?: string }>,
- *   mentor_pace_counts?: Array<{ pace?: string, count?: number }>
- * }>} practices
- * @param {{ includeSeasonColumn?: boolean }} [options]
- */
-async function downloadMentorNumberSummaryExcel(filename, practices, options = {}) {
+async function downloadMentorNumberSummaryExcel(
+  filename: string,
+  practices: PracticeRosterReportRow[],
+  options: { includeSeasonColumn?: boolean } = {}
+) {
   const XLSX = await import('xlsx-js-style')
   const includeSeason = Boolean(options.includeSeasonColumn)
   const sorted = sortPracticesByDateAsc(practices)
@@ -216,12 +244,12 @@ async function downloadMentorNumberSummaryExcel(filename, practices, options = {
     ...PACE_GROUPS,
     'Total',
   ]
-  const rows = [header]
-  const columnTotals = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+  const rows: (string | number)[][] = [header]
+  const columnTotals: Record<string, number> = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
   let grandTotal = 0
 
   for (const practice of sorted) {
-    const countsByPace = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+    const countsByPace: Record<string, number> = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
     if (Array.isArray(practice.mentor_pace_counts) && practice.mentor_pace_counts.length) {
       for (const row of practice.mentor_pace_counts) {
         const pace = row.pace?.trim() || ''
@@ -297,23 +325,25 @@ async function downloadMentorNumberSummaryExcel(filename, practices, options = {
   XLSX.writeFile(workbook, filename)
 }
 
-/** @param {Array<{ mentors?: Array<{ mentor_id?: number, email?: string, pace?: string, first_name?: string, last_name?: string, mentor_type?: string }>, id?: number }>} practices */
-function buildMentorSignupSummary(practices) {
-  /** @type {Map<number|string, { mentor_id?: number, first_name?: string, last_name?: string, email?: string, pace?: string, mentor_type?: string, practice_count: number }>} */
-  const mentorById = new Map()
-  /** @type {Map<string, Set<number>>} */
-  const paceToPracticeIds = new Map(PACE_GROUPS.map((pace) => [pace, new Set()]))
+function buildMentorSignupSummary(practices: PracticeRosterReportRow[]) {
+  const mentorById = new Map<string | number, SignupMentor>()
+  const paceToPracticeIds = new Map<string, Set<number>>(
+    PACE_GROUPS.map((pace) => [pace, new Set<number>()])
+  )
   let practicesWithMentors = 0
 
   for (const practice of practices) {
     const mentors = practice.mentors ?? []
     if (mentors.length === 0) continue
     practicesWithMentors += 1
-    const pacesInPractice = new Set()
+    const pacesInPractice = new Set<string>()
     for (const mentor of mentors) {
       const pace = mentor.pace?.trim() || ''
       if (PACE_ORDER[pace]) pacesInPractice.add(pace)
-      const key = mentor.mentor_id ?? mentor.email ?? fullName(mentor.first_name, mentor.last_name)
+      const key =
+        mentor.mentor_id ??
+        mentor.email ??
+        fullName(mentor.first_name, mentor.last_name)
       if (!mentorById.has(key)) {
         mentorById.set(key, {
           mentor_id: mentor.mentor_id,
@@ -325,7 +355,8 @@ function buildMentorSignupSummary(practices) {
           practice_count: 0,
         })
       }
-      mentorById.get(key).practice_count += 1
+      const entry = mentorById.get(key)
+      if (entry) entry.practice_count += 1
     }
     for (const pace of pacesInPractice) {
       paceToPracticeIds.get(pace)?.add(practice.id)
@@ -358,20 +389,20 @@ function buildMentorSignupSummary(practices) {
   return { practicesWithMentors, practicesByPace, mentorsByPace, mentors }
 }
 
-function formatPaceCounts(counts) {
+function formatPaceCounts(counts: ReportPaceCount[] | null | undefined): string {
   if (!Array.isArray(counts) || counts.length === 0) return ''
   return counts.map(({ pace, count }) => `${pace}: ${count}`).join(' · ')
 }
 
-function formatPracticePaceCounts(counts) {
+function formatPracticePaceCounts(counts: ReportPaceCount[] | null | undefined): string {
   if (!Array.isArray(counts) || counts.length === 0) return ''
   return counts
     .map(({ pace, count }) => `${pace}: ${count} practice${count === 1 ? '' : 's'}`)
     .join(' · ')
 }
 
-function buildMentorPaceCounts(mentors) {
-  const counts = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
+function buildMentorPaceCounts(mentors: ReportRosterPerson[] | null | undefined): ReportPaceCount[] {
+  const counts: Record<string, number> = Object.fromEntries(PACE_GROUPS.map((pace) => [pace, 0]))
   let other = 0
   for (const mentor of mentors ?? []) {
     const pace = (mentor.pace ?? '').trim()
@@ -388,12 +419,15 @@ function buildMentorPaceCounts(mentors) {
   return rows
 }
 
-function mentorCountFromPaceCounts(counts) {
+function mentorCountFromPaceCounts(counts: ReportPaceCount[] | null | undefined): number {
   if (!Array.isArray(counts)) return 0
   return counts.reduce((sum, row) => sum + (row.count ?? 0), 0)
 }
 
-function effectiveMentorPaceCounts(mentors, counts) {
+function effectiveMentorPaceCounts(
+  mentors: ReportRosterPerson[] | null | undefined,
+  counts: ReportPaceCount[] | null | undefined
+): ReportPaceCount[] {
   const mentorTotal = mentors?.length ?? 0
   const apiTotal = mentorCountFromPaceCounts(counts)
   if (mentorTotal > 0 && apiTotal !== mentorTotal) {
@@ -405,7 +439,15 @@ function effectiveMentorPaceCounts(mentors, counts) {
   return buildMentorPaceCounts(mentors)
 }
 
-function MentorPaceBreakdownTable({ mentors, counts, caption }) {
+function MentorPaceBreakdownTable({
+  mentors,
+  counts,
+  caption,
+}: {
+  mentors?: ReportRosterPerson[] | null
+  counts?: ReportPaceCount[] | null
+  caption?: string
+}) {
   const resolvedCounts = effectiveMentorPaceCounts(mentors, counts)
   const total = mentors?.length ?? mentorCountFromPaceCounts(resolvedCounts)
   if (total === 0) return null
@@ -445,7 +487,11 @@ function MentorPaceBreakdownTable({ mentors, counts, caption }) {
   )
 }
 
-function EmailResponsePaceTable({ counts }) {
+function EmailResponsePaceTable({
+  counts,
+}: {
+  counts?: EmailResponsePaceCount[] | null
+}) {
   if (!Array.isArray(counts) || counts.length === 0) return null
   const totals = counts.reduce(
     (acc, row) => ({
@@ -501,22 +547,24 @@ function EmailResponsePaceTable({ counts }) {
 
 export default function ReportsPage() {
   const [searchParams] = useSearchParams()
-  const [seasons, setSeasons] = useState([])
-  const [report, setReport] = useState([])
-  const [pendingReport, setPendingReport] = useState([])
-  const [swapReport, setSwapReport] = useState({ approved: [], rejected: [] })
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [report, setReport] = useState<PracticeRosterReportRow[]>([])
+  const [pendingReport, setPendingReport] = useState<MentorNonResponsePractice[]>([])
+  const [swapReport, setSwapReport] = useState<MentorSwapReport>({
+    approved: [],
+    rejected: [],
+  })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [selectedApprovedSwapId, setSelectedApprovedSwapId] = useState(null)
-  const [selectedRejectedSwapId, setSelectedRejectedSwapId] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedApprovedSwapId, setSelectedApprovedSwapId] = useState<number | null>(null)
+  const [selectedRejectedSwapId, setSelectedRejectedSwapId] = useState<number | null>(null)
 
   const [seasonFilter, setSeasonFilter] = useState('')
   const [seasonFilterReady, setSeasonFilterReady] = useState(false)
   const [practiceFilter, setPracticeFilter] = useState('')
-  /** @type {[SortKey, function(SortKey): void]} */
-  const [sortKey, setSortKey] = useState('pace')
-  const [sortDirection, setSortDirection] = useState('asc')
-  const [exporting, setExporting] = useState(/** @type {null | 'roster' | 'summary'} */ (null))
+  const [sortKey, setSortKey] = useState<SortKey>('pace')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [exporting, setExporting] = useState<null | 'roster' | 'summary'>(null)
 
   const sortedSeasons = useMemo(
     () => sortSeasonsByYearDesc(seasons),
@@ -646,7 +694,7 @@ export default function ReportsPage() {
     [filteredReport, sortKey, sortDirection]
   )
 
-  function toggleSort(nextKey) {
+  function toggleSort(nextKey: SortKey) {
     if (sortKey === nextKey) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
@@ -655,7 +703,7 @@ export default function ReportsPage() {
     }
   }
 
-  function sortIndicator(key) {
+  function sortIndicator(key: SortKey): string {
     if (sortKey !== key) return ''
     return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
@@ -780,7 +828,7 @@ export default function ReportsPage() {
               id="report-sort"
               className="field-input field-select"
               value={sortKey}
-              onChange={(e) => setSortKey(/** @type {SortKey} */ (e.target.value))}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
             >
               <option value="name">Name</option>
               <option value="email">Email</option>
@@ -797,7 +845,7 @@ export default function ReportsPage() {
               className="field-input field-select"
               value={sortDirection}
               onChange={(e) =>
-                setSortDirection(/** @type {'asc' | 'desc'} */ (e.target.value))
+                setSortDirection(e.target.value as SortDirection)
               }
             >
               <option value="asc">Ascending</option>
@@ -1054,7 +1102,7 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {practice.pending_mentors.map((mentor) => (
+                          {(practice.pending_mentors ?? []).map((mentor) => (
                             <tr key={mentor.mentor_id}>
                               <td>{fullName(mentor.first_name, mentor.last_name)}</td>
                               <td>{mentor.email || '—'}</td>

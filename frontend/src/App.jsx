@@ -24,7 +24,7 @@ const MentorDetailPage = lazy(() => import('./pages/MentorDetailPage.jsx'))
 const MentorsPage = lazy(() => import('./pages/MentorsPage.jsx'))
 const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.jsx'))
 const PracticesPage = lazy(() => import('./pages/PracticesPage.jsx'))
-const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage.tsx'))
 const SeasonsPage = lazy(() => import('./pages/SeasonsPage.tsx'))
 const TfkStaffPage = lazy(() => import('./pages/TfkStaffPage.tsx'))
 
