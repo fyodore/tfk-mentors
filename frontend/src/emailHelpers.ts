@@ -1,8 +1,19 @@
+import type {
+  Mentor,
+  MentorNonResponseReport,
+  PendingMentorRow,
+  ScheduledEmail,
+  ScheduledEmailRecipientMode,
+} from './types.js'
+
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 
-/** @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors @param {number} seasonId @param {string|null} [mentorType] */
-function mentorsInSeason(mentors, seasonId, mentorType = null) {
+function mentorsInSeason(
+  mentors: Mentor[],
+  seasonId: number,
+  mentorType: string | null = null
+): Mentor[] {
   return mentors.filter((m) => {
     if (!Array.isArray(m.seasons) || !m.seasons.includes(seasonId)) return false
     if (mentorType && m.type !== mentorType) return false
@@ -10,16 +21,22 @@ function mentorsInSeason(mentors, seasonId, mentorType = null) {
   })
 }
 
-/** @param {string} mode */
-function mentorTypeForRecipientMode(mode) {
+function mentorTypeForRecipientMode(
+  mode: ScheduledEmailRecipientMode | undefined
+): string | null {
   if (mode === 'all_at_practice_in_season') return AT_PRACTICE
   if (mode === 'all_remote_in_season') return REMOTE
   return null
 }
 
-/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors */
-export function scheduledRecipientCount(row, mentors) {
-  const mode = row.recipient_mode === 'specific_mentors' ? 'specific_mentors' : row.recipient_mode
+export function scheduledRecipientCount(
+  row: ScheduledEmail,
+  mentors: Mentor[]
+): number {
+  const mode =
+    row.recipient_mode === 'specific_mentors'
+      ? 'specific_mentors'
+      : row.recipient_mode
   if (mode === 'specific_mentors') {
     return (row.specific_mentors || []).length
   }
@@ -28,9 +45,20 @@ export function scheduledRecipientCount(row, mentors) {
   return mentorsInSeason(mentors, sid, mentorTypeForRecipientMode(mode)).length
 }
 
-/** @param {Map<number, number>} seasonYearById @param {Array<{ id: number, seasons?: number[], type?: string }>} mentors */
-export function recipientSummaryText(row, { seasonYearById, mentors }) {
-  const mode = row.recipient_mode === 'specific_mentors' ? 'specific_mentors' : row.recipient_mode
+export function recipientSummaryText(
+  row: ScheduledEmail,
+  {
+    seasonYearById,
+    mentors,
+  }: {
+    seasonYearById: Map<number, number>
+    mentors: Mentor[]
+  }
+): string {
+  const mode =
+    row.recipient_mode === 'specific_mentors'
+      ? 'specific_mentors'
+      : row.recipient_mode
   const stats = row.reply_stats
   const isSent = Boolean(row.task_completed_at)
   const scheduledCount = scheduledRecipientCount(row, mentors)
@@ -48,14 +76,16 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
       : null
   const selectedPractices =
     isSent && stats ? (stats.mentors_selected_practices ?? 0) : null
-  const pending =
-    isSent && stats
-      ? (stats.mentors_pending ??
-        (stats.pending_mentor_ids?.length ?? null) ??
-        (stats.mentors_emailed != null
-          ? Math.max(0, stats.mentors_emailed - (replied ?? 0))
-          : null))
-      : null
+  let pending: number | null = null
+  if (isSent && stats) {
+    if (stats.mentors_pending != null) {
+      pending = stats.mentors_pending
+    } else if (Array.isArray(stats.pending_mentor_ids)) {
+      pending = stats.pending_mentor_ids.length
+    } else if (stats.mentors_emailed != null) {
+      pending = Math.max(0, stats.mentors_emailed - (replied ?? 0))
+    }
+  }
 
   function responseSummarySuffix() {
     if (!isSent) return ''
@@ -79,8 +109,8 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
   }
 
   const sid = row.recipient_season
-  const year = sid != null ? seasonYearById.get(sid) ?? sid : null
-  let text
+  const year = sid != null ? (seasonYearById.get(sid) ?? sid) : null
+  let text: string
   if (mode === 'all_at_practice_in_season') {
     text = `All At Practice mentors in season ${year ?? '—'}`
   } else if (mode === 'all_remote_in_season') {
@@ -92,14 +122,16 @@ export function recipientSummaryText(row, { seasonYearById, mentors }) {
     text += ' (sent — recipient count unavailable'
     return text + `${responseSummarySuffix()})`
   }
-  if (sid != null || count > 0) {
+  if (sid != null || (count != null && count > 0)) {
     text += ` (${count} mentor${count === 1 ? '' : 's'} ${countLabel}${responseSummarySuffix()})`
   }
   return text
 }
 
-/** @param {number[]} ids @param {(id: number) => string} labelForId */
-export function practiceLabelsForIds(ids, labelForId) {
+export function practiceLabelsForIds(
+  ids: number[],
+  labelForId: (id: number) => string
+): Array<{ id: number; label: string }> {
   if (!Array.isArray(ids) || ids.length === 0) {
     return []
   }
@@ -109,8 +141,13 @@ export function practiceLabelsForIds(ids, labelForId) {
   }))
 }
 
-/** @param {{ first_name?: string, last_name?: string, email?: string, id?: number, name?: string }} mentor */
-export function formatMentorName(mentor) {
+export function formatMentorName(mentor: {
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  id?: number | null
+  name?: string | null
+}): string {
   if (mentor?.name?.trim()) return mentor.name.trim()
   const name = [mentor?.first_name, mentor?.last_name]
     .filter(Boolean)
@@ -121,8 +158,11 @@ export function formatMentorName(mentor) {
   return mentor?.id != null ? `Mentor #${mentor.id}` : 'Unknown mentor'
 }
 
-/** @param {{ practices?: Array<{ id: number, scheduled_email_id?: number|null, pending_mentors?: Array<{ mentor_id?: number, id?: number, first_name?: string, last_name?: string, email?: string, mentor_type?: string, type?: string }> }> }} report @param {number} emailId @param {number[]} practiceIds */
-export function pendingMentorsFromNonResponseReport(report, emailId, practiceIds) {
+export function pendingMentorsFromNonResponseReport(
+  report: MentorNonResponseReport | null | undefined,
+  emailId: number,
+  practiceIds: number[]
+): PendingMentorRow[] {
   const practiceIdSet = new Set(practiceIds)
   const practices = (report?.practices ?? []).filter((practice) => {
     if (!practiceIdSet.has(practice.id)) return false
@@ -136,20 +176,38 @@ export function pendingMentorsFromNonResponseReport(report, emailId, practiceIds
   })
   if (practices.length === 0) return []
 
-  const pendingLists = practices.map((practice) => practice.pending_mentors ?? [])
-  const mentorKey = (row) => row.mentor_id ?? row.id
+  const pendingLists = practices.map(
+    (practice) => practice.pending_mentors ?? []
+  )
+  const mentorKey = (row: { mentor_id?: number; id?: number }) =>
+    row.mentor_id ?? row.id
 
   let sharedIds = new Set(
-    (pendingLists[0] ?? []).map(mentorKey).filter((id) => id != null)
+    (pendingLists[0] ?? [])
+      .map(mentorKey)
+      .filter((id): id is number => id != null)
   )
   for (let i = 1; i < pendingLists.length; i += 1) {
     const practiceIdsSet = new Set(
-      (pendingLists[i] ?? []).map(mentorKey).filter((id) => id != null)
+      (pendingLists[i] ?? [])
+        .map(mentorKey)
+        .filter((id): id is number => id != null)
     )
     sharedIds = new Set([...sharedIds].filter((id) => practiceIdsSet.has(id)))
   }
 
-  const rowById = new Map()
+  const rowById = new Map<
+    number,
+    {
+      mentor_id?: number
+      id?: number
+      first_name?: string | null
+      last_name?: string | null
+      email?: string | null
+      type?: string | null
+      mentor_type?: string | null
+    }
+  >()
   for (const list of pendingLists) {
     for (const row of list) {
       const id = mentorKey(row)
@@ -159,36 +217,49 @@ export function pendingMentorsFromNonResponseReport(report, emailId, practiceIds
 
   return [...sharedIds]
     .map((id) => rowById.get(id))
-    .filter(Boolean)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
     .sort(
       (a, b) =>
         (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
         (a.first_name ?? '').localeCompare(b.first_name ?? '') ||
-        mentorKey(a) - mentorKey(b)
+        (mentorKey(a) ?? 0) - (mentorKey(b) ?? 0)
     )
     .map((row) => ({
-      id: mentorKey(row),
+      id: mentorKey(row) as number,
       name: formatMentorName(row),
       email: row.email ?? '',
       type: row.type ?? row.mentor_type ?? '',
     }))
 }
 
-/** @param {unknown} rows */
-export function normalizePendingMentorRows(rows) {
+export function normalizePendingMentorRows(rows: unknown): PendingMentorRow[] {
   if (!Array.isArray(rows)) return []
   return rows
-    .map((m) => ({
-      id: m.id ?? m.mentor_id,
-      name: formatMentorName(m),
-      email: m.email ?? '',
-      type: m.type ?? m.mentor_type ?? '',
-    }))
-    .filter((m) => m.id != null)
+    .map((raw) => {
+      const m = raw as {
+        id?: number
+        mentor_id?: number
+        email?: string
+        type?: string
+        mentor_type?: string
+        first_name?: string
+        last_name?: string
+        name?: string
+      }
+      return {
+        id: m.id ?? m.mentor_id,
+        name: formatMentorName(m),
+        email: m.email ?? '',
+        type: m.type ?? m.mentor_type ?? '',
+      }
+    })
+    .filter((m): m is PendingMentorRow => m.id != null)
 }
 
-/** @param {{ pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }>, reply_stats?: { pending_mentor_ids?: number[], pending_mentors?: Array<{ id: number, first_name?: string, last_name?: string, name?: string, email?: string, type?: string }> } }} email @param {Array<{ id: number, first_name?: string, last_name?: string, email?: string, type?: string }>} mentors */
-export function pendingMentorsForEmail(email, mentors) {
+export function pendingMentorsForEmail(
+  email: ScheduledEmail | null | undefined,
+  mentors: Mentor[]
+): PendingMentorRow[] {
   const stats = email?.reply_stats
 
   if (Array.isArray(stats?.pending_mentors)) {
@@ -208,7 +279,7 @@ export function pendingMentorsForEmail(email, mentors) {
     const byId = new Map(mentors.map((m) => [m.id, m]))
     return pendingIds
       .map((id) => byId.get(id))
-      .filter(Boolean)
+      .filter((m): m is Mentor => Boolean(m))
       .sort(
         (a, b) =>
           (a.last_name ?? '').localeCompare(b.last_name ?? '') ||
@@ -226,13 +297,16 @@ export function pendingMentorsForEmail(email, mentors) {
   return []
 }
 
-/** @param {{ task_completed_at?: string|null, recipients_emailed_count?: number|null, reply_stats?: { mentors_replied?: number, mentors_responded?: number, mentors_selected_practices?: number, mentors_pending?: number, mentors_emailed?: number, pending_mentor_ids?: number[] } }} row */
-export function sentEmailReplyStats(row) {
+export function sentEmailReplyStats(row: ScheduledEmail): {
+  emailed: number
+  replied: number
+  selectedPractices: number
+  pending: number
+} | null {
   if (!row.task_completed_at) return null
   const stats = row.reply_stats
   if (!stats && row.recipients_emailed_count == null) return null
-  const emailed =
-    stats?.mentors_emailed ?? row.recipients_emailed_count ?? 0
+  const emailed = stats?.mentors_emailed ?? row.recipients_emailed_count ?? 0
   const replied = stats?.mentors_replied ?? stats?.mentors_responded ?? 0
   const pendingIds = stats?.pending_mentor_ids
   const pendingFromIds = Array.isArray(pendingIds) ? pendingIds.length : null
@@ -246,7 +320,7 @@ export function sentEmailReplyStats(row) {
   return {
     emailed,
     replied,
-    selectedPractices: stats.mentors_selected_practices ?? 0,
+    selectedPractices: stats?.mentors_selected_practices ?? 0,
     pending,
   }
 }

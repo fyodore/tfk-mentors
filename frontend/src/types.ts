@@ -215,6 +215,60 @@ export type MentorNonResponseReport = {
   practices?: MentorNonResponsePractice[]
 }
 
+export type ScheduledEmailRecipientMode =
+  | 'all_in_season'
+  | 'all_at_practice_in_season'
+  | 'all_remote_in_season'
+  | 'specific_mentors'
+  | string
+
+export type PendingMentorRow = {
+  id: number
+  name: string
+  email: string
+  type: string
+}
+
+export type ScheduledEmailReplyStats = {
+  mentors_emailed?: number
+  mentors_replied?: number
+  mentors_responded?: number
+  mentors_selected_practices?: number
+  mentors_pending?: number
+  pending_mentor_ids?: number[]
+  pending_mentors?: PendingMentorRow[]
+}
+
+export type ScheduledEmail = {
+  id: number
+  scheduled_send_at: string
+  body_text?: string
+  practices?: number[]
+  recipient_mode?: ScheduledEmailRecipientMode
+  recipient_season?: number | null
+  specific_mentors?: number[]
+  task_completed_at?: string | null
+  recipients_emailed_count?: number | null
+  reply_stats?: ScheduledEmailReplyStats | null
+  pending_mentors?: PendingMentorRow[]
+}
+
+export type ScheduledEmailPendingMentorsResponse = {
+  pending_mentors?: Array<
+    PendingMentorRow & {
+      mentor_id?: number
+      first_name?: string
+      last_name?: string
+      mentor_type?: string
+    }
+  >
+}
+
+export type SendEmailResult = {
+  sent?: number
+  recipients?: number
+}
+
 export type ServerConfig = {
   time_zone: string
 }

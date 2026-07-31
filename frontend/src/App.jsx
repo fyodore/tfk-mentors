@@ -7,7 +7,7 @@ import './App.css'
 
 const AttendancePage = lazy(() => import('./pages/AttendancePage.tsx'))
 const CoachesPage = lazy(() => import('./pages/CoachesPage.tsx'))
-const EmailsPage = lazy(() => import('./pages/EmailsPage.jsx'))
+const EmailsPage = lazy(() => import('./pages/EmailsPage.tsx'))
 const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.jsx'))
 const PracticeReminderDetailPage = lazy(
   () => import('./pages/PracticeReminderDetailPage.jsx')

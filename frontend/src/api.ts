@@ -21,6 +21,9 @@ import type {
   TfkStaff,
   PracticeRosterReportRow,
   MentorNonResponseReport,
+  ScheduledEmail,
+  ScheduledEmailPendingMentorsResponse,
+  SendEmailResult,
 } from './types.js'
 
 export type { Id, JsonObject, Season, Practice, Mentor, Coach, TfkStaff } from './types.js'
@@ -610,18 +613,18 @@ export async function deleteMentorPracticeAssignment(id: Id) {
 
 const SCHEDULED_EMAIL_LIST = apiPath('/api/scheduled-email/')
 
-export function normalizeScheduledEmailList(data: unknown): unknown[] {
-  return normalizeList<unknown>(data)
+export function normalizeScheduledEmailList(data: unknown): ScheduledEmail[] {
+  return normalizeList<ScheduledEmail>(data)
 }
 
-export async function fetchScheduledEmails() {
+export async function fetchScheduledEmails(): Promise<ScheduledEmail[]> {
   const res = await fetch(SCHEDULED_EMAIL_LIST, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   const data = await res.json()
   return normalizeScheduledEmailList(data)
 }
 
-export async function fetchScheduledEmail(id: Id) {
+export async function fetchScheduledEmail(id: Id): Promise<ScheduledEmail> {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
     credentials: 'include',
   })
@@ -629,7 +632,9 @@ export async function fetchScheduledEmail(id: Id) {
   return res.json()
 }
 
-export async function fetchScheduledEmailPendingMentors(id: Id) {
+export async function fetchScheduledEmailPendingMentors(
+  id: Id
+): Promise<ScheduledEmailPendingMentorsResponse> {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/pending-mentors/`, {
     credentials: 'include',
   })
@@ -651,7 +656,7 @@ export async function previewScheduledEmailReplyReminders(id: Id) {
   return res.json()
 }
 
-export async function sendScheduledEmailNow(id: Id) {
+export async function sendScheduledEmailNow(id: Id): Promise<SendEmailResult> {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-now/`, {
     method: 'POST',
     credentials: 'include',

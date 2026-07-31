@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -12,7 +12,13 @@ import {
   patchScheduledEmail,
   sendScheduledEmailNow,
 } from '../api'
-import { normalizePendingMentorRows, pendingMentorsForEmail, recipientSummaryText, scheduledRecipientCount, sentEmailReplyStats } from '../emailHelpers.js'
+import {
+  normalizePendingMentorRows,
+  pendingMentorsForEmail,
+  recipientSummaryText,
+  scheduledRecipientCount,
+  sentEmailReplyStats,
+} from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.jsx'
 import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.jsx'
 import MentorCellPhoneRequestPanel from './MentorCellPhoneRequestPanel.jsx'
@@ -23,6 +29,36 @@ import {
   formatDateTime,
   isoToDateAndQuarterTime,
 } from '../datetime.js'
+import type {
+  Mentor,
+  PendingMentorRow,
+  Practice,
+  ScheduledEmail,
+  ScheduledEmailRecipientMode,
+  Season,
+} from '../types.js'
+
+type EmailsTab = 'mentor-practice-request' | 'practice-reminder' | 'missing-cell-phone'
+type EmailModal = 'create' | 'edit' | 'delete'
+
+type EmailFormState = {
+  sendDate: string
+  sendTime: string
+  body_text: string
+  practices: string[]
+  recipient_mode: ScheduledEmailRecipientMode
+  recipient_season: string
+  specific_mentors: string[]
+}
+
+type EmailPayload = {
+  scheduled_send_at: string
+  body_text: string
+  practices: number[]
+  recipient_mode: string
+  recipient_season: number | null
+  specific_mentors: number[]
+}
 
 const DEFAULT_BODY = `Hi {{ first_name }} {{ last_name }},
 
@@ -39,18 +75,22 @@ Your friendly Mentor Coordinator Ted`
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
 
-const SEASON_RECIPIENT_MODES = new Set([
+const SEASON_RECIPIENT_MODES = new Set<string>([
   'all_in_season',
   'all_at_practice_in_season',
   'all_remote_in_season',
 ])
 
-function isoToSendDateAndTime(iso) {
-  const { date, time } = isoToDateAndQuarterTime(iso)
+function isoToSendDateAndTime(iso: string | null | undefined) {
+  const { date, time } = isoToDateAndQuarterTime(iso ?? '')
   return { sendDate: date, sendTime: time }
 }
 
-function mentorsInSeason(mentors, seasonId, mentorType = null) {
+function mentorsInSeason(
+  mentors: Mentor[],
+  seasonId: number,
+  mentorType: string | null = null
+): Mentor[] {
   return mentors.filter((m) => {
     if (!Array.isArray(m.seasons) || !m.seasons.includes(seasonId)) return false
     if (mentorType && m.type !== mentorType) return false
@@ -58,13 +98,13 @@ function mentorsInSeason(mentors, seasonId, mentorType = null) {
   })
 }
 
-function mentorTypeForRecipientMode(mode) {
+function mentorTypeForRecipientMode(mode: string): string | null {
   if (mode === 'all_at_practice_in_season') return AT_PRACTICE
   if (mode === 'all_remote_in_season') return REMOTE
   return null
 }
 
-function seasonRecipientLabel(mode) {
+function seasonRecipientLabel(mode: string): string {
   if (mode === 'all_at_practice_in_season') {
     return 'Season (all At Practice mentors linked to this season)'
   }
@@ -74,15 +114,15 @@ function seasonRecipientLabel(mode) {
   return 'Season (all mentors linked to this season)'
 }
 
-function sortPracticesByDateAsc(list) {
+function sortPracticesByDateAsc(list: Practice[]): Practice[] {
   return [...list].sort((a, b) => {
-    const ta = new Date(a.date).getTime()
-    const tb = new Date(b.date).getTime()
+    const ta = new Date(a.date ?? 0).getTime()
+    const tb = new Date(b.date ?? 0).getTime()
     return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
   })
 }
 
-function createEmptyEmailForm(defaultSeasonId) {
+function createEmptyEmailForm(defaultSeasonId: number | string): EmailFormState {
   return {
     sendDate: '',
     sendTime: '09:00',
@@ -95,21 +135,23 @@ function createEmptyEmailForm(defaultSeasonId) {
 }
 
 export default function EmailsPage() {
-  const [activeTab, setActiveTab] = useState('mentor-practice-request')
-  const [emails, setEmails] = useState([])
-  const [practices, setPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
-  const [mentors, setMentors] = useState([])
+  const [activeTab, setActiveTab] = useState<EmailsTab>('mentor-practice-request')
+  const [emails, setEmails] = useState<ScheduledEmail[]>([])
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [mentors, setMentors] = useState<Mentor[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [modal, setModal] = useState(null)
-  const [activeEmail, setActiveEmail] = useState(null)
-  const [form, setForm] = useState(() => createEmptyEmailForm(''))
+  const [modal, setModal] = useState<EmailModal | null>(null)
+  const [activeEmail, setActiveEmail] = useState<ScheduledEmail | null>(null)
+  const [form, setForm] = useState<EmailFormState>(() => createEmptyEmailForm(''))
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sendingEmailId, setSendingEmailId] = useState(null)
-  const [pendingMentorsByEmailId, setPendingMentorsByEmailId] = useState({})
+  const [sendingEmailId, setSendingEmailId] = useState<number | null>(null)
+  const [pendingMentorsByEmailId, setPendingMentorsByEmailId] = useState<
+    Record<number, PendingMentorRow[]>
+  >({})
 
   const sortedSeasons = useMemo(
     () =>
@@ -130,7 +172,7 @@ export default function EmailsPage() {
   }, [mentors])
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
@@ -140,9 +182,10 @@ export default function EmailsPage() {
     [practices]
   )
 
-  const practiceLabel = (p) => {
+  const practiceLabel = (p: Practice): string => {
     const when = formatDateTime(p.date)
-    const year = seasonYearById.get(p.season) ?? p.season
+    const year =
+      p.season != null ? (seasonYearById.get(p.season) ?? p.season) : '—'
     const race = p.nyrr_race?.trim()
     return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
   }
@@ -164,8 +207,8 @@ export default function EmailsPage() {
     return [...emails]
       .filter((e) => Boolean(e.task_completed_at))
       .sort((a, b) => {
-        const ta = new Date(a.task_completed_at).getTime()
-        const tb = new Date(b.task_completed_at).getTime()
+        const ta = new Date(a.task_completed_at ?? 0).getTime()
+        const tb = new Date(b.task_completed_at ?? 0).getTime()
         return (
           (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta) ||
           b.id - a.id
@@ -283,7 +326,7 @@ export default function EmailsPage() {
     setModal('create')
   }
 
-  const openEdit = (emailRow) => {
+  const openEdit = (emailRow: ScheduledEmail) => {
     setModalError('')
     setActiveEmail(emailRow)
     const mode =
@@ -312,13 +355,15 @@ export default function EmailsPage() {
     setModal('edit')
   }
 
-  const openDelete = (emailRow) => {
+  const openDelete = (emailRow: ScheduledEmail) => {
     setModalError('')
     setActiveEmail(emailRow)
     setModal('delete')
   }
 
-  const buildPayloadFromForm = () => {
+  const buildPayloadFromForm = ():
+    | { error: string }
+    | { payload: EmailPayload } => {
     const scheduled_send_at = dateAndQuarterTimeToIso(
       form.sendDate,
       form.sendTime
@@ -332,8 +377,11 @@ export default function EmailsPage() {
       .map((id) => Number.parseInt(String(id), 10))
       .filter((id) => !Number.isNaN(id))
 
-    /** @type {{ recipient_mode: string, recipient_season: number|null, specific_mentors: number[] }} */
-    let recipientsPayload
+    let recipientsPayload: {
+      recipient_mode: string
+      recipient_season: number | null
+      specific_mentors: number[]
+    }
     if (SEASON_RECIPIENT_MODES.has(form.recipient_mode)) {
       const sid = Number.parseInt(String(form.recipient_season), 10)
       if (Number.isNaN(sid)) {
@@ -388,7 +436,7 @@ export default function EmailsPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const built = buildPayloadFromForm()
@@ -408,7 +456,7 @@ export default function EmailsPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activeEmail) return
@@ -444,7 +492,7 @@ export default function EmailsPage() {
     }
   }
 
-  const handleSendNow = async (row) => {
+  const handleSendNow = async (row: ScheduledEmail) => {
     const count = scheduledRecipientCount(row, mentors)
     if (
       !window.confirm(
@@ -472,7 +520,7 @@ export default function EmailsPage() {
     }
   }
 
-  const handleMarkSent = async (row) => {
+  const handleMarkSent = async (row: ScheduledEmail) => {
     if (
       !window.confirm(
         `Mark this email as sent?\nScheduled: ${formatDateTime(row.scheduled_send_at)}`
@@ -491,7 +539,7 @@ export default function EmailsPage() {
     }
   }
 
-  const emailFormFields = (formId) => (
+  const emailFormFields = (formId: string): ReactNode => (
     <>
       <span className="field-label">Send date &amp; time</span>
       <div className="practice-datetime-row">
@@ -689,7 +737,7 @@ export default function EmailsPage() {
     </>
   )
 
-  function recipientSummary(row) {
+  function recipientSummary(row: ScheduledEmail): ReactNode {
     return (
       <span className="muted">
         {recipientSummaryText(row, { seasonYearById, mentors })}
@@ -697,7 +745,7 @@ export default function EmailsPage() {
     )
   }
 
-  function practicesSummary(ids) {
+  function practicesSummary(ids: number[] | undefined): ReactNode {
     if (!Array.isArray(ids) || ids.length === 0) {
       return <span className="muted">No practices linked.</span>
     }
@@ -718,7 +766,7 @@ export default function EmailsPage() {
     )
   }
 
-  function renderUpcomingEmailCard(row) {
+  function renderUpcomingEmailCard(row: ScheduledEmail): ReactNode {
     const sending = sendingEmailId === row.id
     return (
       <li key={row.id} className="practice-row email-row">
@@ -777,7 +825,7 @@ export default function EmailsPage() {
     )
   }
 
-  function renderSentEmailCard(row) {
+  function renderSentEmailCard(row: ScheduledEmail): ReactNode {
     const replyStats = sentEmailReplyStats(row)
     const pendingMentorsFromRow = pendingMentorsForEmail(row, mentors)
     const pendingMentors =
@@ -850,7 +898,10 @@ export default function EmailsPage() {
     )
   }
 
-  function renderEmailCard(row, { allowMarkSent }) {
+  function renderEmailCard(
+    row: ScheduledEmail,
+    { allowMarkSent }: { allowMarkSent: boolean }
+  ): ReactNode {
     if (allowMarkSent) {
       return renderUpcomingEmailCard(row)
     }
