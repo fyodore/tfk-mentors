@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   createSeason,
@@ -11,12 +11,15 @@ import {
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
 import { sortSeasonsByYearDesc } from '../seasonHelpers.js'
+import type { Coach, Season } from '../types.js'
 
-function sortSeasons(list) {
+type SeasonModal = 'create' | 'edit' | 'delete'
+
+function sortSeasons(list: Season[]): Season[] {
   return sortSeasonsByYearDesc(list)
 }
 
-function sortCoaches(list) {
+function sortCoaches(list: Coach[]): Coach[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -24,25 +27,25 @@ function sortCoaches(list) {
   })
 }
 
-function coachLabel(coach) {
+function coachLabel(coach: Coach): string {
   return `${coach.first_name ?? ''} ${coach.last_name ?? ''}`.trim()
 }
 
 export default function SeasonsPage() {
-  const [seasons, setSeasons] = useState([])
-  const [coaches, setCoaches] = useState([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [coaches, setCoaches] = useState<Coach[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [modal, setModal] = useState(null)
-  const [activeSeason, setActiveSeason] = useState(null)
+  const [modal, setModal] = useState<SeasonModal | null>(null)
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null)
   const [formYear, setFormYear] = useState('')
   const [formHeadCoachId, setFormHeadCoachId] = useState('')
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
 
   const coachById = useMemo(() => {
-    const map = new Map()
+    const map = new Map<number, Coach>()
     for (const coach of coaches) map.set(coach.id, coach)
     return map
   }, [coaches])
@@ -78,7 +81,7 @@ export default function SeasonsPage() {
     }
   }, [])
 
-  function coachesForSeason(seasonId) {
+  function coachesForSeason(seasonId: number | null | undefined): Coach[] {
     if (!seasonId) return []
     return coaches.filter(
       (coach) =>
@@ -86,8 +89,8 @@ export default function SeasonsPage() {
     )
   }
 
-  function headCoachLabel(season) {
-    if (!season?.head_coach) return null
+  function headCoachLabel(season: Season): string | null {
+    if (!season.head_coach) return null
     const coach = coachById.get(season.head_coach)
     return coach ? coachLabel(coach) : `Coach #${season.head_coach}`
   }
@@ -100,7 +103,7 @@ export default function SeasonsPage() {
     setModal('create')
   }
 
-  const openEdit = (season) => {
+  const openEdit = (season: Season) => {
     setModalError('')
     setFormYear(String(season.year))
     setFormHeadCoachId(
@@ -110,7 +113,7 @@ export default function SeasonsPage() {
     setModal('edit')
   }
 
-  const openDelete = (season) => {
+  const openDelete = (season: Season) => {
     setModalError('')
     setActiveSeason(season)
     setModal('delete')
@@ -127,7 +130,7 @@ export default function SeasonsPage() {
     resetModal()
   }
 
-  const buildSeasonPayload = (year) => {
+  const buildSeasonPayload = (year: number) => {
     const headCoachId = Number.parseInt(formHeadCoachId, 10)
     return {
       year,
@@ -135,7 +138,7 @@ export default function SeasonsPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const year = Number.parseInt(String(formYear), 10)
@@ -145,7 +148,7 @@ export default function SeasonsPage() {
     }
     setBusy(true)
     try {
-      const created = await createSeason({ year })
+      const created = (await createSeason({ year })) as Season
       setSeasons((prev) => sortSeasons([...prev, created]))
       resetModal()
     } catch (err) {
@@ -155,7 +158,7 @@ export default function SeasonsPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activeSeason) return
@@ -166,7 +169,10 @@ export default function SeasonsPage() {
     }
     setBusy(true)
     try {
-      const updated = await patchSeason(activeSeason.id, buildSeasonPayload(year))
+      const updated = (await patchSeason(
+        activeSeason.id,
+        buildSeasonPayload(year)
+      )) as Season
       setSeasons((prev) =>
         sortSeasons([...prev.filter((s) => s.id !== activeSeason.id), updated])
       )
@@ -193,7 +199,7 @@ export default function SeasonsPage() {
     }
   }
 
-  const handleSetCurrent = async (season) => {
+  const handleSetCurrent = async (season: Season) => {
     if (season.is_current) return
     setLoadError(null)
     setBusy(true)
@@ -212,7 +218,7 @@ export default function SeasonsPage() {
     ? coachesForSeason(activeSeason.id)
     : []
 
-  function seasonFormFields(formId) {
+  function seasonFormFields(formId: string): ReactNode {
     return (
       <>
         <label className="field-label" htmlFor={`${formId}-year`}>

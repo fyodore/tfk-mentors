@@ -1,5 +1,6 @@
 import { apiPath } from './config.js'
 import type {
+  Coach,
   Id,
   JsonObject,
   Mentor,
@@ -15,7 +16,7 @@ import type {
   ServerConfig,
 } from './types.js'
 
-export type { Id, JsonObject, Season, Practice, Mentor } from './types.js'
+export type { Id, JsonObject, Season, Practice, Mentor, Coach } from './types.js'
 
 export class ApiError extends Error {
   status?: number
@@ -224,11 +225,11 @@ const MENTOR_LIST = apiPath('/api/mentor/')
 const COACH_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/coach-practice-assignment/')
 const MENTOR_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/mentor-practice-assignment/')
 
-export function normalizeCoachList(data: unknown): unknown[] {
-  return normalizeList<unknown>(data)
+export function normalizeCoachList(data: unknown): Coach[] {
+  return normalizeList<Coach>(data)
 }
 
-export async function fetchCoaches() {
+export async function fetchCoaches(): Promise<Coach[]> {
   const res = await fetch(COACH_LIST, {
     method: 'GET',
     credentials: 'include',
