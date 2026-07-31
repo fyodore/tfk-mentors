@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import {
@@ -22,14 +29,33 @@ import { Modal } from '../components/Modal.tsx'
 import { formatDateTime } from '../datetime.js'
 import { PACE_GROUPS, sortByPaceThenName } from '../paceHelpers.js'
 import { splitPracticesByUpcoming } from '../seasonHelpers.js'
+import type {
+  Coach,
+  CoachPracticeAssignment,
+  Mentor,
+  Practice,
+  PracticeMentorReply,
+  Season,
+} from '../types.js'
 
-function byName(a, b) {
+type NamedPerson = {
+  first_name?: string | null
+  last_name?: string | null
+}
+
+type SwapModalState = {
+  mentorId: number
+  mentorName: string
+  pace: string
+}
+
+function byName(a: NamedPerson, b: NamedPerson) {
   const ln = (a.last_name || '').localeCompare(b.last_name || '')
   if (ln !== 0) return ln
   return (a.first_name || '').localeCompare(b.first_name || '')
 }
 
-function practiceSwitcherLabel(practice) {
+function practiceSwitcherLabel(practice: Practice) {
   const dateLabel = practice.date ? formatDateTime(practice.date) : '—'
   const race = practice.nyrr_race?.trim()
   return race ? `${dateLabel} · ${race}` : dateLabel
@@ -40,41 +66,47 @@ export default function PracticeDetailPage() {
   const navigate = useNavigate()
   const practiceId = Number.parseInt(String(id), 10)
 
-  const [practice, setPractice] = useState(null)
-  const [allPractices, setAllPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
-  const [coaches, setCoaches] = useState([])
-  const [mentors, setMentors] = useState([])
-  const [coachAssignments, setCoachAssignments] = useState([])
-  const [mentorReplies, setMentorReplies] = useState([])
-  const [availableMentorReplies, setAvailableMentorReplies] = useState([])
+  const [practice, setPractice] = useState<Practice | null>(null)
+  const [allPractices, setAllPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [coaches, setCoaches] = useState<Coach[]>([])
+  const [mentors, setMentors] = useState<Mentor[]>([])
+  const [coachAssignments, setCoachAssignments] = useState<
+    CoachPracticeAssignment[]
+  >([])
+  const [mentorReplies, setMentorReplies] = useState<PracticeMentorReply[]>([])
+  const [availableMentorReplies, setAvailableMentorReplies] = useState<
+    PracticeMentorReply[]
+  >([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const [coachIdsToAdd, setCoachIdsToAdd] = useState([])
+  const [coachIdsToAdd, setCoachIdsToAdd] = useState<string[]>([])
   const [coachPaceToAdd, setCoachPaceToAdd] = useState('')
   const [mentorIdToAdd, setMentorIdToAdd] = useState('')
   const [mentorPaceToAdd, setMentorPaceToAdd] = useState('8-9')
   const [saving, setSaving] = useState(false)
-  const [updatingMentorPaceId, setUpdatingMentorPaceId] = useState(null)
-  const [swapModal, setSwapModal] = useState(null)
+  const [updatingMentorPaceId, setUpdatingMentorPaceId] = useState<
+    number | null
+  >(null)
+  const [swapModal, setSwapModal] = useState<SwapModalState | null>(null)
   const [swapIncomingId, setSwapIncomingId] = useState('')
   const [swapError, setSwapError] = useState('')
 
   const seasonById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Season>()
     for (const s of seasons) m.set(s.id, s)
     return m
   }, [seasons])
 
   const coachById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Coach>()
     for (const c of coaches) m.set(c.id, c)
     return m
   }, [coaches])
 
   const mentorById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Mentor>()
     for (const mtr of mentors) m.set(mtr.id, mtr)
     return m
   }, [mentors])
@@ -90,7 +122,7 @@ export default function PracticeDetailPage() {
       [seasonPractices]
     )
 
-  function handlePracticeSwitch(event) {
+  function handlePracticeSwitch(event: ChangeEvent<HTMLSelectElement>) {
     const nextId = Number.parseInt(event.target.value, 10)
     if (Number.isNaN(nextId) || nextId === practiceId) return
     navigate(`/practices/${nextId}`)
@@ -234,7 +266,10 @@ export default function PracticeDetailPage() {
     [mentorReplies, availableMentorReplies]
   )
 
-  function renderMentorReplyRow(r, isAvailable) {
+  function renderMentorReplyRow(
+    r: PracticeMentorReply,
+    isAvailable: boolean
+  ): ReactNode {
     const m = mentorById.get(r.mentor_id)
     const mentorName =
       r.first_name && r.last_name
@@ -322,11 +357,11 @@ export default function PracticeDetailPage() {
     )
   }
 
-  async function handleAddCoach(e) {
+  async function handleAddCoach(e: FormEvent) {
     e.preventDefault()
     const coachIds = coachIdsToAdd
-      .map((id) => Number.parseInt(String(id), 10))
-      .filter((id) => !Number.isNaN(id))
+      .map((coachId) => Number.parseInt(String(coachId), 10))
+      .filter((coachId) => !Number.isNaN(coachId))
     if (coachIds.length === 0) return
     setSaving(true)
     setError(null)
@@ -350,20 +385,20 @@ export default function PracticeDetailPage() {
     }
   }
 
-  async function handleRemoveCoach(assignmentId) {
+  async function handleRemoveCoach(assignmentId: number) {
     setSaving(true)
     setError(null)
     try {
       await deleteCoachPracticeAssignment(assignmentId)
       await loadAll()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleAddMentor(e) {
+  async function handleAddMentor(e: FormEvent) {
     e.preventDefault()
     const mentorId = Number.parseInt(mentorIdToAdd, 10)
     if (Number.isNaN(mentorId)) return
@@ -384,20 +419,23 @@ export default function PracticeDetailPage() {
     }
   }
 
-  async function handleRemoveMentor(mentorId) {
+  async function handleRemoveMentor(mentorId: number) {
     setSaving(true)
     setError(null)
     try {
       await deletePracticeMentorReply(practiceId, mentorId)
       await loadAll()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleAddMentorToPractice(mentorId, pace) {
+  async function handleAddMentorToPractice(
+    mentorId: number,
+    pace?: string | null
+  ) {
     setSaving(true)
     setError(null)
     try {
@@ -412,14 +450,14 @@ export default function PracticeDetailPage() {
         const without = prev.filter((row) => row.mentor_id !== mentorId)
         return sortByPaceThenName([...without, updated])
       })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleMakeMentorAvailable(mentorId) {
+  async function handleMakeMentorAvailable(mentorId: number) {
     setSaving(true)
     setError(null)
     try {
@@ -429,14 +467,18 @@ export default function PracticeDetailPage() {
         const without = prev.filter((r) => r.mentor_id !== mentorId)
         return [...without, updated]
       })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleUpdateMentorPace(mentorId, pace, isAvailable) {
+  async function handleUpdateMentorPace(
+    mentorId: number,
+    pace: string,
+    isAvailable: boolean
+  ) {
     setUpdatingMentorPaceId(mentorId)
     setError(null)
     try {
@@ -450,14 +492,14 @@ export default function PracticeDetailPage() {
           prev.map((row) => (row.mentor_id === mentorId ? updated : row))
         )
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setUpdatingMentorPaceId(null)
     }
   }
 
-  function handleMentorSelectChange(nextId) {
+  function handleMentorSelectChange(nextId: string) {
     setMentorIdToAdd(nextId)
     const mentorId = Number.parseInt(nextId, 10)
     if (Number.isNaN(mentorId)) return
@@ -465,7 +507,7 @@ export default function PracticeDetailPage() {
     if (mentor?.pace) setMentorPaceToAdd(mentor.pace)
   }
 
-  function openSwapModal(reply) {
+  function openSwapModal(reply: PracticeMentorReply) {
     const m = mentorById.get(reply.mentor_id)
     const mentorName =
       reply.first_name && reply.last_name
@@ -559,7 +601,10 @@ export default function PracticeDetailPage() {
                 ) : null}
               </select>
               <p className="muted practice-detail-season-note">
-                Season {seasonById.get(practice.season)?.year ?? practice.season}
+                Season{' '}
+                {(practice.season != null
+                  ? seasonById.get(practice.season)?.year
+                  : undefined) ?? practice.season}
               </p>
             </div>
             {practice.description?.trim() ? (
@@ -609,7 +654,7 @@ export default function PracticeDetailPage() {
                 id="add-coach"
                 className="field-input field-select email-mentor-multiselect"
                 value={coachIdsToAdd}
-                onChange={(e) =>
+                onChange={(e: ChangeEvent<HTMLSelectElement>) =>
                   setCoachIdsToAdd(
                     Array.from(e.target.selectedOptions).map((o) => o.value)
                   )

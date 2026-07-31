@@ -7,6 +7,35 @@ export type Season = {
   head_coach?: number | null
 }
 
+export type PracticeMentorReply = {
+  id?: number | null
+  mentor_id: number
+  first_name?: string | null
+  last_name?: string | null
+  mentor_type?: string | null
+  attendance?: string | null
+  pace?: string | null
+  responded_at?: string | null
+  scheduled_email_id?: number | null
+  scheduled_send_at?: string | null
+}
+
+export type CoachPracticeAssignment = {
+  id: number
+  coach: number
+  practice: number
+  pace?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type PracticeMentorSwapResult = {
+  incoming_mentor: PracticeMentorReply
+  show_up?: string
+  mentor_confirmations?: unknown
+  coach_notification?: unknown
+}
+
 export type Practice = {
   id: number
   date?: string | null
@@ -17,7 +46,54 @@ export type Practice = {
   start_location?: string | null
   full_practice?: boolean
   show_to_mentors?: boolean
+  mentor_replies?: PracticeMentorReply[]
+  available_mentor_replies?: PracticeMentorReply[]
   [key: string]: unknown
+}
+
+export type PracticeReminderKind = 'before_first' | 'after_practice' | string
+
+export type PracticeReminderPendingRecipient = {
+  email: string
+  first_name?: string
+  last_name?: string
+  name?: string
+  kind?: string
+  kind_label?: string
+  mentor_id?: number | null
+  coach_id?: number | null
+  staff_id?: number | null
+}
+
+export type PracticeReminderSendRecord = {
+  id: number
+  recipient_email: string
+  recipient_first_name?: string
+  recipient_last_name?: string
+  recipient_kind?: string
+  rendered_subject?: string
+  rendered_body?: string
+  sent_at?: string | null
+  created_at?: string
+}
+
+export type PracticeReminderEmail = {
+  id: number
+  season: number
+  kind: PracticeReminderKind
+  anchor_practice: number
+  practice_one: number
+  practice_two?: number | null
+  scheduled_send_at?: string | null
+  subject?: string
+  body_text?: string
+  task_completed_at?: string | null
+  recipients_emailed_count?: number | null
+  recipient_count?: number | null
+  pending_recipients?: PracticeReminderPendingRecipient[]
+  send_records?: PracticeReminderSendRecord[]
+  created_at?: string
+  updated_at?: string
 }
 
 export type Coach = {

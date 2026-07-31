@@ -20,7 +20,7 @@ import {
   sentEmailReplyStats,
 } from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.tsx'
-import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.jsx'
+import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.tsx'
 import MentorCellPhoneRequestPanel from './MentorCellPhoneRequestPanel.tsx'
 import { Modal } from '../components/Modal.tsx'
 import {

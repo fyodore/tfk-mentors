@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -20,6 +26,12 @@ import {
   formatDateTime,
   isoToDateAndQuarterTime,
 } from '../datetime.js'
+import type {
+  Practice,
+  PracticeReminderEmail,
+  PracticeReminderPendingRecipient,
+  Season,
+} from '../types.js'
 
 const DEFAULT_BODY = `Dear {{first_name}},
 
@@ -35,33 +47,50 @@ To see the most up to date schedule of you mentoring you can use: https://mentor
 
 If you haven't done so, please join our facebook group: https://www.facebook.com/groups/{{year}}tfkmentors/.`
 
-function isoToSendDateAndTime(iso) {
-  const { date, time } = isoToDateAndQuarterTime(iso)
+type ReminderModal = 'edit' | 'delete' | 'refresh-templates'
+
+type ReminderFormState = {
+  sendDate: string
+  sendTime: string
+  subject: string
+  body_text: string
+}
+
+function isoToSendDateAndTime(iso: string | null | undefined) {
+  const { date, time } = isoToDateAndQuarterTime(iso ?? '')
   return { sendDate: date, sendTime: time }
 }
 
-function sortPracticesByDateAsc(list) {
+function sortPracticesByDateAsc(list: Practice[]) {
   return [...list].sort((a, b) => {
-    const ta = new Date(a.date).getTime()
-    const tb = new Date(b.date).getTime()
+    const ta = new Date(a.date ?? '').getTime()
+    const tb = new Date(b.date ?? '').getTime()
     return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
   })
 }
 
 export default function PracticeReminderEmailsPanel() {
-  const [reminders, setReminders] = useState([])
-  const [practices, setPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [reminders, setReminders] = useState<PracticeReminderEmail[]>([])
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [seasonFilter, setSeasonFilter] = useState('')
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
-  const [modal, setModal] = useState(null)
-  const [activeReminder, setActiveReminder] = useState(null)
-  const [form, setForm] = useState({ sendDate: '', sendTime: '06:15', subject: '', body_text: DEFAULT_BODY })
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [modal, setModal] = useState<ReminderModal | null>(null)
+  const [activeReminder, setActiveReminder] =
+    useState<PracticeReminderEmail | null>(null)
+  const [form, setForm] = useState<ReminderFormState>({
+    sendDate: '',
+    sendTime: '06:15',
+    subject: '',
+    body_text: DEFAULT_BODY,
+  })
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sendingId, setSendingId] = useState(null)
-  const [editRecipients, setEditRecipients] = useState([])
+  const [sendingId, setSendingId] = useState<number | null>(null)
+  const [editRecipients, setEditRecipients] = useState<
+    PracticeReminderPendingRecipient[]
+  >([])
   const [editRecipientsLoading, setEditRecipientsLoading] = useState(false)
 
   const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
@@ -72,22 +101,22 @@ export default function PracticeReminderEmailsPanel() {
   )
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
 
   const practiceById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Practice>()
     for (const p of practices) m.set(p.id, p)
     return m
   }, [practices])
 
-  const practiceLabel = (practiceId) => {
+  const practiceLabel = (practiceId: number) => {
     const p = practiceById.get(practiceId)
     if (!p) return `Practice #${practiceId}`
     const when = formatDateTime(p.date)
-    const year = seasonYearById.get(p.season) ?? p.season
+    const year = seasonYearById.get(p.season ?? -1) ?? p.season
     const race = p.nyrr_race?.trim()
     return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
   }
@@ -113,15 +142,15 @@ export default function PracticeReminderEmailsPanel() {
     return [...reminders]
       .filter((row) => Boolean(row.task_completed_at))
       .sort((a, b) => {
-        const ta = new Date(a.task_completed_at).getTime()
-        const tb = new Date(b.task_completed_at).getTime()
+        const ta = new Date(a.task_completed_at ?? '').getTime()
+        const tb = new Date(b.task_completed_at ?? '').getTime()
         return (
           (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta) || b.id - a.id
         )
       })
   }, [reminders])
 
-  async function reloadReminders(seasonId) {
+  async function reloadReminders(seasonId?: string) {
     const sid = seasonId ?? seasonFilter
     if (!sid) {
       setReminders([])
@@ -206,7 +235,7 @@ export default function PracticeReminderEmailsPanel() {
     resetModal()
   }
 
-  async function openEdit(row) {
+  async function openEdit(row: PracticeReminderEmail) {
     setModalError('')
     setActiveReminder(row)
     setEditRecipients([])
@@ -234,7 +263,7 @@ export default function PracticeReminderEmailsPanel() {
     }
   }
 
-  function openDelete(row) {
+  function openDelete(row: PracticeReminderEmail) {
     setModalError('')
     setActiveReminder(row)
     setModal('delete')
@@ -287,7 +316,7 @@ export default function PracticeReminderEmailsPanel() {
     }
   }
 
-  async function handleSendNow(row) {
+  async function handleSendNow(row: PracticeReminderEmail) {
     setSendingId(row.id)
     setLoadError(null)
     try {
@@ -320,7 +349,7 @@ export default function PracticeReminderEmailsPanel() {
     }
   }
 
-  function reminderSummary(row) {
+  function reminderSummary(row: PracticeReminderEmail): ReactNode {
     const first = practiceLabel(row.practice_one)
     const second =
       row.practice_two != null ? practiceLabel(row.practice_two) : null
@@ -343,14 +372,14 @@ export default function PracticeReminderEmailsPanel() {
     )
   }
 
-  function scheduleLabel(row) {
+  function scheduleLabel(row: PracticeReminderEmail) {
     if (!row.scheduled_send_at) {
       return 'Not scheduled — set a send time or use Send now'
     }
     return `Scheduled ${formatDateTime(row.scheduled_send_at)}`
   }
 
-  function renderUpcomingRow(row) {
+  function renderUpcomingRow(row: PracticeReminderEmail) {
     const sending = sendingId === row.id
     return (
       <li key={row.id} className="practice-row email-row">
@@ -392,7 +421,7 @@ export default function PracticeReminderEmailsPanel() {
     )
   }
 
-  function renderSentRow(row) {
+  function renderSentRow(row: PracticeReminderEmail) {
     return (
       <li key={row.id} className="practice-row email-row">
         <div className="practice-row-main">
@@ -439,7 +468,9 @@ export default function PracticeReminderEmailsPanel() {
             className="season-filter-select"
             value={seasonFilter}
             disabled={loading || busy}
-            onChange={(e) => setSeasonFilter(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setSeasonFilter(e.target.value)
+            }
           >
             {sortedSeasons.map((s) => (
               <option key={s.id} value={String(s.id)}>

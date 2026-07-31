@@ -1,6 +1,7 @@
 import { apiPath } from './config.js'
 import type {
   Coach,
+  CoachPracticeAssignment,
   Id,
   JsonObject,
   Mentor,
@@ -11,6 +12,9 @@ import type {
   Practice,
   PracticeAttendanceCurrentResponse,
   PracticeAttendanceDetail,
+  PracticeMentorReply,
+  PracticeMentorSwapResult,
+  PracticeReminderEmail,
   ArchivedPracticeAttendance,
   PublicMentorDirectoryPractices,
   PublicMentorDirectoryRow,
@@ -465,7 +469,11 @@ export async function fetchPractice(
   return res.json()
 }
 
-export async function fetchPracticeMentorReplies(id: Id) {
+export async function fetchPracticeMentorReplies(id: Id): Promise<{
+  mentors?: PracticeMentorReply[]
+  available_mentors?: PracticeMentorReply[]
+  [key: string]: unknown
+}> {
   const res = await fetch(`${PRACTICE_LIST}${id}/mentor-replies/`, {
     credentials: 'include',
   })
@@ -473,7 +481,10 @@ export async function fetchPracticeMentorReplies(id: Id) {
   return res.json()
 }
 
-export async function createPracticeMentorReply(practiceId: Id, body: { mentor: number; pace: string }) {
+export async function createPracticeMentorReply(
+  practiceId: Id,
+  body: { mentor: number; pace: string }
+): Promise<PracticeMentorReply> {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'POST',
     credentials: 'include',
@@ -487,7 +498,11 @@ export async function createPracticeMentorReply(practiceId: Id, body: { mentor: 
   return res.json()
 }
 
-export async function patchPracticeMentorPace(practiceId: Id, mentorId: Id, pace: string) {
+export async function patchPracticeMentorPace(
+  practiceId: Id,
+  mentorId: Id,
+  pace: string
+): Promise<PracticeMentorReply> {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -501,7 +516,10 @@ export async function patchPracticeMentorPace(practiceId: Id, mentorId: Id, pace
   return res.json()
 }
 
-export async function makePracticeMentorAvailable(practiceId: Id, mentorId: Id) {
+export async function makePracticeMentorAvailable(
+  practiceId: Id,
+  mentorId: Id
+): Promise<PracticeMentorReply> {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -515,7 +533,10 @@ export async function makePracticeMentorAvailable(practiceId: Id, mentorId: Id) 
   return res.json()
 }
 
-export async function swapPracticeMentor(practiceId: Id, body: { outgoing_mentor: number; incoming_mentor: number }) {
+export async function swapPracticeMentor(
+  practiceId: Id,
+  body: { outgoing_mentor: number; incoming_mentor: number }
+): Promise<PracticeMentorSwapResult> {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/swap-mentor/`, {
     method: 'POST',
     credentials: 'include',
@@ -544,11 +565,15 @@ export async function deletePracticeMentorReply(practiceId: Id, mentorId: Id) {
   if (!res.ok && res.status !== 204) throw new Error(await parseError(res))
 }
 
-export function normalizeCoachPracticeAssignmentList(data: unknown): unknown[] {
-  return normalizeList<unknown>(data)
+export function normalizeCoachPracticeAssignmentList(
+  data: unknown
+): CoachPracticeAssignment[] {
+  return normalizeList<CoachPracticeAssignment>(data)
 }
 
-export async function fetchCoachPracticeAssignments() {
+export async function fetchCoachPracticeAssignments(): Promise<
+  CoachPracticeAssignment[]
+> {
   const res = await fetch(COACH_PRACTICE_ASSIGNMENT_LIST, {
     credentials: 'include',
   })
@@ -557,7 +582,9 @@ export async function fetchCoachPracticeAssignments() {
   return normalizeCoachPracticeAssignmentList(data)
 }
 
-export async function createCoachPracticeAssignment(body: JsonObject) {
+export async function createCoachPracticeAssignment(
+  body: JsonObject
+): Promise<CoachPracticeAssignment> {
   const res = await fetch(COACH_PRACTICE_ASSIGNMENT_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -737,11 +764,15 @@ export async function deleteScheduledEmail(id: Id) {
 
 const PRACTICE_REMINDER_EMAIL_LIST = apiPath('/api/practice-reminder-email/')
 
-export function normalizePracticeReminderEmailList(data: unknown): unknown[] {
-  return normalizeList<unknown>(data)
+export function normalizePracticeReminderEmailList(
+  data: unknown
+): PracticeReminderEmail[] {
+  return normalizeList<PracticeReminderEmail>(data)
 }
 
-export async function fetchPracticeReminderEmails(seasonId: Id) {
+export async function fetchPracticeReminderEmails(
+  seasonId: Id
+): Promise<PracticeReminderEmail[]> {
   const query =
     seasonId != null && seasonId !== ''
       ? `?season=${encodeURIComponent(String(seasonId))}`
@@ -754,7 +785,9 @@ export async function fetchPracticeReminderEmails(seasonId: Id) {
   return normalizePracticeReminderEmailList(data)
 }
 
-export async function fetchPracticeReminderEmail(id: Id) {
+export async function fetchPracticeReminderEmail(
+  id: Id
+): Promise<PracticeReminderEmail> {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
     credentials: 'include',
   })
@@ -790,7 +823,10 @@ export async function refreshPracticeReminderEmailTemplates(seasonId: Id) {
   return res.json()
 }
 
-export async function patchPracticeReminderEmail(id: Id, body: JsonObject) {
+export async function patchPracticeReminderEmail(
+  id: Id,
+  body: JsonObject
+): Promise<PracticeReminderEmail> {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',

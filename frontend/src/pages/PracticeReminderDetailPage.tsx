@@ -8,11 +8,16 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
+import type {
+  Practice,
+  PracticeReminderEmail,
+  Season,
+} from '../types.js'
 
-function sortPracticesByDateAsc(list) {
+function sortPracticesByDateAsc(list: Practice[]) {
   return [...list].sort((a, b) => {
-    const ta = new Date(a.date).getTime()
-    const tb = new Date(b.date).getTime()
+    const ta = new Date(a.date ?? '').getTime()
+    const tb = new Date(b.date ?? '').getTime()
     return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
   })
 }
@@ -21,30 +26,30 @@ export default function PracticeReminderDetailPage() {
   const { id } = useParams()
   const reminderId = Number.parseInt(String(id), 10)
 
-  const [reminder, setReminder] = useState(null)
-  const [practices, setPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [reminder, setReminder] = useState<PracticeReminderEmail | null>(null)
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [expandedRecordId, setExpandedRecordId] = useState(null)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedRecordId, setExpandedRecordId] = useState<number | null>(null)
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
 
   const practiceById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Practice>()
     for (const p of practices) m.set(p.id, p)
     return m
   }, [practices])
 
-  const practiceLabel = (practiceId) => {
+  const practiceLabel = (practiceId: number) => {
     const p = practiceById.get(practiceId)
     if (!p) return `Practice #${practiceId}`
     const when = formatDateTime(p.date)
-    const year = seasonYearById.get(p.season) ?? p.season
+    const year = seasonYearById.get(p.season ?? -1) ?? p.season
     const race = p.nyrr_race?.trim()
     return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
   }
@@ -73,7 +78,7 @@ export default function PracticeReminderDetailPage() {
           setSeasons(sList)
         }
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
           setReminder(null)
