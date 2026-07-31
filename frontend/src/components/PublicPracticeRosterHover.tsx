@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { fetchPublicPracticeMentorRoster } from '../api'
 import { PACE_GROUPS } from '../paceHelpers.js'
+import type { PublicPracticeMentor, PublicPracticeRoster } from '../types.js'
 
 const RUNNER_CURSOR =
   'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\' viewBox=\'0 0 24 24\' fill=\'none\'%3E%3Ccircle cx=\'15\' cy=\'4.5\' r=\'2\' fill=\'%23166534\'/%3E%3Cpath d=\'M13 8.5 11 13l2.5.8-2.2 4.7 1.8.8 2.8-6.2-2.4-.8 1.5-3.5z\' fill=\'%23166534\'/%3E%3Cpath d=\'M8.5 14.5 6 20h2l1.8-4.2\' fill=\'%23166534\'/%3E%3C/svg%3E") 8 18, pointer'
 
-function mentorName(row) {
+type PaceGroup = {
+  pace: string
+  mentors: PublicPracticeMentor[]
+}
+
+function mentorName(row: PublicPracticeMentor): string {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()
 }
 
-function sortByName(list) {
+function sortByName(list: PublicPracticeMentor[]): PublicPracticeMentor[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -18,19 +24,19 @@ function sortByName(list) {
   })
 }
 
-function buildPaceGroups(mentors) {
-  const byPace = new Map()
+function buildPaceGroups(mentors: PublicPracticeMentor[]): PaceGroup[] {
+  const byPace = new Map<string, PublicPracticeMentor[]>()
 
   for (const mentor of mentors) {
     const pace = mentor.pace?.trim() || '—'
     if (!byPace.has(pace)) byPace.set(pace, [])
-    byPace.get(pace).push(mentor)
+    byPace.get(pace)!.push(mentor)
   }
 
-  const groups = []
+  const groups: PaceGroup[] = []
   for (const pace of PACE_GROUPS) {
     if (!byPace.has(pace)) continue
-    groups.push({ pace, mentors: sortByName(byPace.get(pace)) })
+    groups.push({ pace, mentors: sortByName(byPace.get(pace)!) })
     byPace.delete(pace)
   }
 
@@ -43,7 +49,7 @@ function buildPaceGroups(mentors) {
   return groups
 }
 
-function PaceGroupList({ groups }) {
+function PaceGroupList({ groups }: { groups: PaceGroup[] }) {
   if (groups.length === 0) return null
 
   return (
@@ -64,7 +70,15 @@ function PaceGroupList({ groups }) {
   )
 }
 
-function RosterSection({ title, groups, emptyMessage }) {
+function RosterSection({
+  title,
+  groups,
+  emptyMessage,
+}: {
+  title: string
+  groups: PaceGroup[]
+  emptyMessage: string
+}) {
   return (
     <section className="public-practice-roster-section">
       <h3 className="public-practice-roster-section-title">{title}</h3>
@@ -77,17 +91,22 @@ function RosterSection({ title, groups, emptyMessage }) {
   )
 }
 
-/**
- * @param {{ practiceId: number, children: import('react').ReactNode }} props
- */
-export function PublicPracticeRosterHover({ practiceId, children }) {
-  const containerRef = useRef(null)
-  const cacheRef = useRef(new Map())
+type PublicPracticeRosterHoverProps = {
+  practiceId: number
+  children: ReactNode
+}
+
+export function PublicPracticeRosterHover({
+  practiceId,
+  children,
+}: PublicPracticeRosterHoverProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const cacheRef = useRef(new Map<number, PublicPracticeRoster>())
   const requestRef = useRef(0)
 
   const [hoverOpen, setHoverOpen] = useState(false)
   const [pinned, setPinned] = useState(false)
-  const [roster, setRoster] = useState(null)
+  const [roster, setRoster] = useState<PublicPracticeRoster | null>(null)
   const [loading, setLoading] = useState(false)
 
   const open = hoverOpen || pinned
@@ -109,7 +128,13 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
       setRoster(data)
     } catch {
       if (requestRef.current !== requestId) return
-      setRoster({ attending_mentors: [], available_mentors: [], description: '' })
+      setRoster({
+        practice_id: practiceId,
+        attending_mentors: [],
+        available_mentors: [],
+        coaches: [],
+        description: '',
+      })
     } finally {
       if (requestRef.current === requestId) setLoading(false)
     }
@@ -123,7 +148,7 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
   function handleEnter() {
     if (pinned) return
     setHoverOpen(true)
-    loadRoster()
+    void loadRoster()
   }
 
   function handleLeave() {
@@ -131,18 +156,18 @@ export function PublicPracticeRosterHover({ practiceId, children }) {
     setHoverOpen(false)
   }
 
-  function handleTriggerClick(event) {
+  function handleTriggerClick(event: { stopPropagation: () => void }) {
     event.stopPropagation()
     setPinned(true)
     setHoverOpen(true)
-    loadRoster()
+    void loadRoster()
   }
 
   useEffect(() => {
     if (!pinned) return undefined
 
-    function handlePointerDown(event) {
-      if (containerRef.current?.contains(event.target)) return
+    function handlePointerDown(event: Event) {
+      if (containerRef.current?.contains(event.target as Node)) return
       closePopup()
     }
 

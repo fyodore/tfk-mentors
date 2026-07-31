@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { fetchMentor, fetchMentorPractices, fetchSeasons } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
 
 function practiceStatusLabel(row) {

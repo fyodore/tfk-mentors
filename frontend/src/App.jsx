@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Outlet, Route, Routes } from 'react-router-dom'
 
-import { PasswordGate } from './components/PasswordGate.jsx'
+import { PasswordGate } from './components/PasswordGate.tsx'
 
 import './App.css'
 

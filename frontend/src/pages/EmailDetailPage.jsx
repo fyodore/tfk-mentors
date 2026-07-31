@@ -11,7 +11,7 @@ import {
   sendScheduledEmailReplyReminders,
 } from '../api'
 import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, normalizePendingMentorRows, sentEmailReplyStats } from '../emailHelpers.js'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
 
 function sortPracticesByDateAsc(list) {

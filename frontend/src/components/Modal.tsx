@@ -1,4 +1,16 @@
+import type { ReactNode } from 'react'
+
 import './Modal.css'
+
+type ModalProps = {
+  open: boolean
+  title: ReactNode
+  children?: ReactNode
+  footer?: ReactNode
+  onClose: () => void
+  closeDisabled?: boolean
+  panelClassName?: string
+}
 
 export function Modal({
   open,
@@ -8,7 +20,7 @@ export function Modal({
   onClose,
   closeDisabled = false,
   panelClassName = '',
-}) {
+}: ModalProps) {
   if (!open) return null
 
   return (

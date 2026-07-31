@@ -6,8 +6,8 @@ import {
   fetchTfkStaff,
   patchTfkStaff,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
-import { Modal } from '../components/Modal.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
+import { Modal } from '../components/Modal.tsx'
 import type { TfkStaff } from '../types.js'
 
 type StaffModal = 'create' | 'edit' | 'delete'

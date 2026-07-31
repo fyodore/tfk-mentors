@@ -4,6 +4,8 @@ import type {
   Id,
   JsonObject,
   Mentor,
+  MentorPracticeRow,
+  MentorScheduleResult,
   MentorSwapReport,
   MentorSwapRequestSummary,
   Practice,
@@ -377,13 +379,13 @@ export async function fetchMentor(id: Id): Promise<Mentor> {
   return res.json()
 }
 
-export async function fetchMentorPractices(id: Id) {
+export async function fetchMentorPractices(id: Id): Promise<MentorPracticeRow[]> {
   const res = await fetch(`${MENTOR_LIST}${id}/practices/`, {
     credentials: 'include',
   })
   if (!res.ok) throw new Error(await parseError(res))
   const data = await res.json()
-  return Array.isArray(data) ? data : []
+  return Array.isArray(data) ? (data as MentorPracticeRow[]) : []
 }
 
 export async function createMentor(body: JsonObject) {
@@ -1146,7 +1148,10 @@ export async function fetchMentorSwapReport(params: { season?: Id | null } = {})
   return res.json()
 }
 
-export async function scheduleMentors(practiceIds: number[], options: { apply?: boolean; schedule?: JsonObject } = {}) {
+export async function scheduleMentors(
+  practiceIds: number[],
+  options: { apply?: boolean; schedule?: MentorScheduleResult } = {}
+): Promise<MentorScheduleResult> {
   const body: JsonObject = {
     practice_ids: practiceIds,
     apply: Boolean(options.apply),

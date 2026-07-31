@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { fetchServerConfig } from '../api'
 import { setDisplayTimeZone } from '../timezone.js'
 
-export function TimezoneProvider({ children }) {
+type TimezoneProviderProps = {
+  children: ReactNode
+}
+
+export function TimezoneProvider({ children }: TimezoneProviderProps) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {

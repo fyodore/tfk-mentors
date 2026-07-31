@@ -1,33 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { fetchMentorPractices } from '../api'
 import { formatDateTime } from '../datetime.js'
+import type { MentorPracticeRow } from '../types.js'
 
-function signupStatusLabel(row) {
+function signupStatusLabel(row: MentorPracticeRow): string {
   if (row.status === 'available') return 'Available'
   if (row.attendance === 'first_half') return 'First half'
   if (row.attendance === 'second_half') return 'Second half'
   return 'Assigned'
 }
 
-/**
- * @param {{
- *   mentorId: number,
- *   currentPracticeId?: number,
- *   refreshKey?: string,
- *   children: import('react').ReactNode,
- * }} props
- */
+type MentorPracticeHoverProps = {
+  mentorId: number
+  currentPracticeId?: number
+  refreshKey?: string
+  children: ReactNode
+}
+
 export function MentorPracticeHover({
   mentorId,
   currentPracticeId,
   refreshKey = '',
   children,
-}) {
+}: MentorPracticeHoverProps) {
   const [open, setOpen] = useState(false)
-  const [rows, setRows] = useState(null)
+  const [rows, setRows] = useState<MentorPracticeRow[] | null>(null)
   const [loading, setLoading] = useState(false)
-  const cacheRef = useRef(new Map())
+  const cacheRef = useRef(new Map<number, MentorPracticeRow[]>())
   const requestRef = useRef(0)
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function MentorPracticeHover({
 
   function handleEnter() {
     setOpen(true)
-    loadRows()
+    void loadRows()
   }
 
   function handleLeave() {

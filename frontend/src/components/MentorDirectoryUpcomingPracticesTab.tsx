@@ -6,12 +6,29 @@ import {
 } from '../api'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { PACE_GROUPS, paceSortKey } from '../paceHelpers.js'
+import type {
+  PublicPracticeMentor,
+  PublicPracticeRoster,
+  PublicUpcomingPractice,
+} from '../types.js'
 
-function personName(row) {
+type PersonWithPace = {
+  first_name?: string | null
+  last_name?: string | null
+  pace?: string | null
+}
+
+type MentorPaceGroup = {
+  pace: string
+  label: string
+  mentors: PublicPracticeMentor[]
+}
+
+function personName(row: PersonWithPace): string {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim()
 }
 
-function sortByLastName(list) {
+function sortByLastName<T extends PersonWithPace>(list: T[]): T[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -19,7 +36,10 @@ function sortByLastName(list) {
   })
 }
 
-function filterBySelectedPaces(people, selectedPaces) {
+function filterBySelectedPaces<T extends PersonWithPace>(
+  people: T[],
+  selectedPaces: Set<string>
+): T[] {
   if (selectedPaces.size === 0) return people
   return people.filter((person) => {
     const pace = person.pace?.trim() || ''
@@ -27,23 +47,26 @@ function filterBySelectedPaces(people, selectedPaces) {
   })
 }
 
-function buildMentorPaceGroups(mentors, selectedPaces) {
-  const byPace = new Map()
+function buildMentorPaceGroups(
+  mentors: PublicPracticeMentor[],
+  selectedPaces: Set<string>
+): MentorPaceGroup[] {
+  const byPace = new Map<string, PublicPracticeMentor[]>()
 
   for (const mentor of filterBySelectedPaces(mentors, selectedPaces)) {
     const pace = mentor.pace?.trim() || ''
     const key = pace || '__none__'
     if (!byPace.has(key)) byPace.set(key, [])
-    byPace.get(key).push(mentor)
+    byPace.get(key)!.push(mentor)
   }
 
-  const groups = []
+  const groups: MentorPaceGroup[] = []
   for (const pace of PACE_GROUPS) {
     if (!byPace.has(pace)) continue
     groups.push({
       pace,
       label: `Pace ${pace}`,
-      mentors: sortByLastName(byPace.get(pace)),
+      mentors: sortByLastName(byPace.get(pace)!),
     })
     byPace.delete(pace)
   }
@@ -52,7 +75,7 @@ function buildMentorPaceGroups(mentors, selectedPaces) {
     groups.push({
       pace: '__none__',
       label: 'No pace',
-      mentors: sortByLastName(byPace.get('__none__')),
+      mentors: sortByLastName(byPace.get('__none__')!),
     })
     byPace.delete('__none__')
   }
@@ -70,7 +93,7 @@ function buildMentorPaceGroups(mentors, selectedPaces) {
   return groups
 }
 
-function practiceLabel(practice) {
+function practiceLabel(practice: PublicUpcomingPractice): string {
   const when = practice.date
     ? formatMentorDirectoryPracticeDate(practice.date)
     : '—'
@@ -79,14 +102,16 @@ function practiceLabel(practice) {
 }
 
 export function MentorDirectoryUpcomingPracticesTab() {
-  const [practices, setPractices] = useState([])
+  const [practices, setPractices] = useState<PublicUpcomingPractice[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [selectedPracticeId, setSelectedPracticeId] = useState(null)
-  const [rosterByPracticeId, setRosterByPracticeId] = useState({})
-  const [rosterLoadingId, setRosterLoadingId] = useState(null)
-  const [rosterErrorById, setRosterErrorById] = useState({})
-  const [selectedPaces, setSelectedPaces] = useState(() => new Set())
+  const [error, setError] = useState<string | null>(null)
+  const [selectedPracticeId, setSelectedPracticeId] = useState<number | null>(null)
+  const [rosterByPracticeId, setRosterByPracticeId] = useState<
+    Record<number, PublicPracticeRoster>
+  >({})
+  const [rosterLoadingId, setRosterLoadingId] = useState<number | null>(null)
+  const [rosterErrorById, setRosterErrorById] = useState<Record<number, string>>({})
+  const [selectedPaces, setSelectedPaces] = useState(() => new Set<string>())
 
   useEffect(() => {
     let cancelled = false
@@ -166,8 +191,7 @@ export function MentorDirectoryUpcomingPracticesTab() {
     selectedPracticeId != null && rosterLoadingId === selectedPracticeId
 
   const coaches = useMemo(
-    () =>
-      sortByLastName(filterBySelectedPaces(roster?.coaches ?? [], selectedPaces)),
+    () => sortByLastName(filterBySelectedPaces(roster?.coaches ?? [], selectedPaces)),
     [roster, selectedPaces]
   )
 
@@ -176,7 +200,7 @@ export function MentorDirectoryUpcomingPracticesTab() {
     [roster, selectedPaces]
   )
 
-  function togglePace(pace) {
+  function togglePace(pace: string) {
     setSelectedPaces((prev) => {
       const next = new Set(prev)
       if (next.has(pace)) next.delete(pace)

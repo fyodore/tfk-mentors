@@ -19,10 +19,10 @@ import {
   scheduledRecipientCount,
   sentEmailReplyStats,
 } from '../emailHelpers.js'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.jsx'
 import MentorCellPhoneRequestPanel from './MentorCellPhoneRequestPanel.jsx'
-import { Modal } from '../components/Modal.jsx'
+import { Modal } from '../components/Modal.tsx'
 import {
   buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,

@@ -1,17 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { scheduleMentors } from '../api'
-import { Modal } from '../components/Modal.jsx'
+import { Modal } from './Modal.tsx'
 import { formatDateStamp, formatDateTime } from '../datetime.js'
 import { PACE_GROUPS } from '../paceHelpers.js'
 import { downloadSchedulePreviewExcel } from '../scheduleExcel.js'
+import type {
+  MentorScheduleResult,
+  ScheduleMentorRow,
+  SchedulePracticeResultRow,
+  ScheduleUnderfilledPaceGroup,
+} from '../types.js'
 
-function mentorName(row) {
+type SchedulerPractice = {
+  id: number
+  date?: string | null
+  nyrr_race?: string
+}
+
+type PracticeMentorSchedulerModalProps = {
+  practices: SchedulerPractice[]
+  open: boolean
+  onClose: () => void
+  onApplied?: (data: MentorScheduleResult) => void | Promise<void>
+}
+
+function mentorName(row: {
+  first_name?: string
+  last_name?: string
+}): string {
   return `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() || '—'
 }
 
-function paceRows(byPace) {
-  const rows = []
+function paceRows(
+  byPace: Record<string, ScheduleMentorRow[]> | undefined
+): { pace: string; mentors: ScheduleMentorRow[] }[] {
+  const rows: { pace: string; mentors: ScheduleMentorRow[] }[] = []
+  const paceGroupSet = PACE_GROUPS as readonly string[]
   for (const pace of PACE_GROUPS) {
     const mentors = byPace?.[pace]
     if (mentors?.length) {
@@ -19,14 +44,20 @@ function paceRows(byPace) {
     }
   }
   for (const [pace, mentors] of Object.entries(byPace ?? {})) {
-    if (!PACE_GROUPS.includes(pace) && mentors?.length) {
+    if (!paceGroupSet.includes(pace) && mentors?.length) {
       rows.push({ pace, mentors })
     }
   }
   return rows
 }
 
-function ScheduleMentorList({ mentors, variant }) {
+function ScheduleMentorList({
+  mentors,
+  variant,
+}: {
+  mentors: ScheduleMentorRow[] | undefined
+  variant: string
+}) {
   if (!mentors?.length) return null
   return (
     <ul className={`schedule-mentor-list schedule-mentor-list-${variant}`}>
@@ -43,7 +74,9 @@ function ScheduleMentorList({ mentors, variant }) {
   )
 }
 
-function formatUnderfilledPaces(groups) {
+function formatUnderfilledPaces(
+  groups: ScheduleUnderfilledPaceGroup[] | undefined
+): string {
   if (!groups?.length) return ''
   return groups
     .map(
@@ -53,7 +86,13 @@ function formatUnderfilledPaces(groups) {
     .join(' · ')
 }
 
-function SchedulePracticeResult({ practice, maxPerPace = 4 }) {
+function SchedulePracticeResult({
+  practice,
+  maxPerPace = 4,
+}: {
+  practice: SchedulePracticeResultRow
+  maxPerPace?: number
+}) {
   const assignmentRows = paceRows(practice.assignments_by_pace)
   const availableRows = paceRows(practice.available_by_pace)
   const underfilled = practice.underfilled_pace_groups ?? []
@@ -80,7 +119,8 @@ function SchedulePracticeResult({ practice, maxPerPace = 4 }) {
       </p>
       {underfilled.length > 0 ? (
         <p className="schedule-underfilled-note" role="note">
-          Needs more mentors: {formatUnderfilledPaces(underfilled)} (max {maxPerPace} per pace)
+          Needs more mentors: {formatUnderfilledPaces(underfilled)} (max {maxPerPace} per
+          pace)
         </p>
       ) : null}
       {assignmentRows.length === 0 && availableRows.length === 0 ? (
@@ -102,15 +142,12 @@ function SchedulePracticeResult({ practice, maxPerPace = 4 }) {
   )
 }
 
-/**
- * @param {{
- *   practices: Array<{ id: number, date?: string, nyrr_race?: string }>,
- *   open: boolean,
- *   onClose: () => void,
- *   onApplied?: () => void | Promise<void>,
- * }} props
- */
-export function PracticeMentorSchedulerModal({ practices, open, onClose, onApplied }) {
+export function PracticeMentorSchedulerModal({
+  practices,
+  open,
+  onClose,
+  onApplied,
+}: PracticeMentorSchedulerModalProps) {
   const sortedPractices = useMemo(
     () =>
       [...practices].sort((a, b) => {
@@ -121,11 +158,11 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
     [practices]
   )
 
-  const [selectedIds, setSelectedIds] = useState(() => new Set())
-  const [result, setResult] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set<number>())
+  const [result, setResult] = useState<MentorScheduleResult | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState(null) // 'preview' | 'apply' | null
+  const [phase, setPhase] = useState<'preview' | 'apply' | null>(null)
   const [applied, setApplied] = useState(false)
   const [exporting, setExporting] = useState(false)
 
@@ -144,7 +181,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
     sortedPractices.length > 0 &&
     sortedPractices.every((practice) => selectedIds.has(practice.id))
 
-  function togglePractice(practiceId) {
+  function togglePractice(practiceId: number) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(practiceId)) next.delete(practiceId)
@@ -209,6 +246,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
     try {
       // Strip any prior apply metadata so the server applies this preview only.
       const { applied: _ignored, ...previewSchedule } = result
+      void _ignored
       const data = await scheduleMentors(practiceIds, {
         apply: true,
         schedule: previewSchedule,
@@ -316,7 +354,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
             type="button"
             className="btn btn-secondary"
             disabled={busy || exporting || !result}
-            onClick={handleDownloadExcel}
+            onClick={() => void handleDownloadExcel()}
           >
             {exporting ? 'Preparing…' : 'Download Excel'}
           </button>
@@ -324,7 +362,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
             type="button"
             className="btn btn-secondary"
             disabled={busy || exporting || selectedIds.size === 0}
-            onClick={runPreview}
+            onClick={() => void runPreview()}
           >
             {phase === 'preview' ? 'Running…' : 'Preview schedule'}
           </button>
@@ -332,7 +370,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
             type="button"
             className="btn btn-primary"
             disabled={busy || exporting || selectedIds.size === 0 || !result}
-            onClick={runApply}
+            onClick={() => void runApply()}
           >
             {phase === 'apply' ? 'Applying…' : 'Apply schedule'}
           </button>
@@ -414,7 +452,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
                   type="button"
                   className="btn btn-secondary"
                   disabled={busy || exporting}
-                  onClick={handleDownloadExcel}
+                  onClick={() => void handleDownloadExcel()}
                 >
                   {exporting ? 'Preparing…' : 'Download Excel'}
                 </button>
@@ -434,7 +472,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
                   Practices needing more mentors
                 </h3>
                 <ul className="schedule-underfilled-list">
-                  {result.underfilled_practices.map((practice) => (
+                  {(result.underfilled_practices ?? []).map((practice) => (
                     <li key={practice.practice_id}>
                       <span className="schedule-underfilled-practice">
                         {practice.date ? formatDateTime(practice.date) : '—'}
@@ -470,7 +508,7 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
                   Remote mentors who could attend
                 </h3>
                 <ul className="schedule-remote-list">
-                  {result.remote_mentors.map((mentor) => (
+                  {(result.remote_mentors ?? []).map((mentor) => (
                     <li key={mentor.mentor_id}>
                       <span className="schedule-mentor-name">{mentorName(mentor)}</span>
                       <span className="muted schedule-mentor-meta">
@@ -509,11 +547,11 @@ export function PracticeMentorSchedulerModal({ practices, open, onClose, onAppli
                 {(result.applied.errors ?? []).length > 0 ? (
                   <>
                     <p className="schedule-applied-errors-heading">
-                      {result.applied.errors.length} issue
-                      {result.applied.errors.length === 1 ? '' : 's'}:
+                      {result.applied.errors!.length} issue
+                      {result.applied.errors!.length === 1 ? '' : 's'}:
                     </p>
                     <ul className="schedule-applied-errors">
-                      {result.applied.errors.map((err, index) => (
+                      {result.applied.errors!.map((err, index) => (
                         <li
                           key={`${err.mentor_id}-${err.practice_id}-${err.action}-${index}`}
                         >

@@ -8,8 +8,8 @@ import {
   patchSeason,
   setCurrentSeason,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
-import { Modal } from '../components/Modal.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
+import { Modal } from '../components/Modal.tsx'
 import { sortSeasonsByYearDesc } from '../seasonHelpers.js'
 import type { Coach, Season } from '../types.js'
 

@@ -72,6 +72,101 @@ export type PublicMentorPracticeRow = {
   attendance?: string | null
 }
 
+export type MentorPracticeRow = {
+  practice_id: number
+  date?: string | null
+  season_id?: number | null
+  season_year?: number | null
+  nyrr_race?: string | null
+  full_practice?: boolean
+  status?: 'assigned' | 'available' | null
+  pace?: string
+  attendance?: string | null
+}
+
+export type ScheduleMentorRow = {
+  mentor_id: number
+  first_name?: string
+  last_name?: string
+  email?: string
+  pace?: string
+  mentor_type?: string
+  selection_count?: number | null
+  attendance?: string
+}
+
+export type ScheduleUnderfilledPaceGroup = {
+  pace: string
+  assigned_count: number
+  slots_remaining: number
+}
+
+export type SchedulePracticeResultRow = {
+  practice_id: number
+  date?: string | null
+  nyrr_race?: string
+  assignments_by_pace?: Record<string, ScheduleMentorRow[]>
+  available_by_pace?: Record<string, ScheduleMentorRow[]>
+  underfilled_pace_groups?: ScheduleUnderfilledPaceGroup[]
+}
+
+export type ScheduleUnderfilledPractice = {
+  practice_id: number
+  date?: string | null
+  nyrr_race?: string
+  underfilled_pace_groups?: ScheduleUnderfilledPaceGroup[]
+}
+
+export type ScheduleRemoteMentorPractice = {
+  practice_id: number
+  date?: string | null
+  nyrr_race?: string
+  pace?: string
+  attendance?: string
+}
+
+export type ScheduleRemoteMentor = {
+  mentor_id: number
+  first_name?: string
+  last_name?: string
+  email?: string
+  pace?: string
+  mentor_type?: string
+  practices?: ScheduleRemoteMentorPractice[]
+}
+
+export type ScheduleAppliedError = {
+  mentor_id?: number
+  practice_id?: number
+  action?: string
+  detail?: string
+}
+
+export type ScheduleApplied = {
+  assigned?: number
+  available?: number
+  errors?: ScheduleAppliedError[]
+  closed_practice_ids?: number[]
+}
+
+export type MentorScheduleResult = {
+  practices?: SchedulePracticeResultRow[]
+  underfilled_practices?: ScheduleUnderfilledPractice[]
+  remote_mentors?: ScheduleRemoteMentor[]
+  summary?: {
+    mentors_considered?: number
+    mentors_assigned?: number
+    assignment_rows?: number
+    available_rows?: number
+    remote_mentors?: number
+    underfilled_practice_count?: number
+    max_per_pace?: number
+    max_per_month?: number
+  }
+  skipped_mentors?: unknown[]
+  applied?: ScheduleApplied
+}
+
 export type PublicMentorDirectoryPractices = {
   mentor_id: number
   assigned_practices: PublicMentorPracticeRow[]

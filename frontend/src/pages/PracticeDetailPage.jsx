@@ -16,9 +16,9 @@ import {
   patchPracticeMentorPace,
   swapPracticeMentor,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
-import { MentorPracticeHover } from '../components/MentorPracticeHover.jsx'
-import { Modal } from '../components/Modal.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
+import { MentorPracticeHover } from '../components/MentorPracticeHover.tsx'
+import { Modal } from '../components/Modal.tsx'
 import { formatDateTime } from '../datetime.js'
 import { PACE_GROUPS, sortByPaceThenName } from '../paceHelpers.js'
 import { splitPracticesByUpcoming } from '../seasonHelpers.js'

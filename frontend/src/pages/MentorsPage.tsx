@@ -9,8 +9,8 @@ import {
   importMentorsCsv,
   patchMentor,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
-import { Modal } from '../components/Modal.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
+import { Modal } from '../components/Modal.tsx'
 import { downloadContactIcs } from '../contactVcard.js'
 import {
   currentSeasonFromList,

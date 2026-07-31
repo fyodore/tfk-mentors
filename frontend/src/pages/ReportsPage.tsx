@@ -7,7 +7,7 @@ import {
   fetchPracticeRosterReport,
   fetchSeasons,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateStamp, formatDateTime } from '../datetime.js'
 import {
   currentSeasonFromList,

@@ -6,7 +6,7 @@ import {
   fetchPractices,
   fetchSeasons,
 } from '../api'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
 
 function sortPracticesByDateAsc(list) {

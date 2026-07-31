@@ -17,9 +17,9 @@ import {
   fetchSeasons,
   patchPractice,
 } from '../api'
-import { Modal } from '../components/Modal.jsx'
-import { PracticeMentorSchedulerModal } from '../components/PracticeMentorScheduler.jsx'
-import { AppHeader } from '../components/AppHeader.jsx'
+import { Modal } from '../components/Modal.tsx'
+import { PracticeMentorSchedulerModal } from '../components/PracticeMentorScheduler.tsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import {
   buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 
 import { fetchMentorEmailReply, putMentorEmailReply } from '../api'
-import { Modal } from '../components/Modal'
+import { Modal } from '../components/Modal.tsx'
 import { formatPracticeWhen } from '../datetime.js'
 
 const AT_PRACTICE = 'At Practice'

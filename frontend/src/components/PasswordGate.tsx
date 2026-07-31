@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import { checkAuthSession, loginSitePassword } from '../api'
 
 import './PasswordGate.css'
 
-/**
- * @param {{ children: import('react').ReactNode }} props
- */
-export function PasswordGate({ children }) {
+type PasswordGateProps = {
+  children: ReactNode
+}
+
+export function PasswordGate({ children }: PasswordGateProps) {
   const [ready, setReady] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export function PasswordGate({ children }) {
     }
   }, [])
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setBusy(true)
     setError(null)

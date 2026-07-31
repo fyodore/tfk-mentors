@@ -13,7 +13,7 @@ import {
   syncPracticeReminderEmails,
 } from '../api'
 import { currentSeasonFromList, sortSeasonsByYearDesc } from '../seasonHelpers.js'
-import { Modal } from '../components/Modal.jsx'
+import { Modal } from '../components/Modal.tsx'
 import {
   buildQuarterTimeOptions,
   dateAndQuarterTimeToIso,

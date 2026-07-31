@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-import { AppHeader } from '../components/AppHeader.jsx'
+import { AppHeader } from '../components/AppHeader.tsx'
 import { SITE_PAGE_CARDS } from '../nav.js'
 
 export default function HomePage() {

@@ -5,10 +5,10 @@ import {
   fetchPublicMentorDirectory,
   fetchPublicMentorDirectoryPractices,
 } from '../api'
-import { Modal } from '../components/Modal.jsx'
-import { MentorDirectoryUpcomingPracticesTab } from '../components/MentorDirectoryUpcomingPracticesTab.jsx'
+import { Modal } from '../components/Modal.tsx'
+import { MentorDirectoryUpcomingPracticesTab } from '../components/MentorDirectoryUpcomingPracticesTab.tsx'
 import { MentorDirectoryRequestSwapTab } from '../components/MentorDirectoryRequestSwapTab.tsx'
-import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
+import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.tsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'
 import { downloadMentorAssignedPracticesIcs } from '../practiceCalendar.js'
