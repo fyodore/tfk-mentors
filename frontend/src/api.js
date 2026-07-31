@@ -1100,6 +1100,13 @@ export async function fetchPublicMentorDirectoryPractices(mentorId) {
   return res.json()
 }
 
+/** @returns {Promise<Array<{ id: number, date: string, nyrr_race: string, season_year: number | null, full_practice: boolean, description: string }>>} */
+export async function fetchPublicUpcomingPractices() {
+  const res = await fetch(apiPath('/api/public/practices/upcoming/'))
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
 /** @param {number|string} practiceId */
 export async function fetchPublicPracticeMentorRoster(practiceId) {
   const res = await fetch(apiPath(`/api/public/practice/${practiceId}/mentors/`))

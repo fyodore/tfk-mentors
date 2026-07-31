@@ -98,6 +98,7 @@ from .serializers import (
     build_public_mentor_directory,
     build_public_mentor_directory_practices,
     build_public_practice_mentor_roster,
+    build_public_upcoming_practices,
 )
 from .email_sending import send_reply_reminders as send_reply_reminders_for_email
 from .email_sending import send_scheduled_email as send_scheduled_email_now
@@ -2077,15 +2078,36 @@ class PublicMentorDirectoryPracticesView(APIView):
         return Response(build_public_mentor_directory_practices(mentor))
 
 
+class PublicUpcomingPracticesView(APIView):
+    """Public list of upcoming practices visible to mentors."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(build_public_upcoming_practices())
+
+
 class PublicPracticeMentorRosterView(APIView):
-    """Public attending and available mentors for one practice."""
+    """Public coaches and mentors for one practice."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request, pk):
         try:
-            practice = Practice.objects.select_related("season").get(pk=pk)
+            practice = (
+                Practice.objects.select_related("season")
+                .prefetch_related(
+                    Prefetch(
+                        "coachpracticeassignment_set",
+                        queryset=CoachPracticeAssignment.objects.select_related(
+                            "coach"
+                        ),
+                    )
+                )
+                .get(pk=pk)
+            )
         except Practice.DoesNotExist:
             return Response(
                 {"detail": "Practice not found."},

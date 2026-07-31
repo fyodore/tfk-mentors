@@ -5,6 +5,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from tfk_mentors.models import (
+    Coach,
+    CoachPracticeAssignment,
     Mentor,
     MentorPracticeAssignment,
     MentorTypes,
@@ -235,3 +237,67 @@ class PublicMentorDirectoryTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["description"], "Long run from the reservoir.")
+
+    def test_public_upcoming_practices_lists_visible_future_practices(self):
+        past = Practice.objects.create(
+            date=timezone.now() - timedelta(days=3),
+            season=self.season,
+            nyrr_race="Past",
+            show_to_mentors=True,
+        )
+        hidden = Practice.objects.create(
+            date=timezone.now() + timedelta(days=30),
+            season=self.season,
+            nyrr_race="Hidden",
+            show_to_mentors=False,
+        )
+
+        response = self.client.get("/api/public/practices/upcoming/")
+        self.assertEqual(response.status_code, 200)
+        ids = [row["id"] for row in response.data]
+        self.assertIn(self.assigned_practice.id, ids)
+        self.assertIn(self.available_practice.id, ids)
+        self.assertNotIn(past.id, ids)
+        self.assertNotIn(hidden.id, ids)
+        self.assertNotIn(self.unassigned_practice.id, ids)
+
+        first = next(
+            row for row in response.data if row["id"] == self.assigned_practice.id
+        )
+        self.assertEqual(first["nyrr_race"], "Long Run")
+        self.assertEqual(first["season_year"], 2026)
+
+    def test_public_practice_roster_includes_coaches_sorted_by_last_name(self):
+        coach_b = Coach.objects.create(
+            first_name="Ann",
+            last_name="Zebra",
+            email="ann@example.com",
+        )
+        coach_a = Coach.objects.create(
+            first_name="Bob",
+            last_name="Able",
+            email="bob@example.com",
+        )
+        coach_a.seasons.add(self.season)
+        coach_b.seasons.add(self.season)
+        CoachPracticeAssignment.objects.create(
+            coach=coach_b,
+            practice=self.assigned_practice,
+            pace="8-9",
+        )
+        CoachPracticeAssignment.objects.create(
+            coach=coach_a,
+            practice=self.assigned_practice,
+        )
+
+        response = self.client.get(
+            f"/api/public/practice/{self.assigned_practice.id}/mentors/"
+        )
+        self.assertEqual(response.status_code, 200)
+        coaches = response.data["coaches"]
+        self.assertEqual(len(coaches), 2)
+        self.assertEqual(coaches[0]["last_name"], "Able")
+        self.assertEqual(coaches[1]["last_name"], "Zebra")
+        self.assertEqual(coaches[1]["pace"], "8-9")
+        self.assertNotIn("email", coaches[0])
+        self.assertNotIn("cell", coaches[0])

@@ -449,6 +449,48 @@ def _sort_public_mentor_roster_rows(rows):
     )
 
 
+def build_public_upcoming_practices():
+    """Upcoming practices visible to mentors (public directory practices tab)."""
+    from django.utils import timezone
+
+    practices = (
+        Practice.objects.filter(show_to_mentors=True, date__gte=timezone.now())
+        .select_related("season")
+        .order_by("date", "id")
+    )
+    return [
+        {
+            "id": practice.id,
+            "date": practice.date,
+            "nyrr_race": practice.nyrr_race or "",
+            "season_year": practice.season.year if practice.season_id else None,
+            "full_practice": practice.full_practice,
+            "description": practice.description or "",
+        }
+        for practice in practices
+    ]
+
+
+def _public_coach_roster_rows(practice):
+    rows = [
+        {
+            "coach_id": assignment.coach_id,
+            "first_name": assignment.coach.first_name,
+            "last_name": assignment.coach.last_name,
+            "pace": assignment.pace or "",
+        }
+        for assignment in practice.coachpracticeassignment_set.all()
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (
+            row.get("last_name") or "",
+            row.get("first_name") or "",
+            row.get("coach_id") or 0,
+        ),
+    )
+
+
 def build_public_practice_mentor_roster(practice):
     """Attending and available mentors for one practice (public, no contact info)."""
     practice.sync_mentor_assignments_from_replies()
@@ -463,6 +505,7 @@ def build_public_practice_mentor_roster(practice):
     return {
         "practice_id": practice.id,
         "description": practice.description or "",
+        "coaches": _public_coach_roster_rows(practice),
         "attending_mentors": attending,
         "available_mentors": available,
     }

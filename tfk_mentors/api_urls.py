@@ -18,6 +18,7 @@ from .views import (
     PublicMentorDirectoryView,
     PublicMentorDirectoryPracticesView,
     PublicPracticeMentorRosterView,
+    PublicUpcomingPracticesView,
     PracticeViewSet,
     PracticeReminderEmailViewSet,
     RequestsViewSet,
@@ -140,6 +141,11 @@ urlpatterns = [
         "public/mentor-directory/<int:pk>/practices/",
         PublicMentorDirectoryPracticesView.as_view(),
         name="public-mentor-directory-practices",
+    ),
+    path(
+        "public/practices/upcoming/",
+        PublicUpcomingPracticesView.as_view(),
+        name="public-upcoming-practices",
     ),
     path(
         "public/practice/<int:pk>/mentors/",

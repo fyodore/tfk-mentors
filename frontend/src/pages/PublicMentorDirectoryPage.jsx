@@ -5,6 +5,7 @@ import {
   fetchPublicMentorDirectoryPractices,
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
+import { MentorDirectoryUpcomingPracticesTab } from '../components/MentorDirectoryUpcomingPracticesTab.jsx'
 import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'
@@ -392,96 +393,123 @@ export default function PublicMentorDirectoryPage() {
           >
             Practice Mentors by Pace
           </button>
-        </div>
-
-        <div className="mentor-directory-filters">
-          <label className="field-label" htmlFor="mentor-directory-name-filter">
-            Name
-          </label>
-          <input
-            id="mentor-directory-name-filter"
-            className="field-input"
-            type="search"
-            placeholder="Search by name"
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-          />
-
-          <label className="field-label" htmlFor="mentor-directory-pace-filter">
-            Pace
-          </label>
-          <select
-            id="mentor-directory-pace-filter"
-            className="field-input field-select"
-            value={paceFilter}
-            onChange={(e) => setPaceFilter(e.target.value)}
+          <button
+            type="button"
+            role="tab"
+            className={`emails-tab${activeTab === 'upcoming-practices' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'upcoming-practices'}
+            onClick={() => setActiveTab('upcoming-practices')}
           >
-            <option value="">All paces</option>
-            {PACE_GROUPS.map((pace) => (
-              <option key={pace} value={pace}>
-                {pace}
-              </option>
-            ))}
-          </select>
+            Upcoming practices
+          </button>
         </div>
 
-        {loading ? <p className="muted">Loading…</p> : null}
-        {error ? (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        {!loading && !error && activeTab === 'all' && filteredMentors.length === 0 ? (
-          <p className="muted">No mentors match these filters.</p>
-        ) : null}
-
-        {!loading && !error && activeTab === 'at-practice-by-pace' && atPracticeMentors.length === 0 ? (
-          <p className="muted">No at-practice mentors match these filters.</p>
-        ) : null}
-
-        {!loading && !error && activeTab === 'all' && filteredMentors.length > 0 ? (
+        {activeTab === 'upcoming-practices' ? (
+          <MentorDirectoryUpcomingPracticesTab />
+        ) : (
           <>
-            <section className="mentor-directory-section" aria-labelledby="at-practice-heading">
-              <h2 id="at-practice-heading">At Practice</h2>
-              {atPracticeMentors.length === 0 ? (
-                <p className="muted">No at-practice mentors match these filters.</p>
-              ) : (
-                <MentorDirectoryList mentors={atPracticeMentors} {...listProps} />
-              )}
-            </section>
+            <div className="mentor-directory-filters">
+              <label className="field-label" htmlFor="mentor-directory-name-filter">
+                Name
+              </label>
+              <input
+                id="mentor-directory-name-filter"
+                className="field-input"
+                type="search"
+                placeholder="Search by name"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+              />
 
-            <section className="mentor-directory-section" aria-labelledby="remote-heading">
-              <h2 id="remote-heading">Remote</h2>
-              {remoteMentors.length === 0 ? (
-                <p className="muted">No remote mentors match these filters.</p>
-              ) : (
-                <MentorDirectoryList mentors={remoteMentors} {...listProps} />
-              )}
-            </section>
-          </>
-        ) : null}
-
-        {!loading && !error && activeTab === 'at-practice-by-pace' && atPracticeMentors.length > 0 ? (
-          atPracticeMentorsByPace.length === 0 ? (
-            <p className="muted">No mentors match the selected pace.</p>
-          ) : (
-            atPracticeMentorsByPace.map((group) => (
-              <section
-                key={group.pace || 'no-pace'}
-                className="mentor-directory-section mentor-directory-pace-section"
-                aria-labelledby={`pace-group-${group.pace || 'none'}`}
+              <label className="field-label" htmlFor="mentor-directory-pace-filter">
+                Pace
+              </label>
+              <select
+                id="mentor-directory-pace-filter"
+                className="field-input field-select"
+                value={paceFilter}
+                onChange={(e) => setPaceFilter(e.target.value)}
               >
-                <h2 id={`pace-group-${group.pace || 'none'}`}>{group.label}</h2>
-                <MentorDirectoryList
-                  mentors={group.mentors}
-                  hidePace
-                  {...listProps}
-                />
-              </section>
-            ))
-          )
-        ) : null}
+                <option value="">All paces</option>
+                {PACE_GROUPS.map((pace) => (
+                  <option key={pace} value={pace}>
+                    {pace}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {loading ? <p className="muted">Loading…</p> : null}
+            {error ? (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            ) : null}
+
+            {!loading && !error && activeTab === 'all' && filteredMentors.length === 0 ? (
+              <p className="muted">No mentors match these filters.</p>
+            ) : null}
+
+            {!loading &&
+            !error &&
+            activeTab === 'at-practice-by-pace' &&
+            atPracticeMentors.length === 0 ? (
+              <p className="muted">No at-practice mentors match these filters.</p>
+            ) : null}
+
+            {!loading && !error && activeTab === 'all' && filteredMentors.length > 0 ? (
+              <>
+                <section
+                  className="mentor-directory-section"
+                  aria-labelledby="at-practice-heading"
+                >
+                  <h2 id="at-practice-heading">At Practice</h2>
+                  {atPracticeMentors.length === 0 ? (
+                    <p className="muted">No at-practice mentors match these filters.</p>
+                  ) : (
+                    <MentorDirectoryList mentors={atPracticeMentors} {...listProps} />
+                  )}
+                </section>
+
+                <section
+                  className="mentor-directory-section"
+                  aria-labelledby="remote-heading"
+                >
+                  <h2 id="remote-heading">Remote</h2>
+                  {remoteMentors.length === 0 ? (
+                    <p className="muted">No remote mentors match these filters.</p>
+                  ) : (
+                    <MentorDirectoryList mentors={remoteMentors} {...listProps} />
+                  )}
+                </section>
+              </>
+            ) : null}
+
+            {!loading &&
+            !error &&
+            activeTab === 'at-practice-by-pace' &&
+            atPracticeMentors.length > 0 ? (
+              atPracticeMentorsByPace.length === 0 ? (
+                <p className="muted">No mentors match the selected pace.</p>
+              ) : (
+                atPracticeMentorsByPace.map((group) => (
+                  <section
+                    key={group.pace || 'no-pace'}
+                    className="mentor-directory-section mentor-directory-pace-section"
+                    aria-labelledby={`pace-group-${group.pace || 'none'}`}
+                  >
+                    <h2 id={`pace-group-${group.pace || 'none'}`}>{group.label}</h2>
+                    <MentorDirectoryList
+                      mentors={group.mentors}
+                      hidePace
+                      {...listProps}
+                    />
+                  </section>
+                ))
+              )
+            ) : null}
+          </>
+        )}
       </main>
 
       <Modal

@@ -2105,7 +2105,7 @@
 }
 
 .mentor-directory-panel {
-  max-width: 52rem;
+  max-width: 64rem;
 }
 
 .mentor-directory-section + .mentor-directory-section {
@@ -2243,6 +2243,138 @@
 .mentor-directory-calendar-hint {
   margin: 0.85rem 0 0;
   font-size: 0.88rem;
+}
+
+.mentor-directory-upcoming-layout {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 840px) {
+  .mentor-directory-upcoming-layout {
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+    align-items: start;
+    gap: 1.75rem;
+  }
+}
+
+.mentor-directory-upcoming-list-panel h2,
+.mentor-directory-upcoming-detail-panel h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.1rem;
+}
+
+.mentor-directory-upcoming-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.mentor-directory-upcoming-practice {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mentor-directory-upcoming-practice:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.mentor-directory-upcoming-practice.is-selected {
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 55%, var(--border));
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.mentor-directory-upcoming-practice-when {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.mentor-directory-upcoming-pace-filter {
+  margin-bottom: 1.25rem;
+}
+
+.mentor-directory-upcoming-pace-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.mentor-directory-upcoming-pace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.mentor-directory-upcoming-pace-chip input {
+  margin: 0;
+}
+
+.mentor-directory-upcoming-pace-chip.is-selected {
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 55%, var(--border));
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.mentor-directory-upcoming-pace-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.88rem;
+}
+
+.mentor-directory-upcoming-roster-section + .mentor-directory-upcoming-roster-section {
+  margin-top: 1.5rem;
+}
+
+.mentor-directory-upcoming-roster-section h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.mentor-directory-upcoming-pace-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mentor-directory-upcoming-pace-group h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.mentor-directory-upcoming-person-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mentor-directory-upcoming-person-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 .mentor-directory-name {
