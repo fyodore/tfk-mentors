@@ -4,9 +4,11 @@ import {
   fetchPublicMentorDirectory,
   fetchPublicMentorDirectoryPractices,
 } from '../api'
+import { Modal } from '../components/Modal.jsx'
 import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'
+import { downloadMentorAssignedPracticesIcs } from '../practiceCalendar.js'
 
 const AT_PRACTICE = 'At Practice'
 const REMOTE = 'Remote'
@@ -67,6 +69,7 @@ function MentorDirectoryList({
   loadingPracticeIds,
   practiceErrorsByMentorId,
   onToggleExpanded,
+  onOpenCalendar,
   hidePace = false,
 }) {
   return (
@@ -81,25 +84,36 @@ function MentorDirectoryList({
 
         return (
           <li key={mentor.id} className="mentor-directory-item">
-            <button
-              type="button"
-              className={`mentor-directory-toggle${hidePace ? ' mentor-directory-toggle--no-pace' : ''}`}
-              aria-expanded={expanded}
-              onClick={() => onToggleExpanded(mentor.id)}
-            >
-              <span className="mentor-directory-name">{mentorName(mentor)}</span>
-              {hidePace ? null : (
-                <span className="mentor-directory-pace">
-                  {mentor.pace ? `Pace ${mentor.pace}` : 'No pace'}
+            <div className="mentor-directory-item-top">
+              <button
+                type="button"
+                className={`mentor-directory-toggle${hidePace ? ' mentor-directory-toggle--no-pace' : ''}`}
+                aria-expanded={expanded}
+                onClick={() => onToggleExpanded(mentor.id)}
+              >
+                <span className="mentor-directory-name">{mentorName(mentor)}</span>
+                {hidePace ? null : (
+                  <span className="mentor-directory-pace">
+                    {mentor.pace ? `Pace ${mentor.pace}` : 'No pace'}
+                  </span>
+                )}
+                <span className="mentor-directory-counts muted">
+                  {assignedCount} attending · {availableCount} available
                 </span>
-              )}
-              <span className="mentor-directory-counts muted">
-                {assignedCount} attending · {availableCount} available
-              </span>
-              <span className="mentor-directory-chevron" aria-hidden>
-                {expanded ? '▾' : '▸'}
-              </span>
-            </button>
+                <span className="mentor-directory-chevron" aria-hidden>
+                  {expanded ? '▾' : '▸'}
+                </span>
+              </button>
+              {assignedCount > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-text mentor-directory-calendar-btn"
+                  onClick={() => onOpenCalendar(mentor)}
+                >
+                  Add to calendar
+                </button>
+              ) : null}
+            </div>
 
             {expanded ? (
               <div className="mentor-directory-details">
@@ -186,6 +200,9 @@ export default function PublicMentorDirectoryPage() {
   const [practiceDetailsByMentorId, setPracticeDetailsByMentorId] = useState({})
   const [loadingPracticeIds, setLoadingPracticeIds] = useState(() => new Set())
   const [practiceErrorsByMentorId, setPracticeErrorsByMentorId] = useState({})
+  const [calendarMentor, setCalendarMentor] = useState(null)
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarError, setCalendarError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -238,6 +255,39 @@ export default function PublicMentorDirectoryPage() {
     [filteredMentors]
   )
 
+  async function ensurePracticeDetails(id) {
+    if (practiceDetailsByMentorId[id]) {
+      return practiceDetailsByMentorId[id]
+    }
+
+    setLoadingPracticeIds((prev) => new Set(prev).add(id))
+    setPracticeErrorsByMentorId((prev) => {
+      if (!(id in prev)) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+
+    try {
+      const details = await fetchPublicMentorDirectoryPractices(id)
+      setPracticeDetailsByMentorId((prev) => ({ ...prev, [id]: details }))
+      return details
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setPracticeErrorsByMentorId((prev) => ({
+        ...prev,
+        [id]: message,
+      }))
+      throw e
+    } finally {
+      setLoadingPracticeIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
   async function toggleExpanded(id) {
     const willExpand = !expandedIds.has(id)
 
@@ -252,30 +302,53 @@ export default function PublicMentorDirectoryPage() {
       return
     }
 
-    setLoadingPracticeIds((prev) => new Set(prev).add(id))
-    setPracticeErrorsByMentorId((prev) => {
-      if (!(id in prev)) return prev
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
-
     try {
-      const details = await fetchPublicMentorDirectoryPractices(id)
-      setPracticeDetailsByMentorId((prev) => ({ ...prev, [id]: details }))
-    } catch (e) {
-      setPracticeErrorsByMentorId((prev) => ({
-        ...prev,
-        [id]: e instanceof Error ? e.message : String(e),
-      }))
-    } finally {
-      setLoadingPracticeIds((prev) => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      await ensurePracticeDetails(id)
+    } catch {
+      // Error state is stored for the expanded panel.
     }
   }
+
+  async function openCalendar(mentor) {
+    setCalendarMentor(mentor)
+    setCalendarError(null)
+    setCalendarLoading(true)
+    try {
+      await ensurePracticeDetails(mentor.id)
+    } catch (e) {
+      setCalendarError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
+  function closeCalendar() {
+    setCalendarMentor(null)
+    setCalendarError(null)
+    setCalendarLoading(false)
+  }
+
+  function handleCalendarDownload(provider) {
+    if (!calendarMentor) return
+    const details = practiceDetailsByMentorId[calendarMentor.id]
+    const practices = details?.assigned_practices ?? []
+    const ok = downloadMentorAssignedPracticesIcs(provider, {
+      mentorId: calendarMentor.id,
+      firstName: calendarMentor.first_name,
+      lastName: calendarMentor.last_name,
+      practices,
+    })
+    if (!ok) {
+      setCalendarError('No assigned practices to add to the calendar.')
+      return
+    }
+    closeCalendar()
+  }
+
+  const calendarAssignedCount =
+    calendarMentor && practiceDetailsByMentorId[calendarMentor.id]
+      ? (practiceDetailsByMentorId[calendarMentor.id].assigned_practices ?? []).length
+      : calendarMentor?.assigned_count ?? 0
 
   const listProps = {
     expandedIds,
@@ -283,6 +356,7 @@ export default function PublicMentorDirectoryPage() {
     loadingPracticeIds,
     practiceErrorsByMentorId,
     onToggleExpanded: toggleExpanded,
+    onOpenCalendar: openCalendar,
   }
 
   return (
@@ -409,6 +483,73 @@ export default function PublicMentorDirectoryPage() {
           )
         ) : null}
       </main>
+
+      <Modal
+        open={Boolean(calendarMentor)}
+        title="Add to calendar"
+        onClose={closeCalendar}
+        closeDisabled={calendarLoading}
+        footer={
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={closeCalendar}
+            disabled={calendarLoading}
+          >
+            Cancel
+          </button>
+        }
+      >
+        {calendarMentor ? (
+          <>
+            <p className="mentor-directory-calendar-intro">
+              Download assigned practices for{' '}
+              <strong>{mentorName(calendarMentor)}</strong>
+              {calendarLoading
+                ? '…'
+                : ` (${calendarAssignedCount} practice${
+                    calendarAssignedCount === 1 ? '' : 's'
+                  }).`}
+              Available practices are not included.
+            </p>
+            {calendarLoading ? <p className="muted">Loading practices…</p> : null}
+            {calendarError ? (
+              <p className="error" role="alert">
+                {calendarError}
+              </p>
+            ) : null}
+            <div className="mentor-directory-calendar-options">
+              <button
+                type="button"
+                className="btn btn-primary mentor-directory-calendar-option"
+                disabled={calendarLoading || Boolean(calendarError) || calendarAssignedCount === 0}
+                onClick={() => handleCalendarDownload('apple')}
+              >
+                Apple Calendar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary mentor-directory-calendar-option"
+                disabled={calendarLoading || Boolean(calendarError) || calendarAssignedCount === 0}
+                onClick={() => handleCalendarDownload('google')}
+              >
+                Google Calendar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary mentor-directory-calendar-option"
+                disabled={calendarLoading || Boolean(calendarError) || calendarAssignedCount === 0}
+                onClick={() => handleCalendarDownload('outlook')}
+              >
+                Outlook
+              </button>
+            </div>
+            <p className="muted mentor-directory-calendar-hint">
+              Opens a calendar file (.ics) you can add in your chosen app.
+            </p>
+          </>
+        ) : null}
+      </Modal>
     </>
   )
 }

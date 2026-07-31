@@ -10,7 +10,7 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
-import { downloadContactVCard } from '../contactVcard.js'
+import { downloadContactIcs } from '../contactVcard.js'
 import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
@@ -503,7 +503,7 @@ export default function CoachesPage() {
                       type="button"
                       className="btn btn-text"
                       onClick={() =>
-                        downloadContactVCard({
+                        downloadContactIcs({
                           firstName: c.first_name,
                           lastName: c.last_name,
                           phone: c.cell,
@@ -513,7 +513,7 @@ export default function CoachesPage() {
                         })
                       }
                     >
-                      Download contact
+                      Download ICS
                     </button>
                   ) : (
                     <span className="practice-row-action-spacer" aria-hidden="true" />
