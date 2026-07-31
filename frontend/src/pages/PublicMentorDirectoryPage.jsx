@@ -7,6 +7,7 @@ import {
 } from '../api'
 import { Modal } from '../components/Modal.jsx'
 import { MentorDirectoryUpcomingPracticesTab } from '../components/MentorDirectoryUpcomingPracticesTab.jsx'
+import { MentorDirectoryRequestSwapTab } from '../components/MentorDirectoryRequestSwapTab.jsx'
 import { PublicPracticeRosterHover } from '../components/PublicPracticeRosterHover.jsx'
 import { formatMentorDirectoryPracticeDate } from '../datetime.js'
 import { compareByPaceThenName, PACE_GROUPS } from '../paceHelpers.js'
@@ -30,6 +31,11 @@ const DIRECTORY_TABS = {
     id: 'upcoming-practices',
     path: '/mentor-directory/upcoming',
     label: 'Upcoming practices',
+  },
+  'request-swap': {
+    id: 'request-swap',
+    path: '/mentor-directory/request-swap',
+    label: 'Request Swap',
   },
 }
 
@@ -444,10 +450,21 @@ export default function PublicMentorDirectoryPage() {
           >
             Upcoming practices
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`emails-tab${activeTab === 'request-swap' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'request-swap'}
+            onClick={() => selectTab('request-swap')}
+          >
+            Request Swap
+          </button>
         </div>
 
         {activeTab === 'upcoming-practices' ? (
           <MentorDirectoryUpcomingPracticesTab />
+        ) : activeTab === 'request-swap' ? (
+          <MentorDirectoryRequestSwapTab />
         ) : (
           <>
             <div className="mentor-directory-filters">

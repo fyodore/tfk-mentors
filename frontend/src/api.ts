@@ -1,40 +1,71 @@
 import { apiPath } from './config.js'
+import type {
+  Id,
+  JsonObject,
+  Mentor,
+  MentorSwapReport,
+  MentorSwapRequestSummary,
+  Practice,
+  PublicMentorDirectoryPractices,
+  PublicMentorDirectoryRow,
+  PublicPracticeRoster,
+  PublicPracticeSwapOptions,
+  PublicUpcomingPractice,
+  Season,
+  ServerConfig,
+} from './types.js'
+
+export type { Id, JsonObject, Season, Practice, Mentor } from './types.js'
+
+export class ApiError extends Error {
+  status?: number
+  body?: unknown
+
+  constructor(message: string, options?: { status?: number; body?: unknown }) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = options?.status
+    this.body = options?.body
+  }
+}
 
 const SEASON_LIST = apiPath('/api/season/')
 const SERVER_CONFIG = apiPath('/api/config/')
 
-/** @returns {Promise<{ time_zone: string }>} */
-export async function fetchServerConfig() {
+export async function fetchServerConfig(): Promise<ServerConfig> {
   const res = await fetch(SERVER_CONFIG, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @returns {string} */
-function getCookie(name) {
+function getCookie(name: string): string {
   const row = document.cookie.split('; ').find((r) => r.startsWith(`${name}=`))
   if (!row) return ''
   return decodeURIComponent(row.slice(name.length + 1))
 }
 
-function csrfHeaders() {
+function csrfHeaders(): Record<string, string> {
   const token = getCookie('csrftoken')
   return token ? { 'X-CSRFToken': token } : {}
 }
 
-async function parseError(res) {
+async function parseError(res: Response): Promise<string> {
   let msg = `${res.status} ${res.statusText}`
   try {
-    const body = await res.json()
+    const body: unknown = await res.json()
     if (body && typeof body === 'object') {
-      if (typeof body.detail === 'string') msg = body.detail
-      else if (body.non_field_errors?.[0]) msg = String(body.non_field_errors[0])
-      else {
-        const first = Object.entries(body).find(
+      const obj = body as Record<string, unknown>
+      if (typeof obj.detail === 'string') msg = obj.detail
+      else if (Array.isArray(obj.non_field_errors) && obj.non_field_errors[0] != null) {
+        msg = String(obj.non_field_errors[0])
+      } else {
+        const first = Object.entries(obj).find(
           ([k, v]) => k !== 'detail' && Array.isArray(v) && v.length
         )
-        if (first) msg = `${first[0]}: ${first[1][0]}`
-        else if (typeof body.year === 'string') msg = body.year
+        if (first) {
+          const [key, values] = first
+          msg = `${key}: ${String((values as unknown[])[0])}`
+        } else if (typeof obj.year === 'string') msg = obj.year
       }
     }
   } catch {
@@ -43,22 +74,26 @@ async function parseError(res) {
   return msg
 }
 
-/** @param {unknown} data */
-export function normalizeSeasonList(data) {
+function normalizeList<T = unknown>(data: unknown): T[] {
   if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
+  if (Array.isArray(data)) return data as T[]
+  if ('results' in data && Array.isArray((data as { results: unknown }).results)) {
+    return (data as { results: T[] }).results
+  }
   return []
 }
 
-/** @type {Promise<ReturnType<typeof normalizeSeasonList>> | null} */
-let seasonsListPromise = null
+export function normalizeSeasonList(data: unknown): Season[] {
+  return normalizeList<Season>(data)
+}
+
+let seasonsListPromise: Promise<Season[]> | null = null
 
 function invalidateSeasonsCache() {
   seasonsListPromise = null
 }
 
-export async function fetchSeasons() {
+export async function fetchSeasons(): Promise<Season[]> {
   if (!seasonsListPromise) {
     seasonsListPromise = (async () => {
       const res = await fetch(SEASON_LIST, { credentials: 'include' })
@@ -73,8 +108,7 @@ export async function fetchSeasons() {
   return seasonsListPromise
 }
 
-/** @param {number | { year: number, head_coach?: number|null }} body */
-export async function createSeason(body) {
+export async function createSeason(body: number | { year: number; head_coach?: number | null }) {
   const payload = typeof body === 'number' ? { year: body } : body
   const res = await fetch(SEASON_LIST, {
     method: 'POST',
@@ -90,8 +124,7 @@ export async function createSeason(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {number | { year?: number, is_current?: boolean, head_coach?: number|null }} body */
-export async function patchSeason(id, body) {
+export async function patchSeason(id: Id, body: number | { year?: number; is_current?: boolean; head_coach?: number | null }) {
   const payload = typeof body === 'number' ? { year: body } : body
   const res = await fetch(`${SEASON_LIST}${id}/`, {
     method: 'PATCH',
@@ -107,13 +140,11 @@ export async function patchSeason(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function setCurrentSeason(id) {
+export async function setCurrentSeason(id: Id) {
   return patchSeason(id, { is_current: true })
 }
 
-/** @param {number|string} id */
-export async function deleteSeason(id) {
+export async function deleteSeason(id: Id) {
   const res = await fetch(`${SEASON_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -128,15 +159,11 @@ export async function deleteSeason(id) {
 
 const PRACTICE_LIST = apiPath('/api/practice/')
 
-/** @param {unknown} data */
-export function normalizePracticeList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizePracticeList(data: unknown): Practice[] {
+  return normalizeList<Practice>(data)
 }
 
-export async function fetchPractices(params = {}) {
+export async function fetchPractices(params: { season?: Id | null; lite?: boolean } = {}) {
   const query = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     query.set('season', String(params.season))
@@ -151,8 +178,7 @@ export async function fetchPractices(params = {}) {
   return normalizePracticeList(data)
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createPractice(body) {
+export async function createPractice(body: JsonObject) {
   const res = await fetch(PRACTICE_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -166,8 +192,7 @@ export async function createPractice(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchPractice(id, body) {
+export async function patchPractice(id: Id, body: JsonObject) {
   const res = await fetch(`${PRACTICE_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -181,8 +206,7 @@ export async function patchPractice(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deletePractice(id) {
+export async function deletePractice(id: Id) {
   const res = await fetch(`${PRACTICE_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -200,15 +224,10 @@ const MENTOR_LIST = apiPath('/api/mentor/')
 const COACH_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/coach-practice-assignment/')
 const MENTOR_PRACTICE_ASSIGNMENT_LIST = apiPath('/api/mentor-practice-assignment/')
 
-/** @param {unknown} data */
-export function normalizeCoachList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeCoachList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
-/** List coaches from Django: `GET /api/coach/`. */
 export async function fetchCoaches() {
   const res = await fetch(COACH_LIST, {
     method: 'GET',
@@ -220,8 +239,7 @@ export async function fetchCoaches() {
   return normalizeCoachList(data)
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createCoach(body) {
+export async function createCoach(body: JsonObject) {
   const res = await fetch(COACH_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -235,8 +253,7 @@ export async function createCoach(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchCoach(id, body) {
+export async function patchCoach(id: Id, body: JsonObject) {
   const res = await fetch(`${COACH_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -250,8 +267,7 @@ export async function patchCoach(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteCoach(id) {
+export async function deleteCoach(id: Id) {
   const res = await fetch(`${COACH_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -263,15 +279,10 @@ export async function deleteCoach(id) {
     throw new Error(await parseError(res))
 }
 
-/** @param {unknown} data */
-export function normalizeTfkStaffList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeTfkStaffList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
-/** List TFK staff from Django: `GET /api/tfk-staff/`. */
 export async function fetchTfkStaff() {
   const res = await fetch(TFK_STAFF_LIST, {
     method: 'GET',
@@ -283,8 +294,7 @@ export async function fetchTfkStaff() {
   return normalizeTfkStaffList(data)
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createTfkStaff(body) {
+export async function createTfkStaff(body: JsonObject) {
   const res = await fetch(TFK_STAFF_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -298,8 +308,7 @@ export async function createTfkStaff(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchTfkStaff(id, body) {
+export async function patchTfkStaff(id: Id, body: JsonObject) {
   const res = await fetch(`${TFK_STAFF_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -313,8 +322,7 @@ export async function patchTfkStaff(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteTfkStaff(id) {
+export async function deleteTfkStaff(id: Id) {
   const res = await fetch(`${TFK_STAFF_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -326,8 +334,7 @@ export async function deleteTfkStaff(id) {
     throw new Error(await parseError(res))
 }
 
-/** @param {File} file */
-export async function importCoachesCsv(file) {
+export async function importCoachesCsv(file: File) {
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${COACH_LIST}import-csv/`, {
@@ -342,12 +349,8 @@ export async function importCoachesCsv(file) {
   return res.json()
 }
 
-/** @param {unknown} data */
-export function normalizeMentorList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeMentorList(data: unknown): Mentor[] {
+  return normalizeList<Mentor>(data)
 }
 
 export async function fetchMentors() {
@@ -357,15 +360,13 @@ export async function fetchMentors() {
   return normalizeMentorList(data)
 }
 
-/** @param {number|string} id */
-export async function fetchMentor(id) {
+export async function fetchMentor(id: Id) {
   const res = await fetch(`${MENTOR_LIST}${id}/`, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function fetchMentorPractices(id) {
+export async function fetchMentorPractices(id: Id) {
   const res = await fetch(`${MENTOR_LIST}${id}/practices/`, {
     credentials: 'include',
   })
@@ -374,8 +375,7 @@ export async function fetchMentorPractices(id) {
   return Array.isArray(data) ? data : []
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createMentor(body) {
+export async function createMentor(body: JsonObject) {
   const res = await fetch(MENTOR_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -389,8 +389,7 @@ export async function createMentor(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchMentor(id, body) {
+export async function patchMentor(id: Id, body: JsonObject) {
   const res = await fetch(`${MENTOR_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -404,8 +403,7 @@ export async function patchMentor(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteMentor(id) {
+export async function deleteMentor(id: Id) {
   const res = await fetch(`${MENTOR_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -417,8 +415,7 @@ export async function deleteMentor(id) {
     throw new Error(await parseError(res))
 }
 
-/** @param {File} file */
-export async function importMentorsCsv(file) {
+export async function importMentorsCsv(file: File) {
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${MENTOR_LIST}import-csv/`, {
@@ -433,8 +430,7 @@ export async function importMentorsCsv(file) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function fetchPractice(id, params = {}) {
+export async function fetchPractice(id: Id, params: { basic?: boolean } = {}) {
   const query = new URLSearchParams()
   if (params.basic) {
     query.set('basic', '1')
@@ -447,8 +443,7 @@ export async function fetchPractice(id, params = {}) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function fetchPracticeMentorReplies(id) {
+export async function fetchPracticeMentorReplies(id: Id) {
   const res = await fetch(`${PRACTICE_LIST}${id}/mentor-replies/`, {
     credentials: 'include',
   })
@@ -456,8 +451,7 @@ export async function fetchPracticeMentorReplies(id) {
   return res.json()
 }
 
-/** @param {number|string} practiceId @param {{ mentor: number, pace: string }} body */
-export async function createPracticeMentorReply(practiceId, body) {
+export async function createPracticeMentorReply(practiceId: Id, body: { mentor: number; pace: string }) {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'POST',
     credentials: 'include',
@@ -471,8 +465,7 @@ export async function createPracticeMentorReply(practiceId, body) {
   return res.json()
 }
 
-/** @param {number|string} practiceId @param {number|string} mentorId @param {string} pace */
-export async function patchPracticeMentorPace(practiceId, mentorId, pace) {
+export async function patchPracticeMentorPace(practiceId: Id, mentorId: Id, pace: string) {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -486,8 +479,7 @@ export async function patchPracticeMentorPace(practiceId, mentorId, pace) {
   return res.json()
 }
 
-/** @param {number|string} practiceId @param {number|string} mentorId */
-export async function makePracticeMentorAvailable(practiceId, mentorId) {
+export async function makePracticeMentorAvailable(practiceId: Id, mentorId: Id) {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/mentor-replies/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -501,11 +493,7 @@ export async function makePracticeMentorAvailable(practiceId, mentorId) {
   return res.json()
 }
 
-/**
- * @param {number|string} practiceId
- * @param {{ outgoing_mentor: number, incoming_mentor: number }} body
- */
-export async function swapPracticeMentor(practiceId, body) {
+export async function swapPracticeMentor(practiceId: Id, body: { outgoing_mentor: number; incoming_mentor: number }) {
   const res = await fetch(`${PRACTICE_LIST}${practiceId}/swap-mentor/`, {
     method: 'POST',
     credentials: 'include',
@@ -519,8 +507,7 @@ export async function swapPracticeMentor(practiceId, body) {
   return res.json()
 }
 
-/** @param {number|string} practiceId @param {number|string} mentorId */
-export async function deletePracticeMentorReply(practiceId, mentorId) {
+export async function deletePracticeMentorReply(practiceId: Id, mentorId: Id) {
   const q = new URLSearchParams({ mentor: String(mentorId) })
   const res = await fetch(
     `${PRACTICE_LIST}${practiceId}/mentor-replies/?${q}`,
@@ -535,12 +522,8 @@ export async function deletePracticeMentorReply(practiceId, mentorId) {
   if (!res.ok && res.status !== 204) throw new Error(await parseError(res))
 }
 
-/** @param {unknown} data */
-export function normalizeCoachPracticeAssignmentList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeCoachPracticeAssignmentList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
 export async function fetchCoachPracticeAssignments() {
@@ -552,8 +535,7 @@ export async function fetchCoachPracticeAssignments() {
   return normalizeCoachPracticeAssignmentList(data)
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createCoachPracticeAssignment(body) {
+export async function createCoachPracticeAssignment(body: JsonObject) {
   const res = await fetch(COACH_PRACTICE_ASSIGNMENT_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -567,8 +549,7 @@ export async function createCoachPracticeAssignment(body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteCoachPracticeAssignment(id) {
+export async function deleteCoachPracticeAssignment(id: Id) {
   const res = await fetch(`${COACH_PRACTICE_ASSIGNMENT_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -580,12 +561,8 @@ export async function deleteCoachPracticeAssignment(id) {
     throw new Error(await parseError(res))
 }
 
-/** @param {unknown} data */
-export function normalizeMentorPracticeAssignmentList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeMentorPracticeAssignmentList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
 export async function fetchMentorPracticeAssignments() {
@@ -597,8 +574,7 @@ export async function fetchMentorPracticeAssignments() {
   return normalizeMentorPracticeAssignmentList(data)
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createMentorPracticeAssignment(body) {
+export async function createMentorPracticeAssignment(body: JsonObject) {
   const res = await fetch(MENTOR_PRACTICE_ASSIGNMENT_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -612,8 +588,7 @@ export async function createMentorPracticeAssignment(body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteMentorPracticeAssignment(id) {
+export async function deleteMentorPracticeAssignment(id: Id) {
   const res = await fetch(`${MENTOR_PRACTICE_ASSIGNMENT_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -627,12 +602,8 @@ export async function deleteMentorPracticeAssignment(id) {
 
 const SCHEDULED_EMAIL_LIST = apiPath('/api/scheduled-email/')
 
-/** @param {unknown} data */
-export function normalizeScheduledEmailList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizeScheduledEmailList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
 export async function fetchScheduledEmails() {
@@ -642,8 +613,7 @@ export async function fetchScheduledEmails() {
   return normalizeScheduledEmailList(data)
 }
 
-/** @param {number|string} id */
-export async function fetchScheduledEmail(id) {
+export async function fetchScheduledEmail(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
     credentials: 'include',
   })
@@ -651,8 +621,7 @@ export async function fetchScheduledEmail(id) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function fetchScheduledEmailPendingMentors(id) {
+export async function fetchScheduledEmailPendingMentors(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/pending-mentors/`, {
     credentials: 'include',
   })
@@ -660,8 +629,7 @@ export async function fetchScheduledEmailPendingMentors(id) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function previewScheduledEmailReplyReminders(id) {
+export async function previewScheduledEmailReplyReminders(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
     method: 'POST',
     credentials: 'include',
@@ -675,8 +643,7 @@ export async function previewScheduledEmailReplyReminders(id) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function sendScheduledEmailNow(id) {
+export async function sendScheduledEmailNow(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-now/`, {
     method: 'POST',
     credentials: 'include',
@@ -690,8 +657,7 @@ export async function sendScheduledEmailNow(id) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function sendScheduledEmailReplyReminders(id) {
+export async function sendScheduledEmailReplyReminders(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
     method: 'POST',
     credentials: 'include',
@@ -705,8 +671,7 @@ export async function sendScheduledEmailReplyReminders(id) {
   return res.json()
 }
 
-/** @param {Record<string, unknown>} body */
-export async function createScheduledEmail(body) {
+export async function createScheduledEmail(body: JsonObject) {
   const res = await fetch(SCHEDULED_EMAIL_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -720,8 +685,7 @@ export async function createScheduledEmail(body) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchScheduledEmail(id, body) {
+export async function patchScheduledEmail(id: Id, body: JsonObject) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -735,8 +699,7 @@ export async function patchScheduledEmail(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deleteScheduledEmail(id) {
+export async function deleteScheduledEmail(id: Id) {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -750,16 +713,11 @@ export async function deleteScheduledEmail(id) {
 
 const PRACTICE_REMINDER_EMAIL_LIST = apiPath('/api/practice-reminder-email/')
 
-/** @param {unknown} data */
-export function normalizePracticeReminderEmailList(data) {
-  if (!data || typeof data !== 'object') return []
-  if (Array.isArray(data)) return data
-  if ('results' in data && Array.isArray(data.results)) return data.results
-  return []
+export function normalizePracticeReminderEmailList(data: unknown): unknown[] {
+  return normalizeList<unknown>(data)
 }
 
-/** @param {number|string} [seasonId] */
-export async function fetchPracticeReminderEmails(seasonId) {
+export async function fetchPracticeReminderEmails(seasonId: Id) {
   const query =
     seasonId != null && seasonId !== ''
       ? `?season=${encodeURIComponent(String(seasonId))}`
@@ -772,8 +730,7 @@ export async function fetchPracticeReminderEmails(seasonId) {
   return normalizePracticeReminderEmailList(data)
 }
 
-/** @param {number|string} id */
-export async function fetchPracticeReminderEmail(id) {
+export async function fetchPracticeReminderEmail(id: Id) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
     credentials: 'include',
   })
@@ -781,8 +738,7 @@ export async function fetchPracticeReminderEmail(id) {
   return res.json()
 }
 
-/** @param {number|string} seasonId */
-export async function syncPracticeReminderEmails(seasonId) {
+export async function syncPracticeReminderEmails(seasonId: Id) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}sync/`, {
     method: 'POST',
     credentials: 'include',
@@ -796,8 +752,7 @@ export async function syncPracticeReminderEmails(seasonId) {
   return res.json()
 }
 
-/** @param {number|string} seasonId */
-export async function refreshPracticeReminderEmailTemplates(seasonId) {
+export async function refreshPracticeReminderEmailTemplates(seasonId: Id) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}refresh-templates/`, {
     method: 'POST',
     credentials: 'include',
@@ -811,8 +766,7 @@ export async function refreshPracticeReminderEmailTemplates(seasonId) {
   return res.json()
 }
 
-/** @param {number|string} id @param {Record<string, unknown>} body */
-export async function patchPracticeReminderEmail(id, body) {
+export async function patchPracticeReminderEmail(id: Id, body: JsonObject) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -826,8 +780,7 @@ export async function patchPracticeReminderEmail(id, body) {
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function deletePracticeReminderEmail(id) {
+export async function deletePracticeReminderEmail(id: Id) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/`, {
     method: 'DELETE',
     credentials: 'include',
@@ -839,8 +792,7 @@ export async function deletePracticeReminderEmail(id) {
     throw new Error(await parseError(res))
 }
 
-/** @param {number|string} id */
-export async function sendPracticeReminderEmailNow(id) {
+export async function sendPracticeReminderEmailNow(id: Id) {
   const res = await fetch(`${PRACTICE_REMINDER_EMAIL_LIST}${id}/send-now/`, {
     method: 'POST',
     credentials: 'include',
@@ -857,8 +809,7 @@ export async function sendPracticeReminderEmailNow(id) {
 const MENTOR_CELL_PHONE_REQUEST = apiPath('/api/mentor-cell-phone-request/')
 const MENTOR_CELL_PHONE_UPDATE = apiPath('/api/mentor-cell-phone-update/')
 
-/** @param {number|string|null|undefined} [seasonId] */
-export async function fetchMentorCellPhoneRequests(seasonId) {
+export async function fetchMentorCellPhoneRequests(seasonId: Id) {
   const qs =
     seasonId !== undefined && seasonId !== null && seasonId !== ''
       ? `?season=${encodeURIComponent(String(seasonId))}`
@@ -870,11 +821,8 @@ export async function fetchMentorCellPhoneRequests(seasonId) {
   return res.json()
 }
 
-/**
- * @param {{ season?: number|string|null, dry_run?: boolean }} [body]
- */
-export async function sendMentorCellPhoneRequests(body = {}) {
-  const payload = {}
+export async function sendMentorCellPhoneRequests(body: { season?: Id | null; dry_run?: boolean } = {}) {
+  const payload: JsonObject = {}
   if (body.season !== undefined && body.season !== null && body.season !== '') {
     payload.season = Number(body.season)
   }
@@ -892,8 +840,7 @@ export async function sendMentorCellPhoneRequests(body = {}) {
   return res.json()
 }
 
-/** @param {string} token */
-export async function fetchMentorCellPhoneUpdate(token) {
+export async function fetchMentorCellPhoneUpdate(token: string) {
   const res = await fetch(
     `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
     { credentials: 'include' }
@@ -907,19 +854,12 @@ export async function fetchMentorCellPhoneUpdate(token) {
     } catch {
       /* ignore */
     }
-    const err = new Error(detail)
-    err.status = res.status
-    err.body = body
-    throw err
+    throw new ApiError(detail, { status: res.status, body })
   }
   return res.json()
 }
 
-/**
- * @param {string} token
- * @param {{ cell_phone: string }} body
- */
-export async function putMentorCellPhoneUpdate(token, body) {
+export async function putMentorCellPhoneUpdate(token: string, body: { cell_phone: string }) {
   const res = await fetch(
     `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
     {
@@ -933,25 +873,21 @@ export async function putMentorCellPhoneUpdate(token, body) {
     }
   )
   if (!res.ok) {
-    const err = new Error(await parseError(res))
-    err.status = res.status
-    throw err
+    throw new ApiError(await parseError(res), { status: res.status })
   }
   return res.json()
 }
 
 const AUTH_SESSION = apiPath('/api/auth/session/')
 
-/** Bootstrap CSRF cookie and report whether the admin session is active. */
-export async function checkAuthSession() {
+export async function checkAuthSession(): Promise<boolean> {
   const res = await fetch(AUTH_SESSION, { credentials: 'include' })
   if (!res.ok) return false
   const data = await res.json()
   return data.authenticated === true
 }
 
-/** @param {string} password */
-export async function loginSitePassword(password) {
+export async function loginSitePassword(password: string) {
   const res = await fetch(AUTH_SESSION, {
     method: 'POST',
     credentials: 'include',
@@ -967,23 +903,14 @@ export async function loginSitePassword(password) {
 
 const MENTOR_EMAIL_REPLY = apiPath('/api/mentor-email-reply')
 
-/** @param {string} token raw UUID from URL (?token= or path) */
-export async function fetchMentorEmailReply(token) {
+export async function fetchMentorEmailReply(token: string) {
   const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/**
- * @param {string} token
- * @param {{
- *   replies: { practice: number, attendance: string, pace?: string }[],
- *   email_received_confirmed?: boolean,
- *   mentor_pace?: string
- * }} payload
- */
-export async function putMentorEmailReply(token, payload) {
+export async function putMentorEmailReply(token: string, payload: { replies: { practice: number; attendance: string; pace?: string }[]; email_received_confirmed?: boolean; mentor_pace?: string }) {
   const url = `${MENTOR_EMAIL_REPLY}/${encodeURIComponent(token)}/`
   const res = await fetch(url, {
     method: 'PUT',
@@ -999,8 +926,7 @@ export async function putMentorEmailReply(token, payload) {
 
 const PRACTICE_ROSTER_REPORT = apiPath('/api/reports/practice-roster/')
 
-/** @param {{ season?: number|string }} [params] */
-export async function fetchPracticeRosterReport(params = {}) {
+export async function fetchPracticeRosterReport(params: { season?: Id | null } = {}) {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))
@@ -1016,8 +942,7 @@ export async function fetchPracticeRosterReport(params = {}) {
 
 const MENTOR_NON_RESPONSE_REPORT = apiPath('/api/reports/mentor-non-responses/')
 
-/** @param {{ season?: number|string }} [params] */
-export async function fetchMentorNonResponseReport(params = {}) {
+export async function fetchMentorNonResponseReport(params: { season?: Id | null } = {}) {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))
@@ -1034,15 +959,13 @@ export async function fetchMentorNonResponseReport(params = {}) {
 const PRACTICE_ATTENDANCE_CURRENT = apiPath('/api/practice-attendance/current/')
 const PRACTICE_ATTENDANCE_ARCHIVED = apiPath('/api/practice-attendance/archived/')
 
-/** @returns {Promise<{ practice: object|null }>} */
 export async function fetchCurrentPracticeAttendance() {
   const res = await fetch(PRACTICE_ATTENDANCE_CURRENT, { credentials: 'include' })
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @param {number|string} id */
-export async function fetchPracticeAttendance(id) {
+export async function fetchPracticeAttendance(id: Id) {
   const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
     credentials: 'include',
   })
@@ -1050,8 +973,7 @@ export async function fetchPracticeAttendance(id) {
   return res.json()
 }
 
-/** @param {{ season?: number|string }} [params] */
-export async function fetchArchivedPracticeAttendance(params = {}) {
+export async function fetchArchivedPracticeAttendance(params: { season?: Id | null } = {}) {
   const qs = new URLSearchParams()
   if (params.season != null && params.season !== '') {
     qs.set('season', String(params.season))
@@ -1064,11 +986,7 @@ export async function fetchArchivedPracticeAttendance(params = {}) {
   return res.json()
 }
 
-/**
- * @param {number|string} id
- * @param {{ attendance_comments?: string, mentors?: Array<{ mentor_id: number, show_up: string|null }> }} body
- */
-export async function patchPracticeAttendance(id, body) {
+export async function patchPracticeAttendance(id: Id, body: { attendance_comments?: string; mentors?: Array<{ mentor_id: number; show_up: string | null }> }) {
   const res = await fetch(apiPath(`/api/practice-attendance/${id}/`), {
     method: 'PATCH',
     credentials: 'include',
@@ -1084,15 +1002,13 @@ export async function patchPracticeAttendance(id, body) {
 
 const PUBLIC_MENTOR_DIRECTORY = apiPath('/api/public/mentor-directory/')
 
-/** @returns {Promise<Array<{ id: number, first_name: string, last_name: string, type: string, pace: string, assigned_count: number, available_count: number }>>} */
-export async function fetchPublicMentorDirectory() {
+export async function fetchPublicMentorDirectory(): Promise<PublicMentorDirectoryRow[]> {
   const res = await fetch(PUBLIC_MENTOR_DIRECTORY)
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @param {number|string} mentorId */
-export async function fetchPublicMentorDirectoryPractices(mentorId) {
+export async function fetchPublicMentorDirectoryPractices(mentorId: Id): Promise<PublicMentorDirectoryPractices> {
   const res = await fetch(
     apiPath(`/api/public/mentor-directory/${mentorId}/practices/`)
   )
@@ -1100,26 +1016,110 @@ export async function fetchPublicMentorDirectoryPractices(mentorId) {
   return res.json()
 }
 
-/** @returns {Promise<Array<{ id: number, date: string, nyrr_race: string, season_year: number | null, full_practice: boolean, description: string }>>} */
-export async function fetchPublicUpcomingPractices() {
+export async function fetchPublicUpcomingPractices(): Promise<PublicUpcomingPractice[]> {
   const res = await fetch(apiPath('/api/public/practices/upcoming/'))
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/** @param {number|string} practiceId */
-export async function fetchPublicPracticeMentorRoster(practiceId) {
+export async function fetchPublicPracticeMentorRoster(practiceId: Id): Promise<PublicPracticeRoster> {
   const res = await fetch(apiPath(`/api/public/practice/${practiceId}/mentors/`))
   if (!res.ok) throw new Error(await parseError(res))
   return res.json()
 }
 
-/**
- * @param {number[]} practiceIds
- * @param {{ apply?: boolean, schedule?: object }} [options]
- */
-export async function scheduleMentors(practiceIds, options = {}) {
-  const body = {
+export async function fetchPublicPracticeSwapOptions(
+  practiceId: Id
+): Promise<PublicPracticeSwapOptions> {
+  const res = await fetch(apiPath(`/api/public/practice/${practiceId}/swap-options/`))
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function createPublicMentorSwapRequest(body: {
+  practice: Id
+  outgoing_mentor: Id
+  incoming_mentor: Id
+}): Promise<MentorSwapRequestSummary & { email?: JsonObject }> {
+  const res = await fetch(apiPath('/api/public/mentor-swap-request/'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function fetchPublicMentorSwapRequest(
+  token: string
+): Promise<MentorSwapRequestSummary> {
+  const res = await fetch(
+    apiPath(`/api/public/mentor-swap-request/${encodeURIComponent(token)}/`)
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function approvePublicMentorSwapRequest(token: string): Promise<{
+  already_decided?: boolean
+  status?: string
+  message?: string
+  detail?: string
+  [key: string]: unknown
+}> {
+  const res = await fetch(
+    apiPath(`/api/public/mentor-swap-request/${encodeURIComponent(token)}/approve/`)
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function rejectPublicMentorSwapRequest(
+  token: string,
+  comments: string
+): Promise<{
+  already_decided?: boolean
+  status?: string
+  message?: string
+  reports_url?: string
+  [key: string]: unknown
+}> {
+  const res = await fetch(
+    apiPath(`/api/public/mentor-swap-request/${encodeURIComponent(token)}/reject/`),
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...csrfHeaders(),
+      },
+      body: JSON.stringify({ comments }),
+    }
+  )
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function fetchMentorSwapReport(params: { season?: Id | null } = {}): Promise<MentorSwapReport> {
+  const qs = new URLSearchParams()
+  if (params.season != null && params.season !== '') {
+    qs.set('season', String(params.season))
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await fetch(`${apiPath('/api/reports/mentor-swaps/')}${suffix}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function scheduleMentors(practiceIds: number[], options: { apply?: boolean; schedule?: JsonObject } = {}) {
+  const body: JsonObject = {
     practice_ids: practiceIds,
     apply: Boolean(options.apply),
   }

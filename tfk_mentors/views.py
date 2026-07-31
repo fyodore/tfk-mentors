@@ -40,6 +40,7 @@ from .models import (
     Season,
     ShowUpStatus,
     TfkStaff,
+    MentorSwapRequest,
     normalize_pace,
 )
 from .practice_swap_notification import (
@@ -47,6 +48,14 @@ from .practice_swap_notification import (
     practice_last_reminder_already_sent,
     send_mentor_swap_coach_notification,
     send_mentor_swap_confirmations,
+)
+from .mentor_swap_request import (
+    approve_mentor_swap_request,
+    build_mentor_swap_report,
+    build_public_practice_swap_options,
+    create_mentor_swap_request,
+    mentor_swap_request_summary,
+    reject_mentor_swap_request,
 )
 
 ATTENDING_REPLY_VALUES = frozenset(
@@ -2119,6 +2128,183 @@ class PublicPracticeMentorRosterView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(build_public_practice_mentor_roster(practice))
+
+
+class PublicPracticeSwapOptionsView(APIView):
+    """Public attending + eligible incoming mentors for a swap request."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        try:
+            practice = Practice.objects.select_related("season").get(pk=pk)
+        except Practice.DoesNotExist:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not practice.show_to_mentors:
+            return Response(
+                {"detail": "Practice not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(build_public_practice_swap_options(practice))
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class PublicMentorSwapRequestCreateView(APIView):
+    """Create a pending mentor swap request and email the incoming mentor."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        practice_id = request.data.get("practice")
+        outgoing_id = request.data.get("outgoing_mentor")
+        incoming_id = request.data.get("incoming_mentor")
+        try:
+            practice_id = int(practice_id)
+            outgoing_id = int(outgoing_id)
+            incoming_id = int(incoming_id)
+        except (TypeError, ValueError):
+            return Response(
+                {
+                    "detail": (
+                        "practice, outgoing_mentor, and incoming_mentor are required."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            practice = Practice.objects.select_related("season").get(pk=practice_id)
+            outgoing = Mentor.objects.get(pk=outgoing_id)
+            incoming = Mentor.objects.get(pk=incoming_id)
+        except (Practice.DoesNotExist, Mentor.DoesNotExist):
+            return Response(
+                {"detail": "Practice or mentor not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            request_row, email_result = create_mentor_swap_request(
+                practice, outgoing, incoming
+            )
+        except ValidationError as exc:
+            messages = getattr(exc, "messages", None) or [str(exc)]
+            return Response(
+                {"detail": messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                **mentor_swap_request_summary(request_row),
+                "email": email_result,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PublicMentorSwapRequestDetailView(APIView):
+    """Public swap-request summary for reject form."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            request_row = MentorSwapRequest.objects.select_related(
+                "practice",
+                "practice__season",
+                "outgoing_mentor",
+                "incoming_mentor",
+            ).get(token=token)
+        except (MentorSwapRequest.DoesNotExist, ValidationError, ValueError):
+            return Response(
+                {"detail": "Swap request not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(mentor_swap_request_summary(request_row))
+
+
+class PublicMentorSwapRequestApproveView(APIView):
+    """Approve a pending swap request immediately (public token link)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            request_row = MentorSwapRequest.objects.select_related(
+                "practice",
+                "practice__season",
+                "outgoing_mentor",
+                "incoming_mentor",
+            ).get(token=token)
+        except (MentorSwapRequest.DoesNotExist, ValidationError, ValueError):
+            return Response(
+                {"detail": "Swap request not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            result = approve_mentor_swap_request(request_row)
+        except ValidationError as exc:
+            messages = getattr(exc, "messages", None) or [str(exc)]
+            return Response(
+                {"detail": messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(result)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class PublicMentorSwapRequestRejectView(APIView):
+    """Reject a pending swap request with comments (public token link)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, token):
+        try:
+            request_row = MentorSwapRequest.objects.select_related(
+                "practice",
+                "practice__season",
+                "outgoing_mentor",
+                "incoming_mentor",
+            ).get(token=token)
+        except (MentorSwapRequest.DoesNotExist, ValidationError, ValueError):
+            return Response(
+                {"detail": "Swap request not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        comments = request.data.get("comments", "")
+        if comments is None:
+            comments = ""
+        try:
+            result = reject_mentor_swap_request(request_row, str(comments))
+        except ValidationError as exc:
+            messages = getattr(exc, "messages", None) or [str(exc)]
+            return Response(
+                {"detail": messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(result)
+
+
+class MentorSwapReportView(APIView):
+    """Approved and rejected mentor swap requests for the Reports page."""
+
+    def get(self, request):
+        season_raw = (request.query_params.get("season") or "").strip()
+        season_id = None
+        if season_raw:
+            try:
+                season_id = int(season_raw)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(build_mentor_swap_report(season_id=season_id))
 
 
 class MentorCellPhoneRequestViewSet(viewsets.ViewSet):

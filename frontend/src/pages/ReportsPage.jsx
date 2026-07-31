@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
-import { fetchMentorNonResponseReport, fetchPracticeRosterReport, fetchSeasons } from '../api'
+import {
+  fetchMentorNonResponseReport,
+  fetchMentorSwapReport,
+  fetchPracticeRosterReport,
+  fetchSeasons,
+} from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { formatDateStamp, formatDateTime } from '../datetime.js'
 import {
@@ -494,11 +500,15 @@ function EmailResponsePaceTable({ counts }) {
 }
 
 export default function ReportsPage() {
+  const [searchParams] = useSearchParams()
   const [seasons, setSeasons] = useState([])
   const [report, setReport] = useState([])
   const [pendingReport, setPendingReport] = useState([])
+  const [swapReport, setSwapReport] = useState({ approved: [], rejected: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selectedApprovedSwapId, setSelectedApprovedSwapId] = useState(null)
+  const [selectedRejectedSwapId, setSelectedRejectedSwapId] = useState(null)
 
   const [seasonFilter, setSeasonFilter] = useState('')
   const [seasonFilterReady, setSeasonFilterReady] = useState(false)
@@ -545,13 +555,18 @@ export default function ReportsPage() {
     Promise.all([
       fetchPracticeRosterReport(seasonFilter ? { season: seasonFilter } : {}),
       fetchMentorNonResponseReport(seasonFilter ? { season: seasonFilter } : {}),
+      fetchMentorSwapReport(seasonFilter ? { season: seasonFilter } : {}),
     ])
-      .then(([rosterData, pendingData]) => {
+      .then(([rosterData, pendingData, swapData]) => {
         if (!cancelled) {
           setReport(Array.isArray(rosterData) ? rosterData : [])
           setPendingReport(
             Array.isArray(pendingData?.practices) ? pendingData.practices : []
           )
+          setSwapReport({
+            approved: Array.isArray(swapData?.approved) ? swapData.approved : [],
+            rejected: Array.isArray(swapData?.rejected) ? swapData.rejected : [],
+          })
           setPracticeFilter('')
         }
       })
@@ -560,6 +575,7 @@ export default function ReportsPage() {
           setError(e instanceof Error ? e.message : String(e))
           setReport([])
           setPendingReport([])
+          setSwapReport({ approved: [], rejected: [] })
         }
       })
       .finally(() => {
@@ -569,6 +585,20 @@ export default function ReportsPage() {
       cancelled = true
     }
   }, [seasonFilter, seasonFilterReady])
+
+  useEffect(() => {
+    if (loading) return
+    const section = searchParams.get('section')
+    if (section !== 'mentor-swaps') return
+    const swapId = Number.parseInt(String(searchParams.get('swap') || ''), 10)
+    const status = searchParams.get('status')
+    if (Number.isFinite(swapId) && swapId > 0) {
+      if (status === 'rejected') setSelectedRejectedSwapId(swapId)
+      else if (status === 'approved') setSelectedApprovedSwapId(swapId)
+    }
+    const el = document.getElementById('mentor-swaps-heading')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [loading, searchParams, swapReport])
 
   const sortedPendingReport = useMemo(
     () => sortPracticesByDateAsc(pendingReport),
@@ -1040,6 +1070,135 @@ export default function ReportsPage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section
+          className="reports-section reports-section-swaps"
+          aria-labelledby="mentor-swaps-heading"
+        >
+          <div className="reports-toolbar">
+            <h2 id="mentor-swaps-heading">Mentor Swap</h2>
+          </div>
+          <p className="muted reports-intro">
+            Approved and rejected swap requests from the mentor directory.
+          </p>
+
+          {!loading && !error ? (
+            <>
+              <h3 className="reports-swap-subheading">Approved swaps</h3>
+              {swapReport.approved.length === 0 ? (
+                <p className="muted">No approved swaps for this season.</p>
+              ) : (
+                <ul className="reports-swap-list">
+                  {swapReport.approved.map((row) => {
+                    const open = selectedApprovedSwapId === row.id
+                    const outgoing = row.outgoing_mentor || {}
+                    const incoming = row.incoming_mentor || {}
+                    return (
+                      <li key={`approved-${row.id}`} className="reports-swap-item">
+                        <button
+                          type="button"
+                          className={`reports-swap-summary${open ? ' is-open' : ''}`}
+                          onClick={() =>
+                            setSelectedApprovedSwapId(open ? null : row.id)
+                          }
+                        >
+                          <span>
+                            {row.practice_date
+                              ? formatDateTime(row.practice_date)
+                              : `Practice #${row.practice_id}`}
+                          </span>
+                          <span className="muted">
+                            {row.decided_at
+                              ? formatDateTime(row.decided_at)
+                              : '—'}
+                          </span>
+                          <span>
+                            {outgoing.last_name || '—'}/{incoming.last_name || '—'}
+                          </span>
+                        </button>
+                        {open ? (
+                          <div className="reports-swap-detail">
+                            <p>
+                              Original: {fullName(outgoing.first_name, outgoing.last_name)}
+                              {outgoing.pace ? ` · Pace ${outgoing.pace}` : ''}
+                            </p>
+                            <p>
+                              Replacement:{' '}
+                              {fullName(incoming.first_name, incoming.last_name)}
+                              {incoming.pace ? ` · Pace ${incoming.pace}` : ''}
+                            </p>
+                            {row.nyrr_race ? (
+                              <p className="muted">NYRR race: {row.nyrr_race}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              <h3 className="reports-swap-subheading">Rejected swaps</h3>
+              {swapReport.rejected.length === 0 ? (
+                <p className="muted">No rejected swaps for this season.</p>
+              ) : (
+                <ul className="reports-swap-list">
+                  {swapReport.rejected.map((row) => {
+                    const open = selectedRejectedSwapId === row.id
+                    const outgoing = row.outgoing_mentor || {}
+                    const incoming = row.incoming_mentor || {}
+                    return (
+                      <li
+                        key={`rejected-${row.id}`}
+                        id={`mentor-swap-${row.id}`}
+                        className="reports-swap-item"
+                      >
+                        <button
+                          type="button"
+                          className={`reports-swap-summary${open ? ' is-open' : ''}`}
+                          onClick={() =>
+                            setSelectedRejectedSwapId(open ? null : row.id)
+                          }
+                        >
+                          <span>
+                            {row.practice_date
+                              ? formatDateTime(row.practice_date)
+                              : `Practice #${row.practice_id}`}
+                          </span>
+                          <span className="muted">
+                            {row.decided_at
+                              ? formatDateTime(row.decided_at)
+                              : '—'}
+                          </span>
+                          <span>
+                            {outgoing.last_name || '—'}/{incoming.last_name || '—'}
+                          </span>
+                        </button>
+                        {open ? (
+                          <div className="reports-swap-detail">
+                            <p>
+                              Original: {fullName(outgoing.first_name, outgoing.last_name)}
+                              {outgoing.pace ? ` · Pace ${outgoing.pace}` : ''}
+                            </p>
+                            <p>
+                              Requested:{' '}
+                              {fullName(incoming.first_name, incoming.last_name)}
+                              {incoming.pace ? ` · Pace ${incoming.pace}` : ''}
+                            </p>
+                            <p>
+                              Comments:{' '}
+                              {(row.reject_comments || '').trim() || '(none)'}
+                            </p>
+                          </div>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          ) : null}
         </section>
       </main>
     </>

@@ -18,6 +18,8 @@ const MentorCellPhonePage = lazy(() => import('./pages/MentorCellPhonePage.jsx')
 const PublicMentorDirectoryPage = lazy(
   () => import('./pages/PublicMentorDirectoryPage.jsx')
 )
+const MentorSwapApprovePage = lazy(() => import('./pages/MentorSwapApprovePage.jsx'))
+const MentorSwapRejectPage = lazy(() => import('./pages/MentorSwapRejectPage.jsx'))
 const MentorDetailPage = lazy(() => import('./pages/MentorDetailPage.jsx'))
 const MentorsPage = lazy(() => import('./pages/MentorsPage.jsx'))
 const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.jsx'))
@@ -53,6 +55,14 @@ export default function App() {
           <Route
             path="/mentor-directory/:tab?"
             element={<PublicMentorDirectoryPage />}
+          />
+          <Route
+            path="/mentor-swap/approve/:token"
+            element={<MentorSwapApprovePage />}
+          />
+          <Route
+            path="/mentor-swap/reject/:token"
+            element={<MentorSwapRejectPage />}
           />
           <Route element={<ProtectedLayout />}>
             <Route path="/" element={<HomePage />} />

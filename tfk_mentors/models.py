@@ -1867,3 +1867,66 @@ class MentorCellPhoneRequestToken(TimeStampedModel):
         )
         return f"{base}/mentor-cell-phone?token={self.token}"
 
+
+class MentorSwapRequestStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class MentorSwapRequest(TimeStampedModel):
+    """Public mentor-directory request for one mentor to replace another at a practice."""
+
+    practice = models.ForeignKey(
+        Practice,
+        on_delete=models.CASCADE,
+        related_name="swap_requests",
+    )
+    outgoing_mentor = models.ForeignKey(
+        Mentor,
+        on_delete=models.CASCADE,
+        related_name="outgoing_swap_requests",
+    )
+    incoming_mentor = models.ForeignKey(
+        Mentor,
+        on_delete=models.CASCADE,
+        related_name="incoming_swap_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=MentorSwapRequestStatus,
+        default=MentorSwapRequestStatus.PENDING,
+        db_index=True,
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    outgoing_pace = models.CharField(max_length=11, blank=True, default="")
+    incoming_pace = models.CharField(max_length=11, blank=True, default="")
+    reject_comments = models.TextField(blank=True, default="")
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return (
+            f"Swap request {self.id}: {self.outgoing_mentor_id} → "
+            f"{self.incoming_mentor_id} @ practice {self.practice_id}"
+        )
+
+    def frontend_base_url(self):
+        return getattr(settings, "FRONTEND_PUBLIC_URL", "http://localhost:5173").rstrip(
+            "/"
+        )
+
+    def approve_absolute_url(self):
+        return f"{self.frontend_base_url()}/mentor-swap/approve/{self.token}"
+
+    def reject_absolute_url(self):
+        return f"{self.frontend_base_url()}/mentor-swap/reject/{self.token}"
+
+    def reports_absolute_url(self):
+        return (
+            f"{self.frontend_base_url()}/reports"
+            f"?section=mentor-swaps&swap={self.id}&status={self.status}"
+        )
+

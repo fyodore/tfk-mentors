@@ -2245,6 +2245,83 @@
   font-size: 0.88rem;
 }
 
+.mentor-directory-request-swap-intro {
+  margin: 0 0 1rem;
+  line-height: 1.45;
+}
+
+.mentor-directory-request-swap-form {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 36rem;
+}
+
+.mentor-directory-request-swap-actions {
+  margin-top: 0.85rem;
+}
+
+.mentor-directory-request-swap-success {
+  margin: 0.85rem 0 0;
+  color: #166534;
+}
+
+.mentor-swap-public-panel {
+  max-width: 36rem;
+  margin: 2rem auto;
+}
+
+.mentor-swap-public-success {
+  color: #166534;
+  line-height: 1.45;
+}
+
+.mentor-swap-reject-form {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+}
+
+.reports-swap-subheading {
+  margin: 1.25rem 0 0.65rem;
+  font-size: 1rem;
+}
+
+.reports-swap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.reports-swap-summary {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.reports-swap-summary:hover,
+.reports-swap-summary.is-open {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.reports-swap-detail {
+  margin: 0.35rem 0 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border-left: 3px solid var(--border);
+}
+
 .mentor-directory-upcoming-controls {
   display: grid;
   gap: 0.35rem;
