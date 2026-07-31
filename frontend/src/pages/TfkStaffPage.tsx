@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
   createTfkStaff,
@@ -8,8 +8,25 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.jsx'
 import { Modal } from '../components/Modal.jsx'
+import type { TfkStaff } from '../types.js'
 
-function sortStaff(list) {
+type StaffModal = 'create' | 'edit' | 'delete'
+
+type StaffFormState = {
+  first_name: string
+  last_name: string
+  email: string
+  cell_phone: string
+}
+
+type StaffPayload = {
+  first_name: string
+  last_name: string
+  email: string
+  cell_phone: string
+}
+
+function sortStaff(list: TfkStaff[]): TfkStaff[] {
   return [...list].sort((a, b) => {
     const ln = (a.last_name || '').localeCompare(b.last_name || '')
     if (ln !== 0) return ln
@@ -19,7 +36,7 @@ function sortStaff(list) {
   })
 }
 
-function emptyStaffForm() {
+function emptyStaffForm(): StaffFormState {
   return {
     first_name: '',
     last_name: '',
@@ -29,13 +46,13 @@ function emptyStaffForm() {
 }
 
 export default function TfkStaffPage() {
-  const [staff, setStaff] = useState([])
+  const [staff, setStaff] = useState<TfkStaff[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [modal, setModal] = useState(null)
-  const [activeStaff, setActiveStaff] = useState(null)
-  const [form, setForm] = useState(() => emptyStaffForm())
+  const [modal, setModal] = useState<StaffModal | null>(null)
+  const [activeStaff, setActiveStaff] = useState<TfkStaff | null>(null)
+  const [form, setForm] = useState<StaffFormState>(() => emptyStaffForm())
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -83,7 +100,7 @@ export default function TfkStaffPage() {
     setModal('create')
   }
 
-  const openEdit = (member) => {
+  const openEdit = (member: TfkStaff) => {
     setModalError('')
     setActiveStaff(member)
     setForm({
@@ -95,13 +112,13 @@ export default function TfkStaffPage() {
     setModal('edit')
   }
 
-  const openDelete = (member) => {
+  const openDelete = (member: TfkStaff) => {
     setModalError('')
     setActiveStaff(member)
     setModal('delete')
   }
 
-  const buildPayload = () => {
+  const buildPayload = (): { error: string } | { payload: StaffPayload } => {
     if (!form.first_name.trim()) return { error: 'First name is required.' }
     if (!form.last_name.trim()) return { error: 'Last name is required.' }
     if (!form.email.trim()) return { error: 'Email is required.' }
@@ -115,7 +132,7 @@ export default function TfkStaffPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const built = buildPayload()
@@ -135,7 +152,7 @@ export default function TfkStaffPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activeStaff) return
@@ -173,7 +190,7 @@ export default function TfkStaffPage() {
     }
   }
 
-  const staffFormFields = (formId) => (
+  const staffFormFields = (formId: string): ReactNode => (
     <>
       <label className="field-label" htmlFor={`${formId}-first`}>
         First name

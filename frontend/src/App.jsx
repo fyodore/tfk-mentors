@@ -26,7 +26,7 @@ const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.jsx'))
 const PracticesPage = lazy(() => import('./pages/PracticesPage.jsx'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'))
 const SeasonsPage = lazy(() => import('./pages/SeasonsPage.tsx'))
-const TfkStaffPage = lazy(() => import('./pages/TfkStaffPage.jsx'))
+const TfkStaffPage = lazy(() => import('./pages/TfkStaffPage.tsx'))
 
 function PageFallback() {
   return <p className="muted">Loading…</p>

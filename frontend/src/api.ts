@@ -18,9 +18,10 @@ import type {
   Season,
   ServerConfig,
   CsvImportResult,
+  TfkStaff,
 } from './types.js'
 
-export type { Id, JsonObject, Season, Practice, Mentor, Coach } from './types.js'
+export type { Id, JsonObject, Season, Practice, Mentor, Coach, TfkStaff } from './types.js'
 
 export class ApiError extends Error {
   status?: number
@@ -284,11 +285,11 @@ export async function deleteCoach(id: Id) {
     throw new Error(await parseError(res))
 }
 
-export function normalizeTfkStaffList(data: unknown): unknown[] {
-  return normalizeList<unknown>(data)
+export function normalizeTfkStaffList(data: unknown): TfkStaff[] {
+  return normalizeList<TfkStaff>(data)
 }
 
-export async function fetchTfkStaff() {
+export async function fetchTfkStaff(): Promise<TfkStaff[]> {
   const res = await fetch(TFK_STAFF_LIST, {
     method: 'GET',
     credentials: 'include',
@@ -299,7 +300,7 @@ export async function fetchTfkStaff() {
   return normalizeTfkStaffList(data)
 }
 
-export async function createTfkStaff(body: JsonObject) {
+export async function createTfkStaff(body: JsonObject): Promise<TfkStaff> {
   const res = await fetch(TFK_STAFF_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -313,7 +314,7 @@ export async function createTfkStaff(body: JsonObject) {
   return res.json()
 }
 
-export async function patchTfkStaff(id: Id, body: JsonObject) {
+export async function patchTfkStaff(id: Id, body: JsonObject): Promise<TfkStaff> {
   const res = await fetch(`${TFK_STAFF_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
