@@ -29,6 +29,7 @@ import type {
   MentorNonResponseReport,
   ScheduledEmail,
   ScheduledEmailPendingMentorsResponse,
+  ScheduledEmailReplyReminderResult,
   SendEmailResult,
   MentorEmailReplyResponse,
   MentorEmailReplyPutPayload,
@@ -680,7 +681,9 @@ export async function fetchScheduledEmailPendingMentors(
   return res.json()
 }
 
-export async function previewScheduledEmailReplyReminders(id: Id) {
+export async function previewScheduledEmailReplyReminders(
+  id: Id
+): Promise<ScheduledEmailReplyReminderResult> {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
     method: 'POST',
     credentials: 'include',
@@ -708,7 +711,9 @@ export async function sendScheduledEmailNow(id: Id): Promise<SendEmailResult> {
   return res.json()
 }
 
-export async function sendScheduledEmailReplyReminders(id: Id) {
+export async function sendScheduledEmailReplyReminders(
+  id: Id
+): Promise<ScheduledEmailReplyReminderResult> {
   const res = await fetch(`${SCHEDULED_EMAIL_LIST}${id}/send-reply-reminders/`, {
     method: 'POST',
     credentials: 'include',

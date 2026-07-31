@@ -8,7 +8,7 @@ import './App.css'
 const AttendancePage = lazy(() => import('./pages/AttendancePage.tsx'))
 const CoachesPage = lazy(() => import('./pages/CoachesPage.tsx'))
 const EmailsPage = lazy(() => import('./pages/EmailsPage.tsx'))
-const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.jsx'))
+const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.tsx'))
 const PracticeReminderDetailPage = lazy(
   () => import('./pages/PracticeReminderDetailPage.tsx')
 )
@@ -18,8 +18,12 @@ const MentorCellPhonePage = lazy(() => import('./pages/MentorCellPhonePage.tsx')
 const PublicMentorDirectoryPage = lazy(
   () => import('./pages/PublicMentorDirectoryPage.tsx')
 )
-const MentorSwapApprovePage = lazy(() => import('./pages/MentorSwapApprovePage.tsx'))
-const MentorSwapRejectPage = lazy(() => import('./pages/MentorSwapRejectPage.tsx'))
+const MentorSwapApprovePage = lazy(
+  () => import('./pages/MentorSwapApprovePage.tsx')
+)
+const MentorSwapRejectPage = lazy(
+  () => import('./pages/MentorSwapRejectPage.tsx')
+)
 const MentorDetailPage = lazy(() => import('./pages/MentorDetailPage.tsx'))
 const MentorsPage = lazy(() => import('./pages/MentorsPage.tsx'))
 const PracticeDetailPage = lazy(() => import('./pages/PracticeDetailPage.tsx'))

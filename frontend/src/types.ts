@@ -442,6 +442,14 @@ export type SendEmailResult = {
   recipients?: number
 }
 
+export type ScheduledEmailReplyReminderResult = {
+  sent?: number
+  recipients?: number
+  pending_mentors?: PendingMentorRow[]
+  dry_run?: boolean
+  subject?: string
+}
+
 export type ServerConfig = {
   time_zone: string
 }

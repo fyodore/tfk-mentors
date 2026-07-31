@@ -10,15 +10,30 @@ import {
   previewScheduledEmailReplyReminders,
   sendScheduledEmailReplyReminders,
 } from '../api'
-import { practiceLabelsForIds, recipientSummaryText, pendingMentorsForEmail, normalizePendingMentorRows, sentEmailReplyStats } from '../emailHelpers.js'
+import {
+  normalizePendingMentorRows,
+  pendingMentorsForEmail,
+  practiceLabelsForIds,
+  recipientSummaryText,
+  sentEmailReplyStats,
+} from '../emailHelpers.js'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { formatDateTime } from '../datetime.js'
+import type {
+  Mentor,
+  PendingMentorRow,
+  Practice,
+  ScheduledEmail,
+  Season,
+} from '../types.js'
 
-function sortPracticesByDateAsc(list) {
+function sortPracticesByDateAsc(list: Practice[]): Practice[] {
   return [...list].sort((a, b) => {
-    const ta = new Date(a.date).getTime()
-    const tb = new Date(b.date).getTime()
-    return (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
+    const ta = new Date(a.date ?? 0).getTime()
+    const tb = new Date(b.date ?? 0).getTime()
+    return (
+      (Number.isNaN(ta) ? 0 : ta) - (Number.isNaN(tb) ? 0 : tb) || a.id - b.id
+    )
   })
 }
 
@@ -26,18 +41,21 @@ export default function EmailDetailPage() {
   const { id } = useParams()
   const emailId = Number.parseInt(String(id), 10)
 
-  const [email, setEmail] = useState(null)
-  const [practices, setPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
-  const [mentors, setMentors] = useState([])
+  const [email, setEmail] = useState<ScheduledEmail | null>(null)
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [mentors, setMentors] = useState<Mentor[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [reminderBusy, setReminderBusy] = useState(false)
-  const [reminderMessage, setReminderMessage] = useState(null)
-  const [reminderError, setReminderError] = useState(null)
-  const [pendingMentorsLoaded, setPendingMentorsLoaded] = useState([])
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null)
+  const [reminderError, setReminderError] = useState<string | null>(null)
+  const [pendingMentorsLoaded, setPendingMentorsLoaded] = useState<
+    PendingMentorRow[]
+  >([])
   const [pendingMentorsLoading, setPendingMentorsLoading] = useState(false)
-  const [pendingMentorsLoadFailed, setPendingMentorsLoadFailed] = useState(false)
+  const [pendingMentorsLoadFailed, setPendingMentorsLoadFailed] =
+    useState(false)
 
   const reloadEmail = async () => {
     const emailRow = await fetchScheduledEmail(emailId)
@@ -46,20 +64,21 @@ export default function EmailDetailPage() {
   }
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
 
   const practiceById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, Practice>()
     for (const p of practices) m.set(p.id, p)
     return m
   }, [practices])
 
-  const practiceLabel = (p) => {
+  const practiceLabel = (p: Practice): string => {
     const when = formatDateTime(p.date)
-    const year = seasonYearById.get(p.season) ?? p.season
+    const year =
+      p.season != null ? (seasonYearById.get(p.season) ?? p.season) : '—'
     const race = p.nyrr_race?.trim()
     return `${when} · Season ${year}${race ? ` · ${race}` : ''}`
   }
@@ -118,7 +137,9 @@ export default function EmailDetailPage() {
     if (email?.recipient_mode !== 'specific_mentors') return []
     return (email.specific_mentors ?? []).map((mid) => {
       const m = mentors.find((x) => x.id === mid)
-      return m ? `${m.first_name} ${m.last_name} · ${m.email}` : `Mentor #${mid}`
+      return m
+        ? `${m.first_name} ${m.last_name} · ${m.email}`
+        : `Mentor #${mid}`
     })
   }, [email, mentors])
 
@@ -148,6 +169,7 @@ export default function EmailDetailPage() {
     setPendingMentorsLoadFailed(false)
 
     async function loadPendingMentors() {
+      if (!email) return
       try {
         const data = await fetchScheduledEmailPendingMentors(email.id)
         if (cancelled) return
@@ -244,19 +266,22 @@ export default function EmailDetailPage() {
               </h2>
               {isSent ? (
                 <p className="muted">
-                  Originally scheduled {formatDateTime(email.scheduled_send_at)}
+                  Originally scheduled{' '}
+                  {formatDateTime(email.scheduled_send_at)}
                 </p>
               ) : null}
             </header>
 
             <section className="email-detail-section">
               <h3>Recipients</h3>
-              <p>{recipientSummaryText(email, { seasonYearById, mentors })}</p>
+              <p>
+                {recipientSummaryText(email, { seasonYearById, mentors })}
+              </p>
               {isSent && replyStats ? (
                 <div className="email-reply-stats" aria-label="Reply summary">
                   <span className="email-reply-stat">
-                    {replyStats.replied} mentor{replyStats.replied === 1 ? '' : 's'}{' '}
-                    replied
+                    {replyStats.replied} mentor
+                    {replyStats.replied === 1 ? '' : 's'} replied
                   </span>
                   <span className="email-reply-stat-sep" aria-hidden="true">
                     ·
