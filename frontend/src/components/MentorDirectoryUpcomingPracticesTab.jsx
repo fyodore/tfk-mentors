@@ -156,11 +156,6 @@ export function MentorDirectoryUpcomingPracticesTab() {
     }
   }, [selectedPracticeId, rosterByPracticeId])
 
-  const selectedPractice = useMemo(
-    () => practices.find((p) => p.id === selectedPracticeId) ?? null,
-    [practices, selectedPracticeId]
-  )
-
   const roster = selectedPracticeId
     ? rosterByPracticeId[selectedPracticeId]
     : null
@@ -204,155 +199,130 @@ export function MentorDirectoryUpcomingPracticesTab() {
 
   return (
     <div className="mentor-directory-upcoming">
-      <div className="mentor-directory-upcoming-layout">
-        <section
-          className="mentor-directory-upcoming-list-panel"
-          aria-labelledby="upcoming-practices-heading"
+      <div className="mentor-directory-upcoming-controls">
+        <label className="field-label" htmlFor="upcoming-practice-select">
+          Practice
+        </label>
+        <select
+          id="upcoming-practice-select"
+          className="field-input field-select mentor-directory-upcoming-practice-select"
+          value={selectedPracticeId ?? ''}
+          onChange={(e) => {
+            const next = Number.parseInt(e.target.value, 10)
+            setSelectedPracticeId(Number.isNaN(next) ? null : next)
+          }}
         >
-          <h2 id="upcoming-practices-heading">Upcoming practices</h2>
-          <ul className="mentor-directory-upcoming-list">
-            {practices.map((practice) => {
-              const selected = practice.id === selectedPracticeId
+          {practices.map((practice) => (
+            <option key={practice.id} value={practice.id}>
+              {practiceLabel(practice)}
+            </option>
+          ))}
+        </select>
+
+        <div className="mentor-directory-upcoming-pace-filter">
+          <span className="field-label">Pace groups</span>
+          <div
+            className="mentor-directory-upcoming-pace-options"
+            role="group"
+            aria-label="Filter coaches and mentors by pace"
+          >
+            {PACE_GROUPS.map((pace) => {
+              const checked = selectedPaces.has(pace)
               return (
-                <li key={practice.id}>
-                  <button
-                    type="button"
-                    className={`mentor-directory-upcoming-practice${
-                      selected ? ' is-selected' : ''
-                    }`}
-                    aria-pressed={selected}
-                    onClick={() => setSelectedPracticeId(practice.id)}
-                  >
-                    <span className="mentor-directory-upcoming-practice-when">
-                      {practice.date
-                        ? formatMentorDirectoryPracticeDate(practice.date)
-                        : '—'}
-                    </span>
-                    {practice.nyrr_race?.trim() ? (
-                      <span className="muted">
-                        {practice.nyrr_race.trim()}
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
+                <label
+                  key={pace}
+                  className={`mentor-directory-upcoming-pace-chip${
+                    checked ? ' is-selected' : ''
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => togglePace(pace)}
+                  />
+                  <span>{pace}</span>
+                </label>
               )
             })}
-          </ul>
-        </section>
-
-        <section
-          className="mentor-directory-upcoming-detail-panel"
-          aria-labelledby="upcoming-practice-detail-heading"
-        >
-          <h2 id="upcoming-practice-detail-heading">
-            {selectedPractice ? practiceLabel(selectedPractice) : 'Practice roster'}
-          </h2>
-
-          <div className="mentor-directory-upcoming-pace-filter">
-            <span className="field-label">Pace groups</span>
-            <div
-              className="mentor-directory-upcoming-pace-options"
-              role="group"
-              aria-label="Filter coaches and mentors by pace"
-            >
-              {PACE_GROUPS.map((pace) => {
-                const checked = selectedPaces.has(pace)
-                return (
-                  <label
-                    key={pace}
-                    className={`mentor-directory-upcoming-pace-chip${
-                      checked ? ' is-selected' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => togglePace(pace)}
-                    />
-                    <span>{pace}</span>
-                  </label>
-                )
-              })}
-            </div>
-            <p className="muted mentor-directory-upcoming-pace-hint">
-              {selectedPaces.size === 0
-                ? 'Showing all pace groups.'
-                : `Showing ${selectedPaces.size} selected pace group${
-                    selectedPaces.size === 1 ? '' : 's'
-                  }.`}
-            </p>
           </div>
-
-          {rosterLoading && !roster ? (
-            <p className="muted">Loading roster…</p>
-          ) : null}
-          {rosterError ? (
-            <p className="error" role="alert">
-              {rosterError}
-            </p>
-          ) : null}
-
-          {roster ? (
-            <>
-              <section
-                className="mentor-directory-upcoming-roster-section"
-                aria-labelledby="upcoming-coaches-heading"
-              >
-                <h3 id="upcoming-coaches-heading">Coaches</h3>
-                {coaches.length === 0 ? (
-                  <p className="muted">
-                    {selectedPaces.size > 0
-                      ? 'No coaches match the selected pace groups.'
-                      : 'No coaches assigned.'}
-                  </p>
-                ) : (
-                  <ul className="mentor-directory-upcoming-person-list">
-                    {coaches.map((coach) => (
-                      <li key={coach.coach_id}>
-                        <span>{personName(coach)}</span>
-                        {coach.pace?.trim() ? (
-                          <span className="muted">Pace {coach.pace}</span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section
-                className="mentor-directory-upcoming-roster-section"
-                aria-labelledby="upcoming-mentors-heading"
-              >
-                <h3 id="upcoming-mentors-heading">Mentors</h3>
-                {mentorPaceGroups.length === 0 ? (
-                  <p className="muted">
-                    {selectedPaces.size > 0
-                      ? 'No mentors match the selected pace groups.'
-                      : 'No mentors assigned.'}
-                  </p>
-                ) : (
-                  <div className="mentor-directory-upcoming-pace-groups">
-                    {mentorPaceGroups.map((group) => (
-                      <section
-                        key={group.pace}
-                        className="mentor-directory-upcoming-pace-group"
-                        aria-labelledby={`upcoming-pace-${group.pace}`}
-                      >
-                        <h4 id={`upcoming-pace-${group.pace}`}>{group.label}</h4>
-                        <ul className="mentor-directory-upcoming-person-list">
-                          {group.mentors.map((mentor) => (
-                            <li key={mentor.mentor_id}>{personName(mentor)}</li>
-                          ))}
-                        </ul>
-                      </section>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </>
-          ) : null}
-        </section>
+          <p className="muted mentor-directory-upcoming-pace-hint">
+            {selectedPaces.size === 0
+              ? 'Showing all pace groups.'
+              : `Showing ${selectedPaces.size} selected pace group${
+                  selectedPaces.size === 1 ? '' : 's'
+                }.`}
+          </p>
+        </div>
       </div>
+
+      {rosterLoading && !roster ? (
+        <p className="muted">Loading roster…</p>
+      ) : null}
+      {rosterError ? (
+        <p className="error" role="alert">
+          {rosterError}
+        </p>
+      ) : null}
+
+      {roster ? (
+        <>
+          <section
+            className="mentor-directory-upcoming-roster-section"
+            aria-labelledby="upcoming-coaches-heading"
+          >
+            <h3 id="upcoming-coaches-heading">Coaches</h3>
+            {coaches.length === 0 ? (
+              <p className="muted">
+                {selectedPaces.size > 0
+                  ? 'No coaches match the selected pace groups.'
+                  : 'No coaches assigned.'}
+              </p>
+            ) : (
+              <ul className="mentor-directory-upcoming-person-list">
+                {coaches.map((coach) => (
+                  <li key={coach.coach_id}>
+                    <span>{personName(coach)}</span>
+                    {coach.pace?.trim() ? (
+                      <span className="muted">Pace {coach.pace}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section
+            className="mentor-directory-upcoming-roster-section"
+            aria-labelledby="upcoming-mentors-heading"
+          >
+            <h3 id="upcoming-mentors-heading">Mentors</h3>
+            {mentorPaceGroups.length === 0 ? (
+              <p className="muted">
+                {selectedPaces.size > 0
+                  ? 'No mentors match the selected pace groups.'
+                  : 'No mentors assigned.'}
+              </p>
+            ) : (
+              <div className="mentor-directory-upcoming-pace-groups">
+                {mentorPaceGroups.map((group) => (
+                  <section
+                    key={group.pace}
+                    className="mentor-directory-upcoming-pace-group"
+                    aria-labelledby={`upcoming-pace-${group.pace}`}
+                  >
+                    <h4 id={`upcoming-pace-${group.pace}`}>{group.label}</h4>
+                    <ul className="mentor-directory-upcoming-person-list">
+                      {group.mentors.map((mentor) => (
+                        <li key={mentor.mentor_id}>{personName(mentor)}</li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : null}
     </div>
   )
 }
