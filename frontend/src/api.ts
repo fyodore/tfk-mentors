@@ -189,7 +189,7 @@ export async function fetchPractices(params: { season?: Id | null; lite?: boolea
   return normalizePracticeList(data)
 }
 
-export async function createPractice(body: JsonObject) {
+export async function createPractice(body: JsonObject): Promise<Practice> {
   const res = await fetch(PRACTICE_LIST, {
     method: 'POST',
     credentials: 'include',
@@ -203,7 +203,7 @@ export async function createPractice(body: JsonObject) {
   return res.json()
 }
 
-export async function patchPractice(id: Id, body: JsonObject) {
+export async function patchPractice(id: Id, body: JsonObject): Promise<Practice> {
   const res = await fetch(`${PRACTICE_LIST}${id}/`, {
     method: 'PATCH',
     credentials: 'include',
@@ -441,7 +441,10 @@ export async function importMentorsCsv(file: File): Promise<CsvImportResult> {
   return res.json()
 }
 
-export async function fetchPractice(id: Id, params: { basic?: boolean } = {}) {
+export async function fetchPractice(
+  id: Id,
+  params: { basic?: boolean } = {}
+): Promise<Practice> {
   const query = new URLSearchParams()
   if (params.basic) {
     query.set('basic', '1')

@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -23,13 +31,37 @@ import {
   sortSeasonsByYearDesc,
   splitPracticesByUpcoming,
 } from '../seasonHelpers.js'
+import type { Practice, Season } from '../types.js'
 
-function isoToPracticeDateAndTime(iso) {
-  const { date, time } = isoToDateAndQuarterTime(iso)
+type PracticeModal = 'create' | 'edit' | 'delete'
+
+type PracticeFormState = {
+  practiceDate: string
+  practiceTime: string
+  nyrr_race: string
+  description: string
+  start_location: string
+  full_practice: boolean
+  show_to_mentors: boolean
+  season: string
+}
+
+type PracticePayload = {
+  date: string
+  nyrr_race: string
+  description: string
+  start_location: string
+  full_practice: boolean
+  show_to_mentors: boolean
+  season: number
+}
+
+function isoToPracticeDateAndTime(iso: string | null | undefined) {
+  const { date, time } = isoToDateAndQuarterTime(iso ?? '')
   return { practiceDate: date, practiceTime: time }
 }
 
-function emptyPracticeForm(defaultSeasonId) {
+function emptyPracticeForm(defaultSeasonId: number | string): PracticeFormState {
   return {
     practiceDate: '',
     practiceTime: '09:00',
@@ -42,13 +74,21 @@ function emptyPracticeForm(defaultSeasonId) {
   }
 }
 
-function resizeDescriptionTextarea(event) {
-  const el = event.target
+function resizeDescriptionTextarea(event: ChangeEvent<HTMLTextAreaElement> | FocusEvent) {
+  const el = event.target as HTMLTextAreaElement
   el.style.height = 'auto'
   el.style.height = `${el.scrollHeight}px`
 }
 
-function PracticeDescriptionField({ formId, value, onChange }) {
+function PracticeDescriptionField({
+  formId,
+  value,
+  onChange,
+}: {
+  formId: string
+  value: string
+  onChange: (value: string) => void
+}) {
   useEffect(() => {
     const el = document.getElementById(`${formId}-description`)
     if (!el) return
@@ -78,22 +118,24 @@ function PracticeDescriptionField({ formId, value, onChange }) {
 }
 
 export default function PracticesPage() {
-  const [practices, setPractices] = useState([])
-  const [seasons, setSeasons] = useState([])
+  const [practices, setPractices] = useState<Practice[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [seasonFilter, setSeasonFilter] = useState('')
 
-  const [modal, setModal] = useState(null)
+  const [modal, setModal] = useState<PracticeModal | null>(null)
   const [schedulerOpen, setSchedulerOpen] = useState(false)
-  const [activePractice, setActivePractice] = useState(null)
-  const [form, setForm] = useState(() => emptyPracticeForm(''))
+  const [activePractice, setActivePractice] = useState<Practice | null>(null)
+  const [form, setForm] = useState<PracticeFormState>(() => emptyPracticeForm(''))
   const [modalError, setModalError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [showToMentorsBusyIds, setShowToMentorsBusyIds] = useState(() => new Set())
+  const [showToMentorsBusyIds, setShowToMentorsBusyIds] = useState<Set<number>>(
+    () => new Set()
+  )
   const [showToMentorsBulkBusy, setShowToMentorsBulkBusy] = useState(false)
-  const showAllUpcomingRef = useRef(null)
+  const showAllUpcomingRef = useRef<HTMLInputElement | null>(null)
 
   const sortedSeasons = useMemo(
     () => sortSeasonsByYearDesc(seasons),
@@ -110,7 +152,7 @@ export default function PracticesPage() {
   const quarterTimeOptions = useMemo(() => buildQuarterTimeOptions(), [])
 
   const seasonYearById = useMemo(() => {
-    const m = new Map()
+    const m = new Map<number, number>()
     for (const s of seasons) m.set(s.id, s.year)
     return m
   }, [seasons])
@@ -202,7 +244,7 @@ export default function PracticesPage() {
     setModal('create')
   }
 
-  const openEdit = async (practice) => {
+  const openEdit = async (practice: Practice) => {
     setModalError('')
     setActivePractice(practice)
     setModal('edit')
@@ -241,13 +283,15 @@ export default function PracticesPage() {
     }
   }
 
-  const openDelete = (practice) => {
+  const openDelete = (practice: Practice) => {
     setModalError('')
     setActivePractice(practice)
     setModal('delete')
   }
 
-  const buildPayload = () => {
+  const buildPayload = ():
+    | { error: string }
+    | { payload: PracticePayload } => {
     const iso = dateAndQuarterTimeToIso(form.practiceDate, form.practiceTime)
     if (!iso) return { error: 'Please set a valid date and time.' }
     const seasonId = Number.parseInt(form.season, 10)
@@ -265,7 +309,7 @@ export default function PracticesPage() {
     }
   }
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     const built = buildPayload()
@@ -287,7 +331,7 @@ export default function PracticesPage() {
     }
   }
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setModalError('')
     if (!activePractice) return
@@ -346,7 +390,10 @@ export default function PracticesPage() {
     el.indeterminate = upcomingShowToMentorsState.some
   }, [upcomingShowToMentorsState.some])
 
-  async function setPracticeShowToMentors(practice, showToMentors) {
+  async function setPracticeShowToMentors(
+    practice: Practice,
+    showToMentors: boolean
+  ): Promise<Practice> {
     if (Boolean(practice.show_to_mentors) === showToMentors) return practice
     const updated = await patchPractice(practice.id, {
       show_to_mentors: showToMentors,
@@ -357,7 +404,7 @@ export default function PracticesPage() {
     return updated
   }
 
-  async function togglePracticeShowToMentors(practice) {
+  async function togglePracticeShowToMentors(practice: Practice) {
     const next = !Boolean(practice.show_to_mentors)
     setShowToMentorsBusyIds((prev) => new Set(prev).add(practice.id))
     setLoadError(null)
@@ -374,7 +421,7 @@ export default function PracticesPage() {
     }
   }
 
-  async function setUpcomingShowToMentors(showToMentors) {
+  async function setUpcomingShowToMentors(showToMentors: boolean) {
     const targets = upcomingPractices.filter(
       (p) => Boolean(p.show_to_mentors) !== showToMentors
     )
@@ -389,7 +436,10 @@ export default function PracticesPage() {
       )
       const byId = new Map(results.map((row) => [row.id, row]))
       setPractices((prev) =>
-        prev.map((row) => (byId.has(row.id) ? { ...row, ...byId.get(row.id) } : row))
+        prev.map((row) => {
+          const updated = byId.get(row.id)
+          return updated ? { ...row, ...updated } : row
+        })
       )
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
@@ -404,7 +454,7 @@ export default function PracticesPage() {
     }
   }
 
-  function renderPracticeRow(p) {
+  function renderPracticeRow(p: Practice): ReactNode {
     const showBusy =
       showToMentorsBusyIds.has(p.id) || showToMentorsBulkBusy
     return (
@@ -458,7 +508,10 @@ export default function PracticesPage() {
         </div>
         <div className="muted practices-list-meta">
           <span>
-            Season {seasonYearById.get(p.season) ?? p.season}
+            Season{' '}
+            {p.season != null
+              ? (seasonYearById.get(p.season) ?? p.season)
+              : '—'}
             {p.full_practice ? ' · Full practice' : ' · Partial'}
           </span>
           {p.start_location?.trim() ? (
@@ -971,7 +1024,11 @@ export default function PracticesPage() {
       </Modal>
 
       <PracticeMentorSchedulerModal
-        practices={upcomingPractices}
+        practices={upcomingPractices.map((p) => ({
+          id: p.id,
+          date: p.date ?? undefined,
+          nyrr_race: p.nyrr_race ?? undefined,
+        }))}
         open={schedulerOpen}
         onClose={() => setSchedulerOpen(false)}
         onApplied={async () => {

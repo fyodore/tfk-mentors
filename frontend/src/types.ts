@@ -13,9 +13,10 @@ export type Practice = {
   season?: number | null
   season_year?: number | null
   nyrr_race?: string | null
+  description?: string | null
+  start_location?: string | null
   full_practice?: boolean
   show_to_mentors?: boolean
-  description?: string | null
   [key: string]: unknown
 }
 
