@@ -927,6 +927,15 @@
   max-width: none;
 }
 
+.practices-page-list .practices-list-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  width: 100%;
+  max-width: none;
+}
+
 .practice-description-block {
   width: 100%;
   max-width: none;
@@ -1073,12 +1082,17 @@
     grid-template-columns: minmax(0, 1fr) minmax(10.5rem, 12rem);
     grid-template-areas:
       'main actions'
+      'meta meta'
       'description description'
       'visibility visibility';
   }
 
   .practices-page-list .practice-row-main {
     grid-area: main;
+  }
+
+  .practices-page-list .practices-list-meta {
+    grid-area: meta;
   }
 
   .practices-page-list .practices-list-description {
@@ -1153,6 +1167,8 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'main'
+      'meta'
+      'description'
       'visibility'
       'actions';
     padding: 0.85rem;

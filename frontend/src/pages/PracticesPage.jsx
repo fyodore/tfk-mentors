@@ -416,13 +416,6 @@ export default function PracticesPage() {
           {p.nyrr_race?.trim() ? (
             <span className="practice-race">{p.nyrr_race}</span>
           ) : null}
-          <span className="muted">
-            Season {seasonYearById.get(p.season) ?? p.season}
-            {p.full_practice ? ' · Full practice' : ' · Partial'}
-          </span>
-          {p.start_location?.trim() ? (
-            <span className="muted">Start: {p.start_location.trim()}</span>
-          ) : null}
         </div>
         <div className="practice-row-visibility">
           <label className="practice-show-to-mentors-toggle">
@@ -462,6 +455,15 @@ export default function PracticesPage() {
           >
             Delete
           </button>
+        </div>
+        <div className="muted practices-list-meta">
+          <span>
+            Season {seasonYearById.get(p.season) ?? p.season}
+            {p.full_practice ? ' · Full practice' : ' · Partial'}
+          </span>
+          {p.start_location?.trim() ? (
+            <span>Start: {p.start_location.trim()}</span>
+          ) : null}
         </div>
         {p.description?.trim() ? (
           <div className="muted practice-description-preview practices-list-description">
