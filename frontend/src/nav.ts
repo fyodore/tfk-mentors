@@ -1,5 +1,18 @@
 /** Shared admin navigation (all protected pages except mentor reply). */
-export const SITE_NAV = [
+
+export type SiteNavItem = {
+  path: string
+  label: string
+  end?: boolean
+}
+
+export type SitePageCard = {
+  path: string
+  title: string
+  description: string
+}
+
+export const SITE_NAV: SiteNavItem[] = [
   { path: '/', label: 'Home', end: true },
   { path: '/seasons', label: 'Seasons' },
   { path: '/practices', label: 'Practices' },
@@ -11,7 +24,7 @@ export const SITE_NAV = [
   { path: '/reports', label: 'Reports' },
 ]
 
-export const SITE_PAGE_CARDS = [
+export const SITE_PAGE_CARDS: SitePageCard[] = [
   {
     path: '/seasons',
     title: 'Seasons',

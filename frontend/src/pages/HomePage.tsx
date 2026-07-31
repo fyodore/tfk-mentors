@@ -11,7 +11,8 @@ export default function HomePage() {
       <main className="panel home-panel">
         <h2 id="pages-heading">Site pages</h2>
         <p className="home-intro muted">
-          Choose a destination below. Links open inside this app (no full page reload).
+          Choose a destination below. Links open inside this app (no full page
+          reload).
         </p>
 
         <nav className="home-nav" aria-labelledby="pages-heading">

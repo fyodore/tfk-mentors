@@ -12,7 +12,7 @@ const EmailDetailPage = lazy(() => import('./pages/EmailDetailPage.jsx'))
 const PracticeReminderDetailPage = lazy(
   () => import('./pages/PracticeReminderDetailPage.jsx')
 )
-const HomePage = lazy(() => import('./pages/HomePage.jsx'))
+const HomePage = lazy(() => import('./pages/HomePage.tsx'))
 const MentorReplyPage = lazy(() => import('./pages/MentorReplyPage.jsx'))
 const MentorCellPhonePage = lazy(() => import('./pages/MentorCellPhonePage.jsx'))
 const PublicMentorDirectoryPage = lazy(
