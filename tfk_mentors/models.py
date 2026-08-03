@@ -1930,3 +1930,93 @@ class MentorSwapRequest(TimeStampedModel):
             f"?section=mentor-swaps&swap={self.id}&status={self.status}"
         )
 
+
+class UnderfilledPaceResponseType(models.TextChoices):
+    PRACTICES = "practices", "Selected practices"
+    UNAVAILABLE = "unavailable", "Not available"
+    ALL_FILLED = "all_filled", "All slots filled"
+
+
+class UnderfilledPaceMentorEmailSend(TimeStampedModel):
+    """One batch of underfilled-pace mentor request emails."""
+
+    season = models.ForeignKey(
+        Season,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="underfilled_pace_mentor_email_sends",
+    )
+    sent_at = models.DateTimeField(db_index=True)
+    recipients_emailed_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-sent_at", "-id"]
+
+    def __str__(self):
+        return (
+            f"Underfilled pace email send {self.id} "
+            f"({self.recipients_emailed_count})"
+        )
+
+
+class UnderfilledPaceMentorEmailToken(TimeStampedModel):
+    """Personal link for one mentor to fill underfilled pace-group slots."""
+
+    send = models.ForeignKey(
+        UnderfilledPaceMentorEmailSend,
+        on_delete=models.CASCADE,
+        related_name="tokens",
+    )
+    mentor = models.ForeignKey(
+        Mentor,
+        on_delete=models.CASCADE,
+        related_name="underfilled_pace_email_tokens",
+    )
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    response_type = models.CharField(
+        max_length=20,
+        choices=UnderfilledPaceResponseType,
+        blank=True,
+        default="",
+    )
+    practice_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Practice ids offered in the email at send time.",
+    )
+    assigned_practice_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Practice ids assigned from this mentor's response.",
+    )
+    snagged_practice_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Practice ids selected but already full at submit time.",
+    )
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["send", "mentor"],
+                name="unique_underfilled_pace_email_send_mentor",
+            )
+        ]
+
+    def __str__(self):
+        return f"Underfilled pace token {self.token} → mentor {self.mentor_id}"
+
+    @property
+    def is_open(self):
+        return self.responded_at is None and self.sent_at is not None
+
+    def absolute_url(self):
+        base = getattr(settings, "FRONTEND_PUBLIC_URL", "http://localhost:5173").rstrip(
+            "/"
+        )
+        return f"{base}/underfilled-pace-reply?token={self.token}"
+

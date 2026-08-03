@@ -602,3 +602,80 @@ export type MentorCellPhoneUpdatePutResponse = {
   detail?: string
   completed?: boolean
 }
+
+export type UnderfilledPaceEligiblePractice = {
+  practice_id: number
+  label: string
+  slots_remaining: number
+}
+
+export type UnderfilledPaceEligibleMentor = {
+  id: number
+  first_name: string
+  last_name: string
+  email?: string
+  type?: string
+  pace?: string
+  practices?: UnderfilledPaceEligiblePractice[]
+}
+
+export type UnderfilledPaceEmailRecipient = {
+  mentor_id: number
+  first_name: string
+  last_name: string
+  email?: string
+  pace?: string
+  practice_count?: number
+  responded_at?: string | null
+  response_type?: string
+}
+
+export type UnderfilledPaceEmailSendBatch = {
+  id: number
+  sent_at?: string | null
+  recipients_emailed_count: number
+  season_id?: number | null
+  season_year?: number | null
+  recipients?: UnderfilledPaceEmailRecipient[]
+}
+
+export type UnderfilledPaceEmailsResponse = {
+  eligible_mentors: UnderfilledPaceEligibleMentor[]
+  sends: UnderfilledPaceEmailSendBatch[]
+}
+
+export type UnderfilledPaceEmailSendResult = {
+  sent?: number
+  recipients?: number
+  subject?: string
+  send_id?: number
+  sent_at?: string
+}
+
+export type UnderfilledPaceReplyPractice = {
+  practice_id: number
+  label: string
+  slots_remaining: number
+  selectable?: boolean
+}
+
+export type UnderfilledPaceReplyGetResponse = {
+  token?: string
+  first_name?: string
+  last_name?: string
+  pace?: string
+  practices?: UnderfilledPaceReplyPractice[]
+  completed?: boolean
+  all_filled?: boolean
+  already_responded?: boolean
+  response_type?: string
+  detail?: string
+  messages?: string[]
+}
+
+export type UnderfilledPaceReplyPutResponse = {
+  completed?: boolean
+  detail?: string
+  messages?: string[]
+  first_name?: string
+}

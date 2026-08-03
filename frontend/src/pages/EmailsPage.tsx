@@ -22,6 +22,7 @@ import {
 import { AppHeader } from '../components/AppHeader.tsx'
 import PracticeReminderEmailsPanel from './PracticeReminderEmailsPanel.tsx'
 import MentorCellPhoneRequestPanel from './MentorCellPhoneRequestPanel.tsx'
+import UnderfilledPaceEmailPanel from './UnderfilledPaceEmailPanel.tsx'
 import { Modal } from '../components/Modal.tsx'
 import {
   buildQuarterTimeOptions,
@@ -38,7 +39,11 @@ import type {
   Season,
 } from '../types.js'
 
-type EmailsTab = 'mentor-practice-request' | 'practice-reminder' | 'missing-cell-phone'
+type EmailsTab =
+  | 'mentor-practice-request'
+  | 'practice-reminder'
+  | 'missing-cell-phone'
+  | 'underfilled-pace'
 type EmailModal = 'create' | 'edit' | 'delete'
 
 type EmailFormState = {
@@ -957,12 +962,23 @@ export default function EmailsPage() {
           >
             Missing Cell Phone
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`emails-tab${activeTab === 'underfilled-pace' ? ' emails-tab-active' : ''}`}
+            aria-selected={activeTab === 'underfilled-pace'}
+            onClick={() => setActiveTab('underfilled-pace')}
+          >
+            Underfilled Pace
+          </button>
         </div>
 
         {activeTab === 'practice-reminder' ? (
           <PracticeReminderEmailsPanel />
         ) : activeTab === 'missing-cell-phone' ? (
           <MentorCellPhoneRequestPanel />
+        ) : activeTab === 'underfilled-pace' ? (
+          <UnderfilledPaceEmailPanel />
         ) : (
           <>
         <p className="muted">

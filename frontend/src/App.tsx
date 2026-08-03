@@ -15,6 +15,9 @@ const PracticeReminderDetailPage = lazy(
 const HomePage = lazy(() => import('./pages/HomePage.tsx'))
 const MentorReplyPage = lazy(() => import('./pages/MentorReplyPage.tsx'))
 const MentorCellPhonePage = lazy(() => import('./pages/MentorCellPhonePage.tsx'))
+const UnderfilledPaceReplyPage = lazy(
+  () => import('./pages/UnderfilledPaceReplyPage.tsx')
+)
 const PublicMentorDirectoryPage = lazy(
   () => import('./pages/PublicMentorDirectoryPage.tsx')
 )
@@ -55,6 +58,14 @@ export default function App() {
           <Route
             path="/mentor-cell-phone/:token"
             element={<MentorCellPhonePage />}
+          />
+          <Route
+            path="/underfilled-pace-reply"
+            element={<UnderfilledPaceReplyPage />}
+          />
+          <Route
+            path="/underfilled-pace-reply/:token"
+            element={<UnderfilledPaceReplyPage />}
           />
           <Route
             path="/mentor-directory/:tab?"

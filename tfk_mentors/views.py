@@ -41,6 +41,9 @@ from .models import (
     ShowUpStatus,
     TfkStaff,
     MentorSwapRequest,
+    UnderfilledPaceMentorEmailSend,
+    UnderfilledPaceMentorEmailToken,
+    UnderfilledPaceResponseType,
     normalize_pace,
 )
 from .practice_swap_notification import (
@@ -2522,3 +2525,251 @@ class MentorCellPhoneUpdateView(APIView):
                 "completed": True,
             }
         )
+
+
+class UnderfilledPaceMentorEmailViewSet(viewsets.ViewSet):
+    """Admin: preview and send underfilled-pace mentor emails."""
+
+    def list(self, request):
+        from .underfilled_pace_email import (
+            eligible_mentors_with_practices,
+            serialize_eligible_mentor,
+        )
+
+        season_raw = request.query_params.get("season")
+        season_id = None
+        if season_raw not in (None, ""):
+            try:
+                season_id = int(season_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not Season.objects.filter(pk=season_id).exists():
+                return Response(
+                    {"detail": "Season not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        if season_id is None:
+            current = Season.objects.filter(is_current=True).first()
+            season_id = current.id if current else None
+
+        mentors = []
+        if season_id is not None:
+            mentors = [
+                serialize_eligible_mentor(entry)
+                for entry in eligible_mentors_with_practices(season_id=season_id)
+            ]
+
+        sends = (
+            UnderfilledPaceMentorEmailSend.objects.select_related("season")
+            .prefetch_related("tokens__mentor")
+            .order_by("-sent_at", "-id")[:50]
+        )
+        send_rows = []
+        for batch in sends:
+            tokens = list(batch.tokens.all())
+            send_rows.append(
+                {
+                    "id": batch.id,
+                    "sent_at": batch.sent_at.isoformat(),
+                    "recipients_emailed_count": batch.recipients_emailed_count,
+                    "season_id": batch.season_id,
+                    "season_year": batch.season.year if batch.season_id else None,
+                    "recipients": [
+                        {
+                            "mentor_id": token.mentor_id,
+                            "first_name": token.mentor.first_name,
+                            "last_name": token.mentor.last_name,
+                            "email": token.mentor.email,
+                            "pace": token.mentor.pace or "",
+                            "practice_count": len(token.practice_ids or []),
+                            "responded_at": (
+                                token.responded_at.isoformat()
+                                if token.responded_at
+                                else None
+                            ),
+                            "response_type": token.response_type or "",
+                        }
+                        for token in tokens
+                    ],
+                }
+            )
+        return Response({"eligible_mentors": mentors, "sends": send_rows})
+
+    @action(detail=False, methods=["post"], url_path="send")
+    def send(self, request):
+        from .underfilled_pace_email import send_underfilled_pace_emails
+
+        season_raw = request.data.get("season")
+        season_id = None
+        if season_raw not in (None, ""):
+            try:
+                season_id = int(season_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Invalid season id."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        if season_id is None:
+            current = Season.objects.filter(is_current=True).first()
+            if current is None:
+                return Response(
+                    {"detail": "No current season is set."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            season_id = current.id
+        dry_run = bool(request.data.get("dry_run"))
+        try:
+            result = send_underfilled_pace_emails(
+                season_id=season_id, dry_run=dry_run
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class UnderfilledPaceMentorReplyView(APIView):
+    """Public page API for underfilled-pace mentor response links."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def _get_token(self, token):
+        try:
+            return UnderfilledPaceMentorEmailToken.objects.select_related(
+                "mentor", "send"
+            ).get(token=token)
+        except UnderfilledPaceMentorEmailToken.DoesNotExist:
+            return None
+
+    def _parse_token(self, raw):
+        if not raw:
+            return None, Response(
+                {"detail": "Token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            return uuid.UUID(str(raw)), None
+        except (TypeError, ValueError):
+            return None, Response(
+                {"detail": "Invalid token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def _completed_response(self, token):
+        from .underfilled_pace_email import (
+            ALL_FILLED_MESSAGE,
+            THANK_YOU_AFTER_SUBMIT,
+        )
+
+        if token.response_type == UnderfilledPaceResponseType.ALL_FILLED:
+            detail = ALL_FILLED_MESSAGE
+        else:
+            detail = THANK_YOU_AFTER_SUBMIT
+        return Response(
+            {
+                "completed": True,
+                "already_responded": True,
+                "response_type": token.response_type,
+                "detail": detail,
+                "messages": [detail],
+                "first_name": token.mentor.first_name,
+            }
+        )
+
+    def get(self, request, token=None):
+        from .underfilled_pace_email import (
+            ALL_FILLED_MESSAGE,
+            build_live_practice_options,
+            maybe_mark_all_filled_on_open,
+        )
+
+        raw = token or request.query_params.get("token")
+        token_uuid, err = self._parse_token(raw)
+        if err is not None:
+            return err
+        row = self._get_token(token_uuid)
+        if row is None:
+            return Response(
+                {"detail": "This link is invalid or has expired."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not row.is_open:
+            return self._completed_response(row)
+
+        options = build_live_practice_options(row)
+        if maybe_mark_all_filled_on_open(row, options):
+            row.refresh_from_db()
+            return Response(
+                {
+                    "completed": True,
+                    "all_filled": True,
+                    "response_type": UnderfilledPaceResponseType.ALL_FILLED,
+                    "detail": ALL_FILLED_MESSAGE,
+                    "messages": [ALL_FILLED_MESSAGE],
+                    "first_name": row.mentor.first_name,
+                    "practices": options,
+                }
+            )
+
+        return Response(
+            {
+                "token": str(row.token),
+                "first_name": row.mentor.first_name,
+                "last_name": row.mentor.last_name,
+                "pace": row.mentor.pace or "",
+                "practices": options,
+                "completed": False,
+            }
+        )
+
+    def put(self, request, token=None):
+        from .underfilled_pace_email import (
+            submit_practice_selections,
+            submit_unavailable,
+        )
+
+        raw = token or request.query_params.get("token") or request.data.get("token")
+        token_uuid, err = self._parse_token(raw)
+        if err is not None:
+            return err
+        row = self._get_token(token_uuid)
+        if row is None:
+            return Response(
+                {"detail": "This link is invalid or has expired."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not row.is_open:
+            return self._completed_response(row)
+
+        unavailable = bool(request.data.get("unavailable"))
+        practice_ids = request.data.get("practice_ids")
+        if unavailable and practice_ids:
+            return Response(
+                {
+                    "detail": (
+                        "Choose either practices to attend or mark yourself "
+                        "unavailable, not both."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            if unavailable:
+                result = submit_unavailable(row)
+            else:
+                if not isinstance(practice_ids, list):
+                    return Response(
+                        {"detail": "practice_ids must be a list."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                result = submit_practice_selections(row, practice_ids)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        result["first_name"] = row.mentor.first_name
+        return Response(result)

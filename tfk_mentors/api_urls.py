@@ -33,6 +33,8 @@ from .views import (
     SiteAuthView,
     SiteConfigView,
     TfkStaffViewSet,
+    UnderfilledPaceMentorEmailViewSet,
+    UnderfilledPaceMentorReplyView,
 )
 
 router = DefaultRouter()
@@ -61,6 +63,11 @@ router.register(
     "mentor-cell-phone-request",
     MentorCellPhoneRequestViewSet,
     basename="mentor-cell-phone-request",
+)
+router.register(
+    "underfilled-pace-email",
+    UnderfilledPaceMentorEmailViewSet,
+    basename="underfilled-pace-email",
 )
 router.register(
     "scheduled-email",
@@ -110,6 +117,16 @@ urlpatterns = [
         "mentor-cell-phone-update/<uuid:token>/",
         MentorCellPhoneUpdateView.as_view(),
         name="mentor-cell-phone-update",
+    ),
+    path(
+        "underfilled-pace-reply/",
+        UnderfilledPaceMentorReplyView.as_view(),
+        name="underfilled-pace-reply-query",
+    ),
+    path(
+        "underfilled-pace-reply/<uuid:token>/",
+        UnderfilledPaceMentorReplyView.as_view(),
+        name="underfilled-pace-reply",
     ),
     path(
         "practice/<int:pk>/mentor-replies/",

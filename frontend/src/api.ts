@@ -37,6 +37,10 @@ import type {
   MentorCellPhoneSendResult,
   MentorCellPhoneUpdateGetResponse,
   MentorCellPhoneUpdatePutResponse,
+  UnderfilledPaceEmailsResponse,
+  UnderfilledPaceEmailSendResult,
+  UnderfilledPaceReplyGetResponse,
+  UnderfilledPaceReplyPutResponse,
 } from './types.js'
 
 export type { Id, JsonObject, Season, Practice, Mentor, Coach, TfkStaff } from './types.js'
@@ -943,6 +947,94 @@ export async function putMentorCellPhoneUpdate(
 ): Promise<MentorCellPhoneUpdatePutResponse> {
   const res = await fetch(
     `${MENTOR_CELL_PHONE_UPDATE}${encodeURIComponent(token)}/`,
+    {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...csrfHeaders(),
+      },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!res.ok) {
+    throw new ApiError(await parseError(res), { status: res.status })
+  }
+  return res.json()
+}
+
+const UNDERFILLED_PACE_EMAIL = apiPath('/api/underfilled-pace-email/')
+const UNDERFILLED_PACE_REPLY = apiPath('/api/underfilled-pace-reply/')
+
+export async function fetchUnderfilledPaceEmails(
+  seasonId?: Id | null
+): Promise<UnderfilledPaceEmailsResponse> {
+  const qs =
+    seasonId !== undefined && seasonId !== null && seasonId !== ''
+      ? `?season=${encodeURIComponent(String(seasonId))}`
+      : ''
+  const res = await fetch(`${UNDERFILLED_PACE_EMAIL}${qs}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function sendUnderfilledPaceEmails(
+  body: { season?: Id | null; dry_run?: boolean } = {}
+): Promise<UnderfilledPaceEmailSendResult> {
+  const payload: JsonObject = {}
+  if (body.season !== undefined && body.season !== null && body.season !== '') {
+    payload.season = Number(body.season)
+  }
+  if (body.dry_run) payload.dry_run = true
+  const res = await fetch(`${UNDERFILLED_PACE_EMAIL}send/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...csrfHeaders(),
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return res.json()
+}
+
+export async function fetchUnderfilledPaceReply(
+  token: string
+): Promise<UnderfilledPaceReplyGetResponse> {
+  const res = await fetch(
+    `${UNDERFILLED_PACE_REPLY}${encodeURIComponent(token)}/`,
+    { credentials: 'include' }
+  )
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    let body: unknown = null
+    try {
+      body = await res.json()
+      if (
+        body &&
+        typeof body === 'object' &&
+        'detail' in body &&
+        (body as { detail?: unknown }).detail
+      ) {
+        detail = String((body as { detail: unknown }).detail)
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(detail, { status: res.status, body })
+  }
+  return res.json()
+}
+
+export async function putUnderfilledPaceReply(
+  token: string,
+  body: { practice_ids?: number[]; unavailable?: boolean }
+): Promise<UnderfilledPaceReplyPutResponse> {
+  const res = await fetch(
+    `${UNDERFILLED_PACE_REPLY}${encodeURIComponent(token)}/`,
     {
       method: 'PUT',
       credentials: 'include',
