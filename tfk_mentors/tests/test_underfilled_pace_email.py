@@ -81,21 +81,31 @@ class UnderfilledPaceEmailTests(TestCase):
         )
         self.practice.mentors.add(self.already_assigned)
 
-    def test_list_eligible_at_practice_mentors_for_underfilled_pace(self):
+    def test_list_returns_sends_without_eligible_preview(self):
         response = self.client.get(
             f"/api/underfilled-pace-email/?season={self.season.id}"
         )
         self.assertEqual(response.status_code, 200)
-        ids = {row["id"] for row in response.data["eligible_mentors"]}
+        self.assertIn("sends", response.data)
+        self.assertNotIn("eligible_mentors", response.data)
+        self.assertEqual(response.data["sends"], [])
+
+    @patch("tfk_mentors.underfilled_pace_email._verify_email_delivery")
+    def test_dry_run_lists_eligible_at_practice_mentors(self, _mock_verify):
+        response = self.client.post(
+            "/api/underfilled-pace-email/send/",
+            {"season": self.season.id, "dry_run": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        ids = {row["id"] for row in response.data["mentors"]}
         self.assertIn(self.eligible.id, ids)
         self.assertIn(self.other_pace.id, ids)
         self.assertNotIn(self.already_assigned.id, ids)
         self.assertNotIn(self.remote.id, ids)
 
         eligible_row = next(
-            row
-            for row in response.data["eligible_mentors"]
-            if row["id"] == self.eligible.id
+            row for row in response.data["mentors"] if row["id"] == self.eligible.id
         )
         self.assertEqual(len(eligible_row["practices"]), 1)
         self.assertEqual(

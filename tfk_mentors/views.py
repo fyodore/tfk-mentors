@@ -2531,13 +2531,8 @@ class UnderfilledPaceMentorEmailViewSet(viewsets.ViewSet):
     """Admin: preview and send underfilled-pace mentor emails."""
 
     def list(self, request):
-        from .underfilled_pace_email import (
-            eligible_mentors_with_practices,
-            serialize_eligible_mentor,
-        )
-
+        """Return recent sends only; eligible mentors are computed at send time."""
         season_raw = request.query_params.get("season")
-        season_id = None
         if season_raw not in (None, ""):
             try:
                 season_id = int(season_raw)
@@ -2551,17 +2546,6 @@ class UnderfilledPaceMentorEmailViewSet(viewsets.ViewSet):
                     {"detail": "Season not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-
-        if season_id is None:
-            current = Season.objects.filter(is_current=True).first()
-            season_id = current.id if current else None
-
-        mentors = []
-        if season_id is not None:
-            mentors = [
-                serialize_eligible_mentor(entry)
-                for entry in eligible_mentors_with_practices(season_id=season_id)
-            ]
 
         sends = (
             UnderfilledPaceMentorEmailSend.objects.select_related("season")
@@ -2597,7 +2581,7 @@ class UnderfilledPaceMentorEmailViewSet(viewsets.ViewSet):
                     ],
                 }
             )
-        return Response({"eligible_mentors": mentors, "sends": send_rows})
+        return Response({"sends": send_rows})
 
     @action(detail=False, methods=["post"], url_path="send")
     def send(self, request):

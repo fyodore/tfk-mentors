@@ -603,22 +603,6 @@ export type MentorCellPhoneUpdatePutResponse = {
   completed?: boolean
 }
 
-export type UnderfilledPaceEligiblePractice = {
-  practice_id: number
-  label: string
-  slots_remaining: number
-}
-
-export type UnderfilledPaceEligibleMentor = {
-  id: number
-  first_name: string
-  last_name: string
-  email?: string
-  type?: string
-  pace?: string
-  practices?: UnderfilledPaceEligiblePractice[]
-}
-
 export type UnderfilledPaceEmailRecipient = {
   mentor_id: number
   first_name: string
@@ -640,7 +624,6 @@ export type UnderfilledPaceEmailSendBatch = {
 }
 
 export type UnderfilledPaceEmailsResponse = {
-  eligible_mentors: UnderfilledPaceEligibleMentor[]
   sends: UnderfilledPaceEmailSendBatch[]
 }
 
