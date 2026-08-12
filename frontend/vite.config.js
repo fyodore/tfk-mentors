@@ -1,9 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import shopify from 'vite-plugin-shopify'
+
+const enableShopifyPlugin = process.env.VITE_SHOPIFY_PLUGIN === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    ...(enableShopifyPlugin
+      ? shopify({
+          themeRoot: './',
+          sourceCodeDir: 'src',
+          entrypointsDir: 'src/entrypoints',
+          additionalEntrypoints: ['src/main.tsx'],
+        })
+      : []),
+  ],
   build: {
     chunkSizeWarningLimit: 900,
   },
