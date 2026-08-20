@@ -1,0 +1,22 @@
+[run]
+branch = True
+source = tfk_mentors,tasks
+omit =
+    */migrations/*
+    */tests/*
+    tfk_mentors/production.py
+    tfk_mentors/wsgi.py
+    tfk_mentors/asgi.py
+    tfk_mentors/main.py
+    tfk_mentors/test_settings.py
+    tfk_mentors/settings.py
+    */admin.py
+
+[report]
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if TYPE_CHECKING:
+    raise NotImplementedError

@@ -11,7 +11,7 @@ import {
 } from '../api'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { Modal } from '../components/Modal.tsx'
-import { downloadContactIcs } from '../contactVcard.js'
+import { downloadContactVCard } from '../contactVcard.js'
 import {
   currentSeasonFromList,
   sortSeasonsByYearDesc,
@@ -603,7 +603,7 @@ export default function MentorsPage() {
                       type="button"
                       className="btn btn-text"
                       onClick={() =>
-                        downloadContactIcs({
+                        downloadContactVCard({
                           firstName: m.first_name,
                           lastName: m.last_name,
                           phone: m.cell_phone,
@@ -613,7 +613,7 @@ export default function MentorsPage() {
                         })
                       }
                     >
-                      Download ICS
+                      Download VCF
                     </button>
                   ) : (
                     <span

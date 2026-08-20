@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from tfk_mentors.cell_phone_request import mentors_assigned_without_cell_phone
 from tfk_mentors.models import (
     Mentor,
     MentorCellPhoneRequestSend,
@@ -135,6 +136,27 @@ class MentorCellPhoneRequestTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(MentorCellPhoneRequestSend.objects.count(), 0)
+
+    def test_no_upcoming_assigned_mentors_returns_empty_queryset(self):
+        empty_season = Season.objects.create(year=2099)
+        result = mentors_assigned_without_cell_phone(season_id=empty_season.id)
+        self.assertEqual(list(result), [])
+
+    def test_send_dry_run_does_not_create_batch_or_send_email(self):
+        response = self.client.post(
+            "/api/mentor-cell-phone-request/send/",
+            {"season": self.season.id, "dry_run": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sent"], 0)
+        self.assertEqual(response.data["recipients"], 1)
+        self.assertEqual(
+            response.data["subject"], "TFK Mentor information needed"
+        )
+        self.assertIn("sample_body", response.data)
+        self.assertEqual(len(mail.outbox), 0)
         self.assertEqual(MentorCellPhoneRequestSend.objects.count(), 0)
 
     def test_excludes_mentors_only_assigned_to_past_practices(self):
