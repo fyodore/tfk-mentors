@@ -9,6 +9,7 @@ import {
   patchCoach,
 } from '../api'
 import { AppHeader } from '../components/AppHeader.tsx'
+import { CoachPracticeHover } from '../components/CoachPracticeHover.tsx'
 import { Modal } from '../components/Modal.tsx'
 import { downloadContactVCard } from '../contactVcard.js'
 import {
@@ -506,7 +507,9 @@ export default function CoachesPage() {
               <li key={c.id} className="practice-row coaches-list-row">
                 <div className="practice-row-main">
                   <span className="practice-date">
-                    {c.first_name} {c.last_name}
+                    <CoachPracticeHover coachId={c.id}>
+                      {c.first_name} {c.last_name}
+                    </CoachPracticeHover>
                   </span>
                   <span className="practice-race muted">{c.email}</span>
                   <span className="muted">

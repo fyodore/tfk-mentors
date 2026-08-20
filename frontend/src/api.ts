@@ -2,6 +2,7 @@ import { apiPath } from './config.js'
 import type {
   Coach,
   CoachPracticeAssignment,
+  CoachPracticeRow,
   Id,
   JsonObject,
   Mentor,
@@ -265,6 +266,15 @@ export async function fetchCoaches(): Promise<Coach[]> {
   if (!res.ok) throw new Error(await parseError(res))
   const data = await res.json()
   return normalizeCoachList(data)
+}
+
+export async function fetchCoachPractices(id: Id): Promise<CoachPracticeRow[]> {
+  const res = await fetch(`${COACH_LIST}${id}/practices/`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  const data = await res.json()
+  return Array.isArray(data) ? (data as CoachPracticeRow[]) : []
 }
 
 export async function createCoach(body: JsonObject) {

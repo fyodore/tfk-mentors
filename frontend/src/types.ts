@@ -29,6 +29,17 @@ export type CoachPracticeAssignment = {
   updated_at?: string
 }
 
+export type CoachPracticeRow = {
+  practice_id: number
+  date?: string | null
+  season_id?: number | null
+  season_year?: number | null
+  nyrr_race?: string | null
+  start_location?: string | null
+  full_practice?: boolean
+  pace?: string
+}
+
 export type PracticeMentorSwapResult = {
   incoming_mentor: PracticeMentorReply
   show_up?: string

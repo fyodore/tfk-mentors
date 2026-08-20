@@ -44,3 +44,23 @@ class CoachPracticeAssignmentTests(TestCase):
             practice=self.practice,
         )
         self.assertEqual(assignment.pace, "")
+
+    def test_coach_practices_endpoint_lists_assignments(self):
+        CoachPracticeAssignment.objects.create(
+            coach=self.coach,
+            practice=self.practice,
+            pace="8-9",
+        )
+        response = self.client.get(f"/api/coach/{self.coach.id}/practices/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        row = response.data[0]
+        self.assertEqual(row["practice_id"], self.practice.id)
+        self.assertEqual(row["pace"], "8-9")
+        self.assertEqual(row["season_id"], self.season.id)
+        self.assertEqual(row["season_year"], self.season.year)
+
+    def test_coach_practices_endpoint_empty_when_unassigned(self):
+        response = self.client.get(f"/api/coach/{self.coach.id}/practices/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])

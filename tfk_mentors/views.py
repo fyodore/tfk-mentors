@@ -106,6 +106,7 @@ from .serializers import (
     practice_available_mentor_payloads,
     build_practice_attendance_payload,
     build_archived_practice_attendance_row,
+    build_coach_practice_rows,
     build_mentor_practice_rows,
     build_public_mentor_directory,
     build_public_mentor_directory_practices,
@@ -340,6 +341,12 @@ class CoachViewSet(viewsets.ModelViewSet):
             },
             status=code,
         )
+
+    @action(detail=True, methods=["get"], url_path="practices")
+    def practices(self, request, pk=None):
+        """Practices this coach is assigned to."""
+        coach = self.get_object()
+        return Response(build_coach_practice_rows(coach))
 
 
 class MentorViewSet(viewsets.ModelViewSet):

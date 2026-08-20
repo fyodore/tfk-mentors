@@ -319,6 +319,31 @@ def build_mentor_practice_rows(mentor, *, show_to_mentors_only=False):
     return rows
 
 
+def build_coach_practice_rows(coach):
+    """Practices the coach is assigned to, ordered by date."""
+    assignments = (
+        CoachPracticeAssignment.objects.filter(coach=coach)
+        .select_related("practice", "practice__season")
+        .order_by("practice__date", "practice__id")
+    )
+    rows = []
+    for assignment in assignments:
+        practice = assignment.practice
+        rows.append(
+            {
+                "practice_id": practice.id,
+                "date": practice.date.isoformat() if practice.date else None,
+                "season_id": practice.season_id,
+                "season_year": practice.season.year if practice.season_id else None,
+                "nyrr_race": practice.nyrr_race or "",
+                "start_location": practice.start_location or "",
+                "full_practice": practice.full_practice,
+                "pace": assignment.pace or "",
+            }
+        )
+    return rows
+
+
 def build_public_mentor_directory():
     """Mentor summaries for the public directory (practices loaded on expand)."""
     mentors = list(
