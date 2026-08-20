@@ -223,3 +223,6 @@ __marimo__/
 
 /tfk_mentors/.env.dev
 tfk_mentors/production.py
+
+tfk_mentors/migrations/*.py
+!tfk_mentors/migrations/__init__.py
