@@ -585,9 +585,82 @@ def due_practice_reminder_emails():
     )
 
 
+ALREADY_SENT_MESSAGE = "This practice reminder has already been sent."
+
+
+def practice_reminder_already_sent(reminder) -> bool:
+    """True when this reminder was claimed/sent, or already has delivery records."""
+    if reminder.task_completed_at is not None:
+        return True
+    return PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists()
+
+
+def _mark_complete_from_existing_records(reminder, *, now=None):
+    """Heal a reminder that has send history but was never marked complete."""
+    if reminder.task_completed_at is not None:
+        return reminder
+    now = now or timezone.now()
+    reminder.task_completed_at = now
+    reminder.recipients_emailed_count = PracticeReminderSendRecord.objects.filter(
+        reminder_id=reminder.pk
+    ).count()
+    reminder.save(
+        update_fields=[
+            "task_completed_at",
+            "recipients_emailed_count",
+            "updated_at",
+        ]
+    )
+    return reminder
+
+
+def _reject_if_already_sent(reminder, *, dry_run=False, now=None):
+    if reminder.task_completed_at is not None:
+        raise ValueError(ALREADY_SENT_MESSAGE)
+    if not PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists():
+        return
+    if not dry_run:
+        _mark_complete_from_existing_records(reminder, now=now)
+    raise ValueError(ALREADY_SENT_MESSAGE)
+
+
+def _claim_practice_reminder_for_send(reminder, *, now):
+    """
+    Atomically claim a reminder so concurrent cron/manual sends cannot resend it.
+
+    Marks task_completed_at before any email leaves. Holding send_mail inside a
+    DB transaction previously meant a mid-send failure rolled back completion
+    while messages had already gone out — and the next cron run blasted again.
+    """
+    with transaction.atomic():
+        locked = (
+            PracticeReminderEmail.objects.select_for_update()
+            .select_related(
+                "season",
+                "anchor_practice",
+                "practice_one",
+                "practice_two",
+            )
+            .get(pk=reminder.pk)
+        )
+        if practice_reminder_already_sent(locked):
+            _mark_complete_from_existing_records(locked, now=now)
+            raise ValueError(ALREADY_SENT_MESSAGE)
+
+        locked.task_completed_at = now
+        locked.recipients_emailed_count = 0
+        locked.save(
+            update_fields=[
+                "task_completed_at",
+                "recipients_emailed_count",
+                "updated_at",
+            ]
+        )
+    return locked
+
+
 def send_practice_reminder(reminder, *, dry_run=False):
-    if reminder.task_completed_at:
-        raise ValueError("This practice reminder has already been sent.")
+    _reject_if_already_sent(reminder, dry_run=dry_run)
 
     recipients = collect_recipients(reminder)
     if not recipients:
@@ -604,38 +677,32 @@ def send_practice_reminder(reminder, *, dry_run=False):
 
     _verify_email_delivery()
 
-    sent_count = 0
     now = timezone.now()
-    with transaction.atomic():
-        for recipient in recipients:
-            subject, body = render_reminder_for_recipient(reminder, recipient)
-            send_mail(
-                subject=subject,
-                message=body,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient.email],
-                fail_silently=False,
-            )
-            PracticeReminderSendRecord.objects.create(
-                reminder=reminder,
-                recipient_email=recipient.email,
-                recipient_first_name=recipient.first_name,
-                recipient_last_name=recipient.last_name,
-                recipient_kind=recipient.kind,
-                rendered_subject=subject,
-                rendered_body=body,
-                sent_at=now,
-            )
-            sent_count += 1
+    locked = _claim_practice_reminder_for_send(reminder, now=now)
 
-        reminder.task_completed_at = now
-        reminder.recipients_emailed_count = sent_count
-        reminder.save(
-            update_fields=[
-                "task_completed_at",
-                "recipients_emailed_count",
-                "updated_at",
-            ]
+    sent_count = 0
+    for recipient in recipients:
+        subject, body = render_reminder_for_recipient(locked, recipient)
+        send_mail(
+            subject=subject,
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient.email],
+            fail_silently=False,
         )
+        PracticeReminderSendRecord.objects.create(
+            reminder=locked,
+            recipient_email=recipient.email,
+            recipient_first_name=recipient.first_name,
+            recipient_last_name=recipient.last_name,
+            recipient_kind=recipient.kind,
+            rendered_subject=subject,
+            rendered_body=body,
+            sent_at=now,
+        )
+        sent_count += 1
+
+    locked.recipients_emailed_count = sent_count
+    locked.save(update_fields=["recipients_emailed_count", "updated_at"])
 
     return {"sent": sent_count, "recipients": sent_count}

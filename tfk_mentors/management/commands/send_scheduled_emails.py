@@ -87,6 +87,12 @@ class Command(BaseCommand):
             )
             try:
                 result = send_practice_reminder(reminder, dry_run=dry_run)
+            except ValueError as exc:
+                # Concurrent cron/manual send may have claimed this row first.
+                if "already been sent" in str(exc):
+                    self.stdout.write(f"Skipped {label}: {exc}")
+                    continue
+                raise CommandError(f"{label}: {exc}") from exc
             except Exception as exc:
                 raise CommandError(f"{label}: {exc}") from exc
 

@@ -176,3 +176,19 @@ class SendScheduledEmailsCommandTests(TestCase):
             self._run()
         self.assertIn(f"PracticeReminderEmail {self.due_reminder.pk}", str(ctx.exception))
         self.assertIn("no recipients", str(ctx.exception))
+
+    @patch(f"{MODULE}.send_scheduled_email")
+    @patch(
+        f"{MODULE}.send_practice_reminder",
+        side_effect=ValueError("This practice reminder has already been sent."),
+    )
+    def test_practice_reminder_already_sent_is_skipped(
+        self, mock_send_reminder, mock_send_email
+    ):
+        mock_send_email.return_value = {"sent": 1, "recipients": 1, "subject": "Subj"}
+
+        output = self._run()
+
+        self.assertIn("Skipped PracticeReminderEmail", output)
+        self.assertIn("already been sent", output)
+        self.assertIn("Sent ScheduledEmail", output)
