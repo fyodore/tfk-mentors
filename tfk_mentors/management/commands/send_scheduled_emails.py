@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from tfk_mentors.email_sending import due_scheduled_emails, send_scheduled_email
 from tfk_mentors.models import ScheduledEmail
@@ -55,7 +56,9 @@ class Command(BaseCommand):
             reminder_rows = list(due_practice_reminder_emails())
 
         if not rows and not reminder_rows:
-            self.stdout.write("No scheduled emails due.")
+            self.stdout.write(
+                f"{timezone.now().isoformat()} No scheduled emails due."
+            )
             return
 
         for scheduled in rows:

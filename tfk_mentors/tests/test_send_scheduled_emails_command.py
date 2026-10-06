@@ -68,7 +68,10 @@ class SendScheduledEmailsCommandTests(TestCase):
 
         output = self._run()
 
-        self.assertIn("No scheduled emails due.", output)
+        self.assertRegex(
+            output,
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.* No scheduled emails due\.",
+        )
 
     @patch(f"{MODULE}.send_practice_reminder")
     @patch(f"{MODULE}.send_scheduled_email")
