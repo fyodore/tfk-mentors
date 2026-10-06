@@ -364,7 +364,7 @@ class SendPracticeReminderEdgeCaseTests(TestCase):
         self.assertIn("already been sent", str(ctx.exception))
 
     def test_raises_when_send_records_exist_even_if_not_marked_complete(self):
-        """Partial/failed prior attempt left delivery history — do not resend."""
+        """All recipients already recorded — heal completion and refuse resend."""
         TfkStaff.objects.create(
             first_name="Sam", last_name="Staff", email="samstaffheal@example.com"
         )
@@ -378,9 +378,9 @@ class SendPracticeReminderEdgeCaseTests(TestCase):
         )
         PracticeReminderSendRecord.objects.create(
             reminder=reminder,
-            recipient_email="already@example.com",
-            recipient_first_name="Al",
-            recipient_last_name="Ready",
+            recipient_email="samstaffheal@example.com",
+            recipient_first_name="Sam",
+            recipient_last_name="Staff",
             recipient_kind=PracticeReminderRecipientKind.STAFF,
             rendered_subject="Subject",
             rendered_body="Body",
@@ -392,6 +392,48 @@ class SendPracticeReminderEdgeCaseTests(TestCase):
         reminder.refresh_from_db()
         self.assertIsNotNone(reminder.task_completed_at)
         self.assertEqual(reminder.recipients_emailed_count, 1)
+
+    @patch("tfk_mentors.practice_reminder._verify_email_delivery")
+    def test_resumes_unsent_recipients_after_partial_failure(self, _mock_verify):
+        from django.core import mail
+
+        TfkStaff.objects.create(
+            first_name="Sam", last_name="Staff", email="samstaffresume@example.com"
+        )
+        Coach.objects.create(
+            first_name="Casey",
+            last_name="Coach",
+            email="caseyresume@example.com",
+        ).seasons.add(self.season)
+        reminder = PracticeReminderEmail.objects.create(
+            season=self.season,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+            anchor_practice=self.practice,
+            practice_one=self.practice,
+            subject="Subject",
+            body_text="Dear {{first_name}},",
+            task_completed_at=timezone.now(),
+            recipients_emailed_count=0,
+        )
+        PracticeReminderSendRecord.objects.create(
+            reminder=reminder,
+            recipient_email="samstaffresume@example.com",
+            recipient_first_name="Sam",
+            recipient_last_name="Staff",
+            recipient_kind=PracticeReminderRecipientKind.STAFF,
+            rendered_subject="Subject",
+            rendered_body="Body",
+            sent_at=timezone.now(),
+        )
+
+        result = send_practice_reminder(reminder)
+
+        self.assertEqual(result["sent"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["caseyresume@example.com"])
+        reminder.refresh_from_db()
+        self.assertIsNotNone(reminder.task_completed_at)
+        self.assertEqual(reminder.recipients_emailed_count, 2)
 
     @patch("tfk_mentors.practice_reminder._verify_email_delivery")
     def test_second_send_refuses_after_successful_send(self, _mock_verify):

@@ -569,11 +569,20 @@ def refresh_practice_reminder_templates_for_season(season):
 
 
 def due_practice_reminder_emails():
+    from django.db.models import Q
+
     return (
         PracticeReminderEmail.objects.filter(
-            task_completed_at__isnull=True,
             scheduled_send_at__isnull=False,
             scheduled_send_at__lte=timezone.now(),
+        )
+        .filter(
+            # Never finished, or claimed with recipients_emailed_count still 0
+            # (in-progress crash / older builds that left the claim set after a
+            # partial or first-message failure). Single-cron deploys should not
+            # overlap long enough for a second worker to also claim these.
+            Q(task_completed_at__isnull=True)
+            | Q(task_completed_at__isnull=False, recipients_emailed_count=0)
         )
         .select_related(
             "season",
@@ -588,17 +597,44 @@ def due_practice_reminder_emails():
 ALREADY_SENT_MESSAGE = "This practice reminder has already been sent."
 
 
+def _already_emailed_addresses(reminder):
+    return {
+        (email or "").strip().lower()
+        for email in PracticeReminderSendRecord.objects.filter(
+            reminder_id=reminder.pk
+        ).values_list("recipient_email", flat=True)
+    }
+
+
+def unsent_recipients_for_reminder(reminder, recipients=None):
+    """Recipients who do not yet have a PracticeReminderSendRecord."""
+    recipients = (
+        list(recipients) if recipients is not None else collect_recipients(reminder)
+    )
+    already = _already_emailed_addresses(reminder)
+    return [
+        recipient
+        for recipient in recipients
+        if (recipient.email or "").strip().lower() not in already
+    ]
+
+
 def practice_reminder_already_sent(reminder) -> bool:
-    """True when this reminder was claimed/sent, or already has delivery records."""
-    if reminder.task_completed_at is not None:
+    """True when this reminder has no remaining recipients to email."""
+    if reminder.task_completed_at is not None and not unsent_recipients_for_reminder(
+        reminder
+    ):
         return True
-    return PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists()
+    if reminder.task_completed_at is not None:
+        return False
+    recipients = collect_recipients(reminder)
+    if not recipients:
+        return PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists()
+    return not unsent_recipients_for_reminder(reminder, recipients)
 
 
 def _mark_complete_from_existing_records(reminder, *, now=None):
     """Heal a reminder that has send history but was never marked complete."""
-    if reminder.task_completed_at is not None:
-        return reminder
     now = now or timezone.now()
     reminder.task_completed_at = now
     reminder.recipients_emailed_count = PracticeReminderSendRecord.objects.filter(
@@ -615,13 +651,16 @@ def _mark_complete_from_existing_records(reminder, *, now=None):
 
 
 def _reject_if_already_sent(reminder, *, dry_run=False, now=None):
+    pending = unsent_recipients_for_reminder(reminder)
+    if pending:
+        return pending
+    if PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists():
+        if not dry_run:
+            _mark_complete_from_existing_records(reminder, now=now)
+        raise ValueError(ALREADY_SENT_MESSAGE)
     if reminder.task_completed_at is not None:
         raise ValueError(ALREADY_SENT_MESSAGE)
-    if not PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).exists():
-        return
-    if not dry_run:
-        _mark_complete_from_existing_records(reminder, now=now)
-    raise ValueError(ALREADY_SENT_MESSAGE)
+    return pending
 
 
 def _claim_practice_reminder_for_send(reminder, *, now):
@@ -631,6 +670,10 @@ def _claim_practice_reminder_for_send(reminder, *, now):
     Marks task_completed_at before any email leaves. Holding send_mail inside a
     DB transaction previously meant a mid-send failure rolled back completion
     while messages had already gone out — and the next cron run blasted again.
+
+    Mid-send failures that leave some recipients unsent clear task_completed_at
+    again (see send_practice_reminder) so cron can resume without duplicating
+    addresses that already have send records.
     """
     with transaction.atomic():
         # of=("self",): practice_two is nullable, so select_related uses a LEFT
@@ -646,34 +689,54 @@ def _claim_practice_reminder_for_send(reminder, *, now):
             )
             .get(pk=reminder.pk)
         )
-        if practice_reminder_already_sent(locked):
+        pending = unsent_recipients_for_reminder(locked)
+        if not pending:
             _mark_complete_from_existing_records(locked, now=now)
             raise ValueError(ALREADY_SENT_MESSAGE)
 
-        locked.task_completed_at = now
-        locked.recipients_emailed_count = 0
-        locked.save(
-            update_fields=[
-                "task_completed_at",
-                "recipients_emailed_count",
-                "updated_at",
-            ]
-        )
+        if locked.task_completed_at is None:
+            locked.task_completed_at = now
+            if locked.recipients_emailed_count is None:
+                locked.recipients_emailed_count = 0
+            locked.save(
+                update_fields=[
+                    "task_completed_at",
+                    "recipients_emailed_count",
+                    "updated_at",
+                ]
+            )
     return locked
 
 
-def send_practice_reminder(reminder, *, dry_run=False):
-    _reject_if_already_sent(reminder, dry_run=dry_run)
+def _release_incomplete_practice_reminder(reminder):
+    """Allow cron to resume after a mid-send failure (quota, network, etc.)."""
+    recorded = PracticeReminderSendRecord.objects.filter(reminder_id=reminder.pk).count()
+    PracticeReminderEmail.objects.filter(pk=reminder.pk).update(
+        task_completed_at=None,
+        recipients_emailed_count=recorded,
+        updated_at=timezone.now(),
+    )
 
+
+def send_practice_reminder(reminder, *, dry_run=False):
     recipients = collect_recipients(reminder)
+    pending = unsent_recipients_for_reminder(reminder, recipients)
+
+    if reminder.task_completed_at is not None and not pending:
+        raise ValueError(ALREADY_SENT_MESSAGE)
+
     if not recipients:
         raise ValueError("No recipients found for this practice reminder.")
 
+    pending = _reject_if_already_sent(reminder, dry_run=dry_run)
+    if not pending:
+        raise ValueError(ALREADY_SENT_MESSAGE)
+
     if dry_run:
-        sample = recipients[0]
+        sample = pending[0]
         subject, body = render_reminder_for_recipient(reminder, sample)
         return {
-            "recipients": len(recipients),
+            "recipients": len(pending),
             "subject": subject,
             "sample_body": body,
         }
@@ -682,30 +745,46 @@ def send_practice_reminder(reminder, *, dry_run=False):
 
     now = timezone.now()
     locked = _claim_practice_reminder_for_send(reminder, now=now)
+    pending = unsent_recipients_for_reminder(locked, collect_recipients(locked))
+    if not pending:
+        _mark_complete_from_existing_records(locked, now=now)
+        raise ValueError(ALREADY_SENT_MESSAGE)
 
     sent_count = 0
-    for recipient in recipients:
-        subject, body = render_reminder_for_recipient(locked, recipient)
-        send_mail(
-            subject=subject,
-            message=body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[recipient.email],
-            fail_silently=False,
-        )
-        PracticeReminderSendRecord.objects.create(
-            reminder=locked,
-            recipient_email=recipient.email,
-            recipient_first_name=recipient.first_name,
-            recipient_last_name=recipient.last_name,
-            recipient_kind=recipient.kind,
-            rendered_subject=subject,
-            rendered_body=body,
-            sent_at=now,
-        )
-        sent_count += 1
+    try:
+        for recipient in pending:
+            subject, body = render_reminder_for_recipient(locked, recipient)
+            send_mail(
+                subject=subject,
+                message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient.email],
+                fail_silently=False,
+            )
+            PracticeReminderSendRecord.objects.create(
+                reminder=locked,
+                recipient_email=recipient.email,
+                recipient_first_name=recipient.first_name,
+                recipient_last_name=recipient.last_name,
+                recipient_kind=recipient.kind,
+                rendered_subject=subject,
+                rendered_body=body,
+                sent_at=now,
+            )
+            sent_count += 1
+            locked.recipients_emailed_count = (
+                PracticeReminderSendRecord.objects.filter(reminder_id=locked.pk).count()
+            )
+            locked.save(update_fields=["recipients_emailed_count", "updated_at"])
+    except Exception:
+        _release_incomplete_practice_reminder(locked)
+        raise
 
-    locked.recipients_emailed_count = sent_count
-    locked.save(update_fields=["recipients_emailed_count", "updated_at"])
+    total = PracticeReminderSendRecord.objects.filter(reminder_id=locked.pk).count()
+    locked.task_completed_at = now
+    locked.recipients_emailed_count = total
+    locked.save(
+        update_fields=["task_completed_at", "recipients_emailed_count", "updated_at"]
+    )
 
-    return {"sent": sent_count, "recipients": sent_count}
+    return {"sent": sent_count, "recipients": total}

@@ -3,6 +3,7 @@
 import base64
 import json
 import smtplib
+import time
 from email.message import EmailMessage
 from urllib.error import HTTPError
 from urllib.request import Request as UrlRequest
@@ -16,6 +17,39 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 GMAIL_SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+
+# messages.send costs 100 quota units; default user cap is 6000 units/min (~60/min).
+_DEFAULT_SEND_MIN_INTERVAL_SECONDS = 1.1
+_DEFAULT_SEND_MAX_RETRIES = 6
+
+
+def _gmail_send_min_interval_seconds():
+    raw = getattr(settings, "GMAIL_SEND_MIN_INTERVAL_SECONDS", None)
+    if raw is None or raw == "":
+        return _DEFAULT_SEND_MIN_INTERVAL_SECONDS
+    return max(0.0, float(raw))
+
+
+def _gmail_send_max_retries():
+    raw = getattr(settings, "GMAIL_SEND_MAX_RETRIES", None)
+    if raw is None or raw == "":
+        return _DEFAULT_SEND_MAX_RETRIES
+    return max(0, int(raw))
+
+
+def _is_gmail_rate_limit_error(status_code: int, detail: str) -> bool:
+    if status_code not in (403, 429):
+        return False
+    lowered = (detail or "").lower()
+    return any(
+        token in lowered
+        for token in (
+            "ratelimitexceeded",
+            "rate_limit_exceeded",
+            "quota exceeded",
+            "usagelimitsexceeded",
+        )
+    )
 
 
 def gmail_oauth_configured():
@@ -57,24 +91,33 @@ def send_gmail_api_message(*, access_token, from_email, to_addrs, subject, body)
     msg["To"] = ", ".join(to_addrs)
     msg.set_content(body)
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    payload = json.dumps({"raw": raw}).encode()
+    timeout = getattr(settings, "EMAIL_TIMEOUT", 30)
+    max_retries = _gmail_send_max_retries()
 
-    req = UrlRequest(
-        GMAIL_SEND_URL,
-        data=json.dumps({"raw": raw}).encode(),
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=getattr(settings, "EMAIL_TIMEOUT", 30)) as resp:
-            resp.read()
-    except HTTPError as exc:
-        detail = exc.read().decode(errors="replace")
-        raise RuntimeError(
-            f"Gmail API send failed ({exc.code}): {detail}"
-        ) from exc
+    for attempt in range(max_retries + 1):
+        req = UrlRequest(
+            GMAIL_SEND_URL,
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                resp.read()
+            return
+        except HTTPError as exc:
+            detail = exc.read().decode(errors="replace")
+            if attempt < max_retries and _is_gmail_rate_limit_error(exc.code, detail):
+                # ~60s window for per-minute quota; backoff up to that.
+                time.sleep(min(60.0, float(2 ** attempt)))
+                continue
+            raise RuntimeError(
+                f"Gmail API send failed ({exc.code}): {detail}"
+            ) from exc
 
 
 class GmailApiEmailBackend(BaseEmailBackend):
@@ -92,8 +135,14 @@ class GmailApiEmailBackend(BaseEmailBackend):
             )
 
         access_token = get_gmail_access_token()
+        interval = _gmail_send_min_interval_seconds()
+        last_send_at = None
         sent = 0
         for message in email_messages:
+            if last_send_at is not None and interval > 0:
+                wait_for = interval - (time.monotonic() - last_send_at)
+                if wait_for > 0:
+                    time.sleep(wait_for)
             try:
                 send_gmail_api_message(
                     access_token=access_token,
@@ -107,6 +156,8 @@ class GmailApiEmailBackend(BaseEmailBackend):
                     raise
             else:
                 sent += 1
+            finally:
+                last_send_at = time.monotonic()
         return sent
 
 

@@ -26,6 +26,9 @@ os.environ["EMAIL_HOST_USER"] = "your-email@gmail.com"
 os.environ["GMAIL_CLIENT_ID"] = "....apps.googleusercontent.com"
 os.environ["GMAIL_CLIENT_SECRET"] = "...."
 os.environ["GMAIL_REFRESH_TOKEN"] = "1//...."
+# Optional pacing for bulk sends (default 1.1s ≈ under 60 messages.send/min)
+# os.environ["GMAIL_SEND_MIN_INTERVAL_SECONDS"] = "1.1"
+# os.environ["GMAIL_SEND_MAX_RETRIES"] = "6"
 
 # Optional fallback: SMTP + app password (leave GMAIL_* empty)
 # os.environ["EMAIL_HOST"] = "smtp.gmail.com"

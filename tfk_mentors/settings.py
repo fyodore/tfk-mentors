@@ -169,6 +169,11 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "noreply@localhost"
 GMAIL_CLIENT_ID = os.environ.get("GMAIL_CLIENT_ID", "")
 GMAIL_CLIENT_SECRET = os.environ.get("GMAIL_CLIENT_SECRET", "")
 GMAIL_REFRESH_TOKEN = os.environ.get("GMAIL_REFRESH_TOKEN", "")
+# Stay under Gmail's ~60 messages.send/minute user quota (100 units each).
+GMAIL_SEND_MIN_INTERVAL_SECONDS = float(
+    os.environ.get("GMAIL_SEND_MIN_INTERVAL_SECONDS", "1.1")
+)
+GMAIL_SEND_MAX_RETRIES = int(os.environ.get("GMAIL_SEND_MAX_RETRIES", "6"))
 
 # EMAIL_BACKEND env override (e.g. console backend for local Docker).
 _email_backend_override = (os.environ.get("EMAIL_BACKEND") or "").strip()

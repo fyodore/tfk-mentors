@@ -146,6 +146,60 @@ class SendGmailApiMessageTests(TestCase):
         self.assertIn("400", str(ctx.exception))
         self.assertIn("invalid grant", str(ctx.exception))
 
+    @override_settings(GMAIL_SEND_MAX_RETRIES=2)
+    @patch("tfk_mentors.email_backends.time.sleep")
+    @patch("tfk_mentors.email_backends.urlopen")
+    def test_retries_rate_limit_then_succeeds(self, mock_urlopen, mock_sleep):
+        rate_limited = HTTPError(
+            url=GMAIL_SEND_URL,
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=BytesIO(
+                b'{"error":{"errors":[{"reason":"rateLimitExceeded"}],'
+                b'"message":"Quota exceeded"}}'
+            ),
+        )
+        ok = MagicMock()
+        mock_urlopen.side_effect = [rate_limited, ok]
+
+        send_gmail_api_message(
+            access_token="tok",
+            from_email="from@example.com",
+            to_addrs=["to@example.com"],
+            subject="Subj",
+            body="Body",
+        )
+
+        self.assertEqual(mock_urlopen.call_count, 2)
+        mock_sleep.assert_called_once_with(1.0)
+
+    @override_settings(GMAIL_SEND_MAX_RETRIES=1)
+    @patch("tfk_mentors.email_backends.time.sleep")
+    @patch("tfk_mentors.email_backends.urlopen")
+    def test_rate_limit_exhausted_raises(self, mock_urlopen, mock_sleep):
+        rate_limited = HTTPError(
+            url=GMAIL_SEND_URL,
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=BytesIO(b"Quota exceeded for quota metric"),
+        )
+        mock_urlopen.side_effect = rate_limited
+
+        with self.assertRaises(RuntimeError) as ctx:
+            send_gmail_api_message(
+                access_token="tok",
+                from_email="from@example.com",
+                to_addrs=["to@example.com"],
+                subject="Subj",
+                body="Body",
+            )
+
+        self.assertIn("403", str(ctx.exception))
+        self.assertEqual(mock_urlopen.call_count, 2)
+        mock_sleep.assert_called_once()
+
 
 class GmailApiEmailBackendTests(TestCase):
     def _message(self, to="mentor@example.com", from_email=""):
@@ -241,15 +295,25 @@ class GmailApiEmailBackendTests(TestCase):
         self.assertEqual(sent, 0)
         self.assertEqual(mock_send.call_count, 2)
 
-    @override_settings(EMAIL_HOST_USER="sender@example.com")
-    @patch(
-        "tfk_mentors.email_backends.get_gmail_access_token",
-        side_effect=ValueError("no refresh token"),
-    )
-    def test_raises_when_access_token_unavailable(self, mock_get_token):
+    @override_settings(EMAIL_HOST_USER="sender@example.com", GMAIL_SEND_MIN_INTERVAL_SECONDS=0.5)
+    @patch("tfk_mentors.email_backends.time.sleep")
+    @patch("tfk_mentors.email_backends.time.monotonic", side_effect=[10.0, 10.1, 10.6])
+    @patch("tfk_mentors.email_backends.send_gmail_api_message")
+    @patch("tfk_mentors.email_backends.get_gmail_access_token", return_value="tok")
+    def test_paces_messages_using_min_interval(
+        self, mock_get_token, mock_send, _mock_monotonic, mock_sleep
+    ):
         backend = GmailApiEmailBackend()
-        with self.assertRaises(ValueError):
-            backend.send_messages([self._message()])
+        messages = [
+            self._message(to="a@example.com"),
+            self._message(to="b@example.com"),
+        ]
+
+        sent = backend.send_messages(messages)
+
+        self.assertEqual(sent, 2)
+        mock_sleep.assert_called_once()
+        self.assertAlmostEqual(mock_sleep.call_args[0][0], 0.4, places=5)
 
 
 class Xoauth2StringTests(TestCase):
