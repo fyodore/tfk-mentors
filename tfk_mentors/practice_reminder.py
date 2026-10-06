@@ -633,8 +633,11 @@ def _claim_practice_reminder_for_send(reminder, *, now):
     while messages had already gone out — and the next cron run blasted again.
     """
     with transaction.atomic():
+        # of=("self",): practice_two is nullable, so select_related uses a LEFT
+        # OUTER JOIN. PostgreSQL rejects FOR UPDATE on the nullable side of that
+        # join ("FOR UPDATE cannot be applied to the nullable side of an outer join").
         locked = (
-            PracticeReminderEmail.objects.select_for_update()
+            PracticeReminderEmail.objects.select_for_update(of=("self",))
             .select_related(
                 "season",
                 "anchor_practice",

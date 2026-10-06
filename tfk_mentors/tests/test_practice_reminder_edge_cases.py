@@ -318,6 +318,37 @@ class SendPracticeReminderEdgeCaseTests(TestCase):
             date=timezone.now() + timedelta(days=1), season=self.season
         )
 
+    @patch("tfk_mentors.practice_reminder._verify_email_delivery")
+    def test_claim_uses_select_for_update_of_self(self, _mock_verify):
+        """Postgres rejects FOR UPDATE on nullable practice_two outer joins."""
+        from django.core import mail
+
+        TfkStaff.objects.create(
+            first_name="Sam", last_name="Staff", email="samstaffofs@example.com"
+        )
+        reminder = PracticeReminderEmail.objects.create(
+            season=self.season,
+            kind=PracticeReminderKind.BEFORE_FIRST,
+            anchor_practice=self.practice,
+            practice_one=self.practice,
+            practice_two=None,
+            subject="Subject",
+            body_text="Dear {{first_name}},",
+        )
+        original = PracticeReminderEmail.objects.select_for_update
+
+        def wrapped(*args, **kwargs):
+            self.assertEqual(kwargs.get("of"), ("self",))
+            return original(*args, **kwargs)
+
+        with patch.object(
+            PracticeReminderEmail.objects, "select_for_update", side_effect=wrapped
+        ):
+            result = send_practice_reminder(reminder)
+
+        self.assertGreater(result["sent"], 0)
+        self.assertEqual(len(mail.outbox), result["sent"])
+
     def test_raises_when_already_sent(self):
         reminder = PracticeReminderEmail.objects.create(
             season=self.season,
